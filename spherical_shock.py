@@ -4,6 +4,7 @@ import jax.numpy as jnp
 # plotting
 import matplotlib.pyplot as plt
 
+from jf1uids.boundaries import OPEN_BOUNDARY
 from jf1uids.geometry import center_of_volume, r_hat_alpha
 from jf1uids.simulation_config import SimulationConfig
 from jf1uids.simulation_helper_data import SimulationHelperData
@@ -32,8 +33,8 @@ r_hat = r_hat_alpha(r, dx, alpha)
 
 # introduce constants to 
 # make this more readable
-left_boundary = 0
-right_boundary = 0
+left_boundary = OPEN_BOUNDARY
+right_boundary = OPEN_BOUNDARY
 
 config = SimulationConfig(alpha_geom = alpha, left_boundary = left_boundary, right_boundary = right_boundary)
 

@@ -1,6 +1,10 @@
 import jax
 from functools import partial
 
+CARTESIAN = 0
+CYLINDRICAL = 1
+SPHERICAL = 2
+
 @partial(jax.jit, static_argnames=['alpha_geom'])
 def r_hat_alpha(r, dr, alpha_geom):
     if alpha_geom == 2:

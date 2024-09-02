@@ -9,4 +9,6 @@ class SimulationConfig(NamedTuple):
     left_boundary: int = 0 # 0 -> open, 1 -> reflective
     right_boundary: int = 0 # 0 -> open, 1 -> reflective
 
+    stellar_wind: bool = False
+
     # TODO: add more configs

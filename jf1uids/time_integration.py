@@ -4,6 +4,7 @@ from functools import partial
 
 from jf1uids.CFL import cfl_time_step
 from jf1uids.muscl_scheme import evolve_state
+from jf1uids.physics_modules.physical_sources import add_physical_sources
 
 @partial(jax.jit, static_argnames=['config'])
 def time_integration(primitive_state, config, params, helper_data):
@@ -14,7 +15,10 @@ def time_integration(primitive_state, config, params, helper_data):
 
         dt = cfl_time_step(state, params.dx, params.dt_max, params.gamma, params.C_cfl)
 
+        state = add_physical_sources(state, dt / 2, config, params, helper_data)
         state = evolve_state(state, params.dx, dt, params.gamma, config, params, helper_data)
+        state = add_physical_sources(state, dt / 2, config, params, helper_data)
+
         time += dt
 
         return (time, state)

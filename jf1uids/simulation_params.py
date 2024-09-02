@@ -1,5 +1,7 @@
 from typing import NamedTuple
 
+from jf1uids.physics_modules.stellar_wind import WindParams
+
 # Different from the simulation configuration, the simulation parameters
 # do not require recompilation when changed.
 
@@ -12,3 +14,4 @@ class SimulationParams(NamedTuple):
     dx: float
     gamma: float
     t_end: float
+    wind_params: WindParams = WindParams()
