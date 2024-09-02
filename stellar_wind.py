@@ -4,6 +4,8 @@
 import jax
 import jax.numpy as jnp
 
+from timeit import default_timer as timer
+
 # plotting
 import matplotlib.pyplot as plt
 
@@ -46,7 +48,7 @@ code_units = CodeUnits(code_length, code_mass, code_velocity)
 # spatial domain
 alpha = SPHERICAL
 L = 1.0
-N_grid = 4000
+N_grid = 2000
 dx = L / N_grid
 r = jnp.linspace(dx/2, L + dx / 2, N_grid)
 
@@ -95,7 +97,14 @@ wind_params = WindParams(wind_mass_loss_rate = wind_mass_loss_rate.to(code_units
 params = SimulationParams(C_cfl = C_CFL, dt_max = dt_max, dx = dx, gamma = gamma, t_end = t_end, wind_params=wind_params)
 
 # run the simulation
+
+start = timer()
 final_state = time_integration(initial_state, config, params, helper_data)
+end = timer()
+
+print(f"Simulation took {end - start} seconds")
+
+
 rho, vel, p = final_state
 internal_energy = p / ((gamma - 1) * rho)
 
