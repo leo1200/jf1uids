@@ -68,3 +68,20 @@ def speed_of_sound(rho, p, gamma):
     return jnp.sqrt(gamma * p / rho)
 
 # ===========================================
+
+# ============= Total Quantities =============
+
+@jax.jit
+def calculate_total_mass_proxy(primitive_state, helper_data, params):
+    """
+    Calculate the total mass in the domain.
+    """
+    return jnp.sum(primitive_state[0, 2:-2] * helper_data.r_hat_alpha[2:-2] * params.dx)
+
+@jax.jit
+def calculate_total_energy_proxy(primitive_state, helper_data, params):
+    """
+    Calculate the total energy in the domain.
+    """
+    energy = total_energy_from_primitives(primitive_state[0, 2:-2], primitive_state[1, 2:-2], primitive_state[2, 2:-2], params.gamma)
+    return jnp.sum(energy * helper_data.r_hat_alpha[2:-2] * params.dx)

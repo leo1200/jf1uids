@@ -5,7 +5,7 @@ from functools import partial
 
 from jf1uids.boundaries import boundary_handler
 from jf1uids.fluid import conserved_state, primitive_state_from_conserved, speed_of_sound
-from jf1uids.limiters import minmod, superbee
+from jf1uids.limiters import minmod, superbee, meanmod
 from jf1uids.riemann import hll_solver
 
 @partial(jax.jit, static_argnames=['alpha_geom'])

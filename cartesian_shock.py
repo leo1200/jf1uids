@@ -34,7 +34,6 @@ right_boundary = 0
 
 config = SimulationConfig(alpha_geom = alpha, left_boundary = left_boundary, right_boundary = right_boundary)
 
-
 # time domain
 dt_max = 0.001
 C_CFL = 0.8
