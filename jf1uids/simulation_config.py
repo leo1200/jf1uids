@@ -24,4 +24,5 @@ class SimulationConfig(NamedTuple):
     checkpointing: bool = False
     num_checkpoints: int = 10
 
+    first_order_fallback: bool = False
     # TODO: add more configs

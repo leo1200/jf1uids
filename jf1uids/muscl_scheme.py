@@ -27,8 +27,8 @@ def calculate_limited_gradients(primitive_states, dx, alpha_geom, rv):
     return limited_gradients
 
 
-@partial(jax.jit, static_argnames=['alpha_geom'])
-def reconstruct_at_interface(primitive_states, dt, dx, gamma, alpha_geom, helper_data):
+@partial(jax.jit, static_argnames=['alpha_geom', 'first_order_fallback'])
+def reconstruct_at_interface(primitive_states, dt, dx, gamma, alpha_geom, first_order_fallback, helper_data):
 
     # get fluid variables for convenience
     rho, u, p = primitive_states
@@ -47,7 +47,8 @@ def reconstruct_at_interface(primitive_states, dt, dx, gamma, alpha_geom, helper
     limited_gradients = calculate_limited_gradients(primitive_states, dx, alpha_geom, helper_data.volumetric_centers)
 
     # fallback to 1st order
-    # limited_gradients = jnp.zeros_like(limited_gradients)
+    if first_order_fallback:
+        limited_gradients = jnp.zeros_like(limited_gradients)
 
     # calculate the sound speed
     c = speed_of_sound(rho, p, gamma)
@@ -95,7 +96,7 @@ def evolve_state(primitive_states, dx, dt, gamma, config, params, helper_data):
     conserved_states = conserved_state(primitive_states, gamma)
 
     # get the left and right states at the interfaces
-    primitives_left_of_interface, primitives_right_of_interface = reconstruct_at_interface(primitive_states, dt, dx, gamma, config.alpha_geom, helper_data)
+    primitives_left_of_interface, primitives_right_of_interface = reconstruct_at_interface(primitive_states, dt, dx, gamma, config.alpha_geom, config.first_order_fallback, helper_data)
 
     # calculate the fluxes at the interfaces
     fluxes = hll_solver(primitives_left_of_interface, primitives_right_of_interface, gamma)

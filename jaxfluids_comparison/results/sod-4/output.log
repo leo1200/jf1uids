@@ -1,0 +1,170 @@
+*------------------------------------------------------------------------------*
+*                                                                              *
+*                                                                              *
+*          _     _    __  __        _____  _      _   _  ___  ____   ____      *
+*         | |   / \   \ \/ /       |  ___|| |    | | | ||_ _||  _ \ / ___|     *
+*      _  | |  / _ \   \  /  _____ | |_   | |    | | | | | | | | | |\___ \     *
+*     | |_| | / ___ \  /  \ |_____||  _|  | |___ | |_| | | | | |_| | ___) |    *
+*      \___/ /_/   \_\/_/\_\       |_|    |_____| \___/ |___||____/ |____/     *
+*                                                                              *
+*                                By BB - ML@AER                                *
+*                                                                              *
+*------------------------------------------------------------------------------*
+* JAX-FLUIDS -                                                                 *
+*                                                                              *
+* A fully-differentiable CFD solver for compressible two-phase flows.          *
+* Copyright (C) 2022  Deniz A. Bezgin, Aaron B. Buhendwa, Nikolaus A. Adams    *
+*                                                                              *
+* This program is free software: you can redistribute it and/or modify         *
+* it under the terms of the GNU General Public License as published by         *
+* the Free Software Foundation, either version 3 of the License, or            *
+* (at your option) any later version.                                          *
+*                                                                              *
+* This program is distributed in the hope that it will be useful,              *
+* but WITHOUT ANY WARRANTY; without even the implied warranty of               *
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the                *
+* GNU General Public License for more details.                                 *
+*                                                                              *
+* You should have received a copy of the GNU General Public License            *
+* along with this program.  If not, see <https://www.gnu.org/licenses/>.       *
+*                                                                              *
+*------------------------------------------------------------------------------*
+*                                                                              *
+* CONTACT                                                                      *
+*                                                                              *
+* deniz.bezgin@tum.de // aaron.buhendwa@tum.de // nikolaus.adams@tum.de        *
+*                                                                              *
+*------------------------------------------------------------------------------*
+*                                                                              *
+* Munich, April 15th, 2022                                                     *
+*                                                                              *
+*------------------------------------------------------------------------------*
+*                                                                              *
+*                                                                              *
+*                               NUMERICAL SETUP                                *
+*                                                                              *
+*    CONSERVATIVES                                                             *
+*      HALO CELLS          :    5                                              *
+*      TIME INTEGRATION                                                        *
+*        INTEGRATOR  :    RK3                                                  *
+*        CFL         :    0.9                                                  *
+*      CONVECTIVE FLUXES                                                       *
+*        CONVECTIVE SOLVER       :    GODUNOV                                  *
+*        RIEMANN SOLVER          :    HLLC                                     *
+*        SIGNAL SPEED            :    EINFELDT                                 *
+*        RECONSTRUCTION STENCIL  :    WENO5-Z                                  *
+*        RECONSTRUCTION VARIABLE :    CHAR-PRIMITIVE                           *
+*      DISSIPATIVE FLUXES                                                      *
+*        RECONSTRUCTION STENCIL      :    CENTRAL4                             *
+*        DERIVATIVE STENCIL CENTER   :    CENTRAL4                             *
+*        DERIVATIVE STENCIL FACE     :    CENTRAL4                             *
+*                                                                              *
+*    ACTIVE PHYSICS                                                            *
+*      IS CONVECTIVE FLUX  :    True                                           *
+*      IS GEOMETRIC SOURCE :    True                                           *
+*      IS VISCOUS FLUX     :    False                                          *
+*      IS HEAT FLUX        :    False                                          *
+*      IS VOLUME FORCE     :    False                                          *
+*                                                                              *
+*    PRECISION                                                                 *
+*      IS DOUBLE PRECISION COMPUTE :    True                                   *
+*      IS DOUBLE PRECISION OUTPUT  :    True                                   *
+*                                                                              *
+*    OUTPUT                                                                    *
+*      IS XDMF             :    False                                          *
+*      DERIVATIVE STENCIL  :    CENTRAL4                                       *
+*                                                                              *
+*                                                                              *
+*------------------------------------------------------------------------------*
+*                                                                              *
+*                                  CASE SETUP                                  *
+*                                                                              *
+*    GENERAL                                                                   *
+*      CASE NAME   :    sod                                                    *
+*      SAVE PATH   :    ./results                                              *
+*      END TIME    :    0.15                                                   *
+*      SAVE DT     :    0.01                                                   *
+*                                                                              *
+*    RESTART                                                                   *
+*      FLAG        :    False                                                  *
+*      FILE PATH   :    results/sod/domain/data_0.2012801584.h5                *
+*                                                                              *
+*    DOMAIN                                                                    *
+*      X                                                                       *
+*        CELLS   :    100                                                      *
+*        RANGE   :    [0.0, 1.0]                                               *
+*      Y                                                                       *
+*        CELLS   :    1                                                        *
+*        RANGE   :    [0.0, 1.0]                                               *
+*      Z                                                                       *
+*        CELLS   :    1                                                        *
+*        RANGE   :    [0.0, 1.0]                                               *
+*      DECOMPOSITION                                                           *
+*        SPLIT X :    1                                                        *
+*        SPLIT Y :    1                                                        *
+*        SPLIT Z :    1                                                        *
+*                                                                              *
+*    BOUNDARY CONDITIONS                                                       *
+*      EAST                                                                    *
+*        TYPE    :    ZEROGRADIENT                                             *
+*      WEST                                                                    *
+*        TYPE    :    ZEROGRADIENT                                             *
+*      NORTH                                                                   *
+*        TYPE    :    INACTIVE                                                 *
+*      SOUTH                                                                   *
+*        TYPE    :    INACTIVE                                                 *
+*      TOP                                                                     *
+*        TYPE    :    INACTIVE                                                 *
+*      BOTTOM                                                                  *
+*        TYPE    :    INACTIVE                                                 *
+*                                                                              *
+*    INITIAL CONDITION                                                         *
+*      RHO :    lambda x: 1.0*(x <= 0.5) + 0.125*(x > 0.5)                     *
+*      U   :    0.0                                                            *
+*      V   :    0.0                                                            *
+*      W   :    0.0                                                            *
+*      P   :    lambda x: 1.0*(x <= 0.5) + 0.1*(x > 0.5)                       *
+*                                                                              *
+*    MATERIAL PROPERTIES                                                       *
+*      EQUATION OF STATE                                                       *
+*        MODEL                   :    IdealGas                                 *
+*        SPECIFIC HEAT RATIO     :    1.4                                      *
+*        SPECIFIC GAS CONSTANT   :    1.0                                      *
+*                                                                              *
+*    FORCINGS                                                                  *
+*      GEOMETRIC SOURCE                                                        *
+*        SYMMETRY TYPE   :    SPHERICAL                                        *
+*        SYMMETRY AXIS   :    x                                                *
+*                                                                              *
+*    NONDIMENSIONALIZATION PARAMETERS                                          *
+*      DENSITY REFERENCE       :    1.0                                        *
+*      LENGTH REFERENCE        :    1.0                                        *
+*      VELOCITY REFERENCE      :    1.0                                        *
+*      TEMPERATURE REFERENCE   :    1.0                                        *
+*                                                                              *
+*    OUTPUT                                                                    *
+*      PRIMITIVES  :    ['density', 'velocity', 'pressure', 'temperature']     *
+*                                                                              *
+*                                                                              *
+*------------------------------------------------------------------------------*
+*                                                                              *
+*                                                                              *
+*          _     _    __  __        _____  _      _   _  ___  ____   ____      *
+*         | |   / \   \ \/ /       |  ___|| |    | | | ||_ _||  _ \ / ___|     *
+*      _  | |  / _ \   \  /  _____ | |_   | |    | | | | | | | | | |\___ \     *
+*     | |_| | / ___ \  /  \ |_____||  _|  | |___ | |_| | | | | |_| | ___) |    *
+*      \___/ /_/   \_\/_/\_\       |_|    |_____| \___/ |___||____/ |____/     *
+*                                                                              *
+*                                                                              *
+*------------------------------------------------------------------------------*
+*                                                                              *
+*                            PYTHON Version: 3.11.9                            *
+*                             JAX Version: 0.4.31                              *
+*                            JAXLIB Version: 0.4.31                            *
+*                          JAX-Fluids Version: 0.2.0                           *
+*             GIT Commit: 55e3070c0d33ff31d3a11091e0056f9cac031296             *
+*                       DATE & TIME: 2024-09-07 14:26:00                       *
+*                             PROCESS ID: 2914337                              *
+*                               JAX BACKEND: cpu                               *
+*                                                                              *
+*------------------------------------------------------------------------------*
