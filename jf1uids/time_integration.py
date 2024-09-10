@@ -8,6 +8,8 @@ from jf1uids.muscl_scheme import evolve_state
 from jf1uids.physics_modules.physical_sources import add_physical_sources
 from jf1uids.simulation_checkpoint_data import CheckpointData
 
+from timeit import default_timer as timer
+
 @partial(jax.jit, static_argnames=['config'])
 def time_integration(primitive_state, config, params, helper_data):
     if config.fixed_timestep:
@@ -67,6 +69,9 @@ def time_integration_adaptive_steps(primitive_state, config, params, helper_data
 
             checkpoint_data = jax.lax.cond(time >= checkpoint_data.current_checkpoint * params.t_end / config.num_checkpoints, update_checkpoint_data, dont_update_checkpoint_data, checkpoint_data)
 
+            num_iterations = checkpoint_data.num_iterations + 1
+            checkpoint_data = checkpoint_data._replace(num_iterations = num_iterations)
+
         else:
             time, state = carry
 
@@ -97,10 +102,14 @@ def time_integration_adaptive_steps(primitive_state, config, params, helper_data
     else:
         carry = (0.0, primitive_state)
     
+    start = timer()
     carry = jax.lax.while_loop(condition, update_step, carry)
+    end = timer()
+    duration = end - start
 
     if config.checkpointing:
         _, state, checkpoint_data = carry
+        checkpoint_data = checkpoint_data._replace(runtime = duration)
         return checkpoint_data
     else:
         _, state = carry

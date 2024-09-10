@@ -8,3 +8,6 @@ class CheckpointData(NamedTuple):
     total_energy_proxy: jnp.ndarray = None
     states: jnp.ndarray = None
     current_checkpoint: int = 0
+    num_iterations: int = 0
+
+    runtime: float = 0.0
