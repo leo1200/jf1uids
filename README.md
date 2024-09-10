@@ -4,7 +4,7 @@ Welcome to the repository, of jf1uids. This is still very much work in progress 
 
 ## Reproducing the results from the paper
 
-All the results from the paper can easily be reproduces via the notebooks provided
+All the results from the paper can easily be reproduced via the notebooks provided(which are currently still a bit messy)
 
 - figure 1 -> paper_numerics.ipynb
 - figure 2 -> paper_gradients.ipynb
