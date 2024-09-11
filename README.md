@@ -25,9 +25,9 @@ installed.
 
 All the results from the paper can easily be reproduced via the notebooks provided
 
-- figure 1 -> [conservational_properties.ipynb](conservational_properties.ipynb): For a radial shock problem, conservation of mass and energy in jf1uids are showcased.
-- figure 2 -> [gradiends_through_stellar_wind.ipynb](gradiends_through_stellar_wind.ipynb): The gradients of the final fluid state with respect to the wind's velocity are analyzed.
-- figure 3 -> [wind_parameter_optimization.ipynb](wind_parameter_optimization.ipynb): Finding wind parameters from the final fluid state via
+- figure 1 &rarr; [conservational_properties.ipynb](conservational_properties.ipynb): For a radial shock problem, conservation of mass and energy in jf1uids are showcased.
+- figure 2 &rarr; [gradiends_through_stellar_wind.ipynb](gradiends_through_stellar_wind.ipynb): The gradients of the final fluid state with respect to the wind's velocity are analyzed.
+- figure 3 &rarr; [wind_parameter_optimization.ipynb](wind_parameter_optimization.ipynb): Finding wind parameters from the final fluid state via
 gradient-descent is shown.
 
 ## Roadmap
