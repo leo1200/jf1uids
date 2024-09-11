@@ -31,7 +31,4 @@ def hll_solver(primitives_left, primitives_right, gamma):
     # F = (S_R * F_L - S_L * F_R + S_L * S_R * (U_R - U_L)) / (S_R - S_L)
     fluxes = (wave_speeds_right_plus * fluxes_left - wave_speeds_left_minus * fluxes_right + wave_speeds_left_minus * wave_speeds_right_plus * (conservatives_right - conservatives_left)) / (wave_speeds_right_plus - wave_speeds_left_minus)
 
-    # print("fluxes")
-    # print(fluxes)
-
     return fluxes

@@ -9,6 +9,9 @@ class SimulationConfig(NamedTuple):
     box_size: float = 1.0
     num_cells: int = 400
 
+    # HAS TO BE UPDATED MANUALLY
+    dx: float = box_size / (num_cells - 1)
+
     left_boundary: int = 0 # 0 -> open, 1 -> reflective
     right_boundary: int = 0 # 0 -> open, 1 -> reflective
 
@@ -20,9 +23,9 @@ class SimulationConfig(NamedTuple):
 
     stellar_wind: bool = False
 
-    # checkpointing
-    checkpointing: bool = False
-    num_checkpoints: int = 10
+    # intermediate saving of the simulation
+    intermediate_saves: bool = False
+    num_saves: int = 10
 
     first_order_fallback: bool = False
     # TODO: add more configs

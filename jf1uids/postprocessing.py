@@ -16,7 +16,6 @@ def strongest_shock_radius(primitive_state, helper_data, padL, padR):
     max_shock_idx = jnp.argmax(shock_sensors)
     return (r[max_shock_idx - 1] * shock_sensors[max_shock_idx - 1] + r[max_shock_idx] * shock_sensors[max_shock_idx] + r[max_shock_idx + 1] * shock_sensors[max_shock_idx + 1]) / (shock_sensors[max_shock_idx - 1] + shock_sensors[max_shock_idx] + shock_sensors[max_shock_idx + 1])
 
-
 def strongest_shock_dissipated_energy_flux(primitive_state, gamma, padL, padR, statePad):
     """
     Compute the dissipated energy flux due to the strongest shock in the domain.
