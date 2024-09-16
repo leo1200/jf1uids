@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "jf1uids"
+version = "0.1.0"
+description = "conservative, differe"
+authors = ["Leonard Storcks <leonard.storcks@stud.uni-heidelberg.de>"]
+readme = "README.md"
+packages = [{include = "jf1uids"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+optax = "^0.2.3"
+jax = "^0.4.31"
+scipy = "^1.14.1"
+astropy = "^6.1.3"
+numpy = "^2.1.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

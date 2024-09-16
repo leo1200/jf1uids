@@ -1,10 +1,10 @@
 import jax.numpy as jnp
-from jf1uids.euler import euler_flux
+from jf1uids.euler import _euler_flux
 from jf1uids.fluid import speed_of_sound
 import jax
 
 @jax.jit
-def cfl_time_step(primitive_states, dx, dt_max, gamma, C_CFL = 0.8):
+def _cfl_time_step(primitive_states, dx, dt_max, gamma, C_CFL = 0.8):
     primitives_left = primitive_states[:, :-1]
     primitives_right = primitive_states[:, 1:]
 

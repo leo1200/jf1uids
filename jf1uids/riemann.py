@@ -1,10 +1,10 @@
 import jax.numpy as jnp
 import jax
-from jf1uids.euler import euler_flux
+from jf1uids.euler import _euler_flux
 from jf1uids.fluid import conserved_state, speed_of_sound
 
 @jax.jit
-def hll_solver(primitives_left, primitives_right, gamma):
+def _hll_solver(primitives_left, primitives_right, gamma):
     """
     Returns the conservative fluxes.
     """
@@ -16,8 +16,8 @@ def hll_solver(primitives_left, primitives_right, gamma):
     c_R = speed_of_sound(rho_R, p_R, gamma)
 
     # get the left and right states and fluxes
-    fluxes_left = euler_flux(primitives_left, gamma)
-    fluxes_right = euler_flux(primitives_right, gamma)
+    fluxes_left = _euler_flux(primitives_left, gamma)
+    fluxes_right = _euler_flux(primitives_right, gamma)
     
     # very simple approach for the wave velocities
     wave_speeds_right_plus = jnp.maximum(jnp.maximum(u_L + c_L, u_R + c_R), 0)

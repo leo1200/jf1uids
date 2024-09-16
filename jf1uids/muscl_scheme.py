@@ -3,10 +3,10 @@ import jax
 
 from functools import partial
 
-from jf1uids.boundaries import boundary_handler
+from jf1uids.boundaries import _boundary_handler
 from jf1uids.fluid import conserved_state, primitive_state_from_conserved, speed_of_sound
-from jf1uids.limiters import minmod, superbee, meanmod
-from jf1uids.riemann import hll_solver
+from jf1uids.limiters import _minmod
+from jf1uids.riemann import _hll_solver
 
 @partial(jax.jit, static_argnames=['alpha_geom'])
 def calculate_limited_gradients(primitive_states, dx, alpha_geom, rv):
@@ -19,7 +19,7 @@ def calculate_limited_gradients(primitive_states, dx, alpha_geom, rv):
         cell_distances_right = rv[2:] - rv[1:-1]
 
     # get the limited gradients on the cells
-    limited_gradients = minmod(
+    limited_gradients = _minmod(
         (primitive_states[:, 1:-1] - primitive_states[:, :-2]) / cell_distances_left,
         (primitive_states[:, 2:] - primitive_states[:, 1:-1]) / cell_distances_right
     )
@@ -90,7 +90,7 @@ def evolve_state(primitive_states, dx, dt, gamma, config, params, helper_data):
     Evolve the primitive state by dt.
     """
 
-    primitive_states = boundary_handler(primitive_states, config.left_boundary, config.right_boundary)
+    primitive_states = _boundary_handler(primitive_states, config.left_boundary, config.right_boundary)
     
     # calculate conserved variables
     conserved_states = conserved_state(primitive_states, gamma)
@@ -99,7 +99,7 @@ def evolve_state(primitive_states, dx, dt, gamma, config, params, helper_data):
     primitives_left_of_interface, primitives_right_of_interface = reconstruct_at_interface(primitive_states, dt, dx, gamma, config.alpha_geom, config.first_order_fallback, helper_data)
 
     # calculate the fluxes at the interfaces
-    fluxes = hll_solver(primitives_left_of_interface, primitives_right_of_interface, gamma)
+    fluxes = _hll_solver(primitives_left_of_interface, primitives_right_of_interface, gamma)
 
     # update the conserved variables using the fluxes
     if config.alpha_geom == 0:

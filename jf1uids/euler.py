@@ -3,7 +3,7 @@ from jf1uids.fluid import total_energy_from_primitives
 import jax
 
 @jax.jit
-def euler_flux(primitive_states, gamma):
+def _euler_flux(primitive_states, gamma):
     rho, u, p = primitive_states
     m = rho * u
     E = total_energy_from_primitives(rho, u, p, gamma)

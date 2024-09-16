@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 from functools import partial
 
-from jf1uids.CFL import cfl_time_step
+from jf1uids.CFL import _cfl_time_step
 from jf1uids.fluid import calculate_total_energy_proxy, calculate_total_mass_proxy
 from jf1uids.muscl_scheme import evolve_state
 from jf1uids.physics_modules.physical_sources import add_physical_sources
@@ -79,7 +79,7 @@ def time_integration_adaptive_steps(primitive_state, config, params, helper_data
         else:
             time, state = carry
 
-        dt = cfl_time_step(state, config.dx, params.dt_max, params.gamma, params.C_cfl)
+        dt = _cfl_time_step(state, config.dx, params.dt_max, params.gamma, params.C_cfl)
 
         state = add_physical_sources(state, dt / 2, config, params, helper_data)
         state = evolve_state(state, config.dx, dt, params.gamma, config, params, helper_data)
