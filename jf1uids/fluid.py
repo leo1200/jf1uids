@@ -4,9 +4,6 @@ import jax
 # The default state jf1uids operates on 
 # are the primitive variables rho, u, p.
 
-# The conserved variables are (rho, rho*u, E) * r^\alpha
-# where \alpha specifies the geometry.
-
 # ======= Create the primitive state ========
 
 @jax.jit

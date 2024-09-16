@@ -32,10 +32,9 @@ class CodeUnits:
     def init_from_unit_params(UnitLength_in_cm, UnitMass_in_g, UnitVelocity_in_cm_per_s):
         return CodeUnits(UnitLength_in_cm * u.cm, UnitMass_in_g * u.g, UnitVelocity_in_cm_per_s * u.cm / u.s)
     
-    def get_temperature_from_internal_energy(self, internal_energy, gamma = 5 / 3):
+    def get_temperature_from_internal_energy(self, internal_energy, gamma = 5 / 3, hydrogen_abundance = 0.76):
         mhydrogen = c.m_e + c.m_p
         gm1 = gamma - 1
-        hydrogen_abundance = 0.76
         mean_molecular_weight = 4 / (5 * hydrogen_abundance + 3)
         return (gm1 * internal_energy * mean_molecular_weight * mhydrogen * self.code_velocity**2 / c.k_B).to(u.K)
     

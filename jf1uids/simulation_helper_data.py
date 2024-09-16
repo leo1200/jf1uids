@@ -16,7 +16,7 @@ def get_helper_data(config):
         r = jnp.linspace(0, config.box_size, config.num_cells)
         r_hat = dx * jnp.ones_like(r) # not really
         return SimulationHelperData(geometric_centers = r, r_hat_alpha = r_hat)
-    if config.alpha_geom == 2:
+    elif config.alpha_geom == 2 or config.alpha_geom == 1:
         # r = jnp.linspace(- 3 * dx/2, config.box_size - 3 * dx / 2, config.num_cells)
         r = jnp.linspace(dx / 2, config.box_size + dx / 2, config.num_cells)
         volumetric_centers = center_of_volume(r, dx, config.alpha_geom)
