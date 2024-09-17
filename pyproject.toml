@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "jf1uids"
 version = "0.1.0"
-description = "conservative, differe"
+description = "conservative, differentiable, radial 1d fluid solver with astrophysical modules"
 authors = ["Leonard Storcks <leonard.storcks@stud.uni-heidelberg.de>"]
 readme = "README.md"
 packages = [{include = "jf1uids"}]
