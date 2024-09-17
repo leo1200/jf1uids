@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 import jax
+from functools import partial
 
 # The default state jf1uids operates on 
 # are the primitive variables rho, u, p.
@@ -68,17 +69,17 @@ def speed_of_sound(rho, p, gamma):
 
 # ============= Total Quantities =============
 
-@jax.jit
-def calculate_total_mass_proxy(primitive_state, helper_data, dx):
+@partial(jax.jit, static_argnames=['num_ghost_cells'])
+def calculate_total_mass_proxy(primitive_state, helper_data, dx, num_ghost_cells):
     """
     Calculate the total mass in the domain.
     """
-    return jnp.sum(primitive_state[0, 2:-2] * helper_data.r_hat_alpha[2:-2] * dx)
+    return jnp.sum(primitive_state[0, num_ghost_cells:-num_ghost_cells] * helper_data.r_hat_alpha[num_ghost_cells:-num_ghost_cells] * dx)
 
-@jax.jit
-def calculate_total_energy_proxy(primitive_state, helper_data, dx, gamma):
+@partial(jax.jit, static_argnames=['num_ghost_cells'])
+def calculate_total_energy_proxy(primitive_state, helper_data, dx, gamma, num_ghost_cells):
     """
     Calculate the total energy in the domain.
     """
-    energy = total_energy_from_primitives(primitive_state[0, 2:-2], primitive_state[1, 2:-2], primitive_state[2, 2:-2], gamma)
-    return jnp.sum(energy * helper_data.r_hat_alpha[2:-2] * dx)
+    energy = total_energy_from_primitives(primitive_state[0, num_ghost_cells:-num_ghost_cells], primitive_state[1, num_ghost_cells:-num_ghost_cells], primitive_state[2, num_ghost_cells:-num_ghost_cells], gamma)
+    return jnp.sum(energy * helper_data.r_hat_alpha[num_ghost_cells:-num_ghost_cells] * dx)

@@ -1,7 +1,7 @@
 from typing import NamedTuple
 import jax.numpy as jnp
 import jax
-from jf1uids.fluid import pressure_from_energy
+from jf1uids.fluid_equations.fluid import pressure_from_energy
 
 class WindParams(NamedTuple):
     wind_mass_loss_rate: float = 0.0

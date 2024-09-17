@@ -1,5 +1,5 @@
 import jax.numpy as jnp
-from jf1uids.fluid import total_energy_from_primitives
+from jf1uids.fluid_equations.fluid import total_energy_from_primitives
 import jax
 
 @jax.jit

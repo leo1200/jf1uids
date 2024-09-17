@@ -9,6 +9,24 @@ class SimulationConfig(NamedTuple):
     box_size: float = 1.0
     num_cells: int = 400
 
+    # TODO: set num_ghost_cells automatically
+    reconstruction_order: int = 1
+    # The reconstruction order is the number of 
+    # cells on each side of the cell of interest
+    # used to calculate the gradients for the
+    # reconstruction at the interfaces.
+
+    #                                |---------|
+    #                           |---------|
+    # stencil              |---------|
+    # cells            || 1g | 2g | 3c | 4g | 5g ||
+    # reconstructions        |L  R|L  R|L  R|    |
+    # fluxes                     -->  -->
+    # update                      | 3c'|
+    # --> all others are ghost cells
+
+    num_ghost_cells: int = reconstruction_order + 1
+
     # HAS TO BE UPDATED MANUALLY
     dx: float = box_size / (num_cells - 1)
 
@@ -20,6 +38,8 @@ class SimulationConfig(NamedTuple):
     # compiled, mind the CFL criterion
     fixed_timestep: bool = False
     num_timesteps: int = 1000
+    adaptive_timesteps_backwards_differentiable: bool = False
+    num_checkpoints: int = 100
 
     stellar_wind: bool = False
 

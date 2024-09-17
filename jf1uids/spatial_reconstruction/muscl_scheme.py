@@ -3,10 +3,10 @@ import jax
 
 from functools import partial
 
-from jf1uids.boundaries import _boundary_handler
-from jf1uids.fluid import conserved_state, primitive_state_from_conserved, speed_of_sound
-from jf1uids.limiters import _minmod
-from jf1uids.riemann import _hll_solver
+from jf1uids.geometry.boundaries import _boundary_handler
+from jf1uids.fluid_equations.fluid import conserved_state, primitive_state_from_conserved, speed_of_sound
+from jf1uids.spatial_reconstruction.limiters import _minmod
+from jf1uids.riemann_solver.hll import _hll_solver
 
 @partial(jax.jit, static_argnames=['alpha_geom'])
 def calculate_limited_gradients(primitive_states, dx, alpha_geom, rv):
@@ -18,14 +18,20 @@ def calculate_limited_gradients(primitive_states, dx, alpha_geom, rv):
         cell_distances_left = rv[1:-1] - rv[:-2]
         cell_distances_right = rv[2:] - rv[1:-1]
 
-    # get the limited gradients on the cells
+    # formulation 1:
+    # a = (primitive_states[:, 1:-1] - primitive_states[:, :-2]) / cell_distances_left
+    # b = (primitive_states[:, 2:] - primitive_states[:, 1:-1]) / cell_distances_right
+    # g = jnp.where(a != 0, jnp.divide(b, a), jnp.zeros_like(a))
+    # slope_limited = jnp.maximum(0, jnp.minimum(1, g)) # minmod
+    # limited_gradients = slope_limited * a
+
+    # formulation 2:
     limited_gradients = _minmod(
         (primitive_states[:, 1:-1] - primitive_states[:, :-2]) / cell_distances_left,
         (primitive_states[:, 2:] - primitive_states[:, 1:-1]) / cell_distances_right
     )
-
+    
     return limited_gradients
-
 
 @partial(jax.jit, static_argnames=['alpha_geom', 'first_order_fallback'])
 def reconstruct_at_interface(primitive_states, dt, dx, gamma, alpha_geom, first_order_fallback, helper_data):
@@ -103,7 +109,7 @@ def evolve_state(primitive_states, dx, dt, gamma, config, params, helper_data):
 
     # update the conserved variables using the fluxes
     if config.alpha_geom == 0:
-        conserved_states = conserved_states.at[:, 2:-2].add(-dt / dx * (fluxes[:, 1:] - fluxes[:, :-1]))
+        conserved_states = conserved_states.at[:, config.num_ghost_cells:-config.num_ghost_cells].add(-dt / dx * (fluxes[:, 1:] - fluxes[:, :-1]))
     else:
         r = helper_data.geometric_centers
         rv = helper_data.volumetric_centers
@@ -111,15 +117,15 @@ def evolve_state(primitive_states, dx, dt, gamma, config, params, helper_data):
 
         alpha = config.alpha_geom
 
-        r_plus_half = r.at[2:-2].add(dx / 2)
-        r_minus_half = r.at[2:-2].add(-dx / 2)
+        r_plus_half = r.at[config.num_ghost_cells:-config.num_ghost_cells].add(dx / 2)
+        r_minus_half = r.at[config.num_ghost_cells:-config.num_ghost_cells].add(-dx / 2)
 
         # calculate the source terms
         nozzling_source = pressure_nozzling_source(primitive_states, dx, r, rv, r_hat_alpha, config.alpha_geom)
 
         # update the conserved variables using the fluxes and source terms
-        conserved_states = conserved_states.at[:, 2:-2].add(dt / r_hat_alpha[2:-2] * (
-            - (r_plus_half[2:-2] ** alpha * fluxes[:, 1:] - r_minus_half[2:-2] ** alpha * fluxes[:, :-1]) / dx
+        conserved_states = conserved_states.at[:, config.num_ghost_cells:-config.num_ghost_cells].add(dt / r_hat_alpha[config.num_ghost_cells:-config.num_ghost_cells] * (
+            - (r_plus_half[config.num_ghost_cells:-config.num_ghost_cells] ** alpha * fluxes[:, 1:] - r_minus_half[config.num_ghost_cells:-config.num_ghost_cells] ** alpha * fluxes[:, :-1]) / dx
             + nozzling_source[:, 1:-1]
         ))
 

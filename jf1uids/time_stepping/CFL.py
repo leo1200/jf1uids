@@ -1,6 +1,6 @@
 import jax.numpy as jnp
-from jf1uids.euler import _euler_flux
-from jf1uids.fluid import speed_of_sound
+from jf1uids.fluid_equations.euler import _euler_flux
+from jf1uids.fluid_equations.fluid import speed_of_sound
 import jax
 
 @jax.jit

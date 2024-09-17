@@ -1,7 +1,7 @@
 import jax
 from functools import partial
 
-from jf1uids.boundaries import _boundary_handler
+from jf1uids.geometry.boundaries import _boundary_handler
 from jf1uids.physics_modules.stellar_wind.stellar_wind import wind_source
 
 

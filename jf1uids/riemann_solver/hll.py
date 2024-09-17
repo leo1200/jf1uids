@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 import jax
-from jf1uids.euler import _euler_flux
-from jf1uids.fluid import conserved_state, speed_of_sound
+from jf1uids.fluid_equations.euler import _euler_flux
+from jf1uids.fluid_equations.fluid import conserved_state, speed_of_sound
 
 @jax.jit
 def _hll_solver(primitives_left, primitives_right, gamma):

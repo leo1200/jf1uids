@@ -2,11 +2,13 @@ import jax
 import jax.numpy as jnp
 from functools import partial
 
-from jf1uids.CFL import _cfl_time_step
-from jf1uids.fluid import calculate_total_energy_proxy, calculate_total_mass_proxy
-from jf1uids.muscl_scheme import evolve_state
+from equinox.internal._loop.checkpointed import checkpointed_while_loop
+
+from jf1uids.time_stepping.CFL import _cfl_time_step
+from jf1uids.fluid_equations.fluid import calculate_total_energy_proxy, calculate_total_mass_proxy
+from jf1uids.spatial_reconstruction.muscl_scheme import evolve_state
 from jf1uids.physics_modules.physical_sources import add_physical_sources
-from jf1uids.simulation_checkpoint_data import CheckpointData
+from jf1uids.data_classes.simulation_checkpoint_data import CheckpointData
 
 from timeit import default_timer as timer
 
@@ -19,7 +21,10 @@ def time_integration(primitive_state, config, params, helper_data):
     if config.fixed_timestep:
         return time_integration_fixed_steps(primitive_state, config, params, helper_data)
     else:
-        return time_integration_adaptive_steps(primitive_state, config, params, helper_data)
+        if config.adaptive_timesteps_backwards_differentiable:
+            return time_integration_adaptive_backwards(primitive_state, config, params, helper_data)
+        else:
+            return time_integration_adaptive_steps(primitive_state, config, params, helper_data)
 
 @partial(jax.jit, static_argnames=['config'])
 def time_integration_fixed_steps(primitive_state, config, params, helper_data):
@@ -62,8 +67,8 @@ def time_integration_adaptive_steps(primitive_state, config, params, helper_data
             def update_checkpoint_data(checkpoint_data):
                 times = checkpoint_data.times.at[checkpoint_data.current_checkpoint].set(time)
                 states = checkpoint_data.states.at[checkpoint_data.current_checkpoint].set(state)
-                total_mass_proxy = checkpoint_data.total_mass_proxy.at[checkpoint_data.current_checkpoint].set(calculate_total_mass_proxy(state, helper_data, config.dx))
-                total_energy_proxy = checkpoint_data.total_energy_proxy.at[checkpoint_data.current_checkpoint].set(calculate_total_energy_proxy(state, helper_data, config.dx, params.gamma))
+                total_mass_proxy = checkpoint_data.total_mass_proxy.at[checkpoint_data.current_checkpoint].set(calculate_total_mass_proxy(state, helper_data, config.dx, config.num_ghost_cells))
+                total_energy_proxy = checkpoint_data.total_energy_proxy.at[checkpoint_data.current_checkpoint].set(calculate_total_energy_proxy(state, helper_data, config.dx, params.gamma, config.num_ghost_cells))
                 current_checkpoint = checkpoint_data.current_checkpoint + 1
                 checkpoint_data = checkpoint_data._replace(times = times, states = states, total_mass_proxy = total_mass_proxy, total_energy_proxy = total_energy_proxy, current_checkpoint = current_checkpoint)
                 return checkpoint_data
@@ -118,3 +123,34 @@ def time_integration_adaptive_steps(primitive_state, config, params, helper_data
     else:
         _, state = carry
         return state
+    
+
+@partial(jax.jit, static_argnames=['config'])
+def time_integration_adaptive_backwards(primitive_state, config, params, helper_data):
+
+    def update_step(carry):
+
+        time, state = carry
+
+        dt = _cfl_time_step(state, config.dx, params.dt_max, params.gamma, params.C_cfl)
+
+        state = add_physical_sources(state, dt / 2, config, params, helper_data)
+        state = evolve_state(state, config.dx, dt, params.gamma, config, params, helper_data)
+        state = add_physical_sources(state, dt / 2, config, params, helper_data)
+
+        time += dt
+
+        carry = (time, state)
+
+        return carry
+    
+    def condition(carry):
+        t, _ = carry
+        return t < params.t_end
+    
+    carry = (0.0, primitive_state)
+    
+    carry = checkpointed_while_loop(condition, update_step, carry, checkpoints=config.num_checkpoints)
+
+    _, state = carry
+    return state
