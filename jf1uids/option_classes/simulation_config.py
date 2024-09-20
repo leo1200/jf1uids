@@ -1,15 +1,19 @@
 from typing import NamedTuple
 
+from jf1uids.physics_modules.stellar_wind.stellar_wind import WindConfig
+
+FORWARDS = 0
+BACKWARDS = 1
+
 # The simulation configuration are parameters defining the simulation
-# where changes of necessitate recompilation.
+# where changes necessitate recompilation.
 
 class SimulationConfig(NamedTuple):
     # Simulation parameters
-    alpha_geom: int = 0 # 0 -> cartesian, 1 -> cylindrical, 2 -> spherical
+    geometry: int = 0 # 0 -> cartesian, 1 -> cylindrical, 2 -> spherical
     box_size: float = 1.0
     num_cells: int = 400
 
-    # TODO: set num_ghost_cells automatically
     reconstruction_order: int = 1
     # The reconstruction order is the number of 
     # cells on each side of the cell of interest
@@ -24,7 +28,6 @@ class SimulationConfig(NamedTuple):
     # fluxes                     -->  -->
     # update                      | 3c'|
     # --> all others are ghost cells
-
     num_ghost_cells: int = reconstruction_order + 1
 
     # HAS TO BE UPDATED MANUALLY
@@ -38,14 +41,16 @@ class SimulationConfig(NamedTuple):
     # compiled, mind the CFL criterion
     fixed_timestep: bool = False
     num_timesteps: int = 1000
-    adaptive_timesteps_backwards_differentiable: bool = False
-    num_checkpoints: int = 100
 
-    stellar_wind: bool = False
+    # TODO: combine intermediate_saves and checkpointing
+    differentiation_mode = FORWARDS
+    num_checkpoints: int = 100
 
     # intermediate saving of the simulation
     intermediate_saves: bool = False
     num_saves: int = 10
 
     first_order_fallback: bool = False
-    # TODO: add more configs
+
+    # physical modules
+    wind_config: WindConfig = WindConfig()

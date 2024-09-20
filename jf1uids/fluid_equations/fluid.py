@@ -63,6 +63,7 @@ def total_energy_from_primitives(rho, u, p, gamma):
 
 @jax.jit
 def speed_of_sound(rho, p, gamma):
+    # produces nans if p or rho are negative
     return jnp.sqrt(gamma * p / rho)
 
 # ===========================================
@@ -70,16 +71,16 @@ def speed_of_sound(rho, p, gamma):
 # ============= Total Quantities =============
 
 @partial(jax.jit, static_argnames=['num_ghost_cells'])
-def calculate_total_mass_proxy(primitive_state, helper_data, dx, num_ghost_cells):
+def calculate_total_mass(primitive_state, helper_data, dx, num_ghost_cells):
     """
     Calculate the total mass in the domain.
     """
-    return jnp.sum(primitive_state[0, num_ghost_cells:-num_ghost_cells] * helper_data.r_hat_alpha[num_ghost_cells:-num_ghost_cells] * dx)
+    return jnp.sum(primitive_state[0, num_ghost_cells:-num_ghost_cells] * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])
 
 @partial(jax.jit, static_argnames=['num_ghost_cells'])
-def calculate_total_energy_proxy(primitive_state, helper_data, dx, gamma, num_ghost_cells):
+def calculate_total_energy(primitive_state, helper_data, dx, gamma, num_ghost_cells):
     """
     Calculate the total energy in the domain.
     """
     energy = total_energy_from_primitives(primitive_state[0, num_ghost_cells:-num_ghost_cells], primitive_state[1, num_ghost_cells:-num_ghost_cells], primitive_state[2, num_ghost_cells:-num_ghost_cells], gamma)
-    return jnp.sum(energy * helper_data.r_hat_alpha[num_ghost_cells:-num_ghost_cells] * dx)
+    return jnp.sum(energy * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])

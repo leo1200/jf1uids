@@ -4,13 +4,30 @@ from functools import partial
 
 from equinox.internal._loop.checkpointed import checkpointed_while_loop
 
+from jf1uids.option_classes.simulation_config import BACKWARDS
 from jf1uids.time_stepping.CFL import _cfl_time_step
-from jf1uids.fluid_equations.fluid import calculate_total_energy_proxy, calculate_total_mass_proxy
+from jf1uids.fluid_equations.fluid import calculate_total_energy, calculate_total_mass
 from jf1uids.spatial_reconstruction.muscl_scheme import evolve_state
-from jf1uids.physics_modules.physical_sources import add_physical_sources
+from jf1uids.physics_modules.run_physics_modules import run_physics_modules
 from jf1uids.data_classes.simulation_checkpoint_data import CheckpointData
 
 from timeit import default_timer as timer
+
+@partial(jax.jit, static_argnames=['config'])
+def _source_term_aware_time_step(state, config, params, helper_data):
+    """
+    Calculate the time step based on the CFL condition and the source terms
+    """
+
+    # calculate the time step based on the CFL condition
+    dt = _cfl_time_step(state, config.dx, params.dt_max, params.gamma, params.C_cfl)
+
+    # == experimental: correct the CFL time step based on the physical sources ==
+    hypothetical_new_state = run_physics_modules(state, dt, config, params, helper_data)
+    dt = _cfl_time_step(hypothetical_new_state, config.dx, params.dt_max, params.gamma, params.C_cfl)
+    # ===========================================================================
+
+    return dt
 
 @partial(jax.jit, static_argnames=['config'])
 def time_integration(primitive_state, config, params, helper_data):
@@ -21,7 +38,7 @@ def time_integration(primitive_state, config, params, helper_data):
     if config.fixed_timestep:
         return time_integration_fixed_steps(primitive_state, config, params, helper_data)
     else:
-        if config.adaptive_timesteps_backwards_differentiable:
+        if config.differentiation_mode == BACKWARDS:
             return time_integration_adaptive_backwards(primitive_state, config, params, helper_data)
         else:
             return time_integration_adaptive_steps(primitive_state, config, params, helper_data)
@@ -30,15 +47,15 @@ def time_integration(primitive_state, config, params, helper_data):
 def time_integration_fixed_steps(primitive_state, config, params, helper_data):
 
     if config.intermediate_saves:
-        raise NotImplementedError("intermediate_saves not implemented")
+        raise NotImplementedError("intermediate_saves only implemented with adaptive time stepping with forward mode option")
 
     dt = params.t_end / config.num_timesteps
 
     def update_step(_, state):
 
-        state = add_physical_sources(state, dt / 2, config, params, helper_data)
-        state = evolve_state(state, config.dx, dt, params.gamma, config, params, helper_data)
-        state = add_physical_sources(state, dt / 2, config, params, helper_data)
+        state = run_physics_modules(state, dt / 2, config, params, helper_data)
+        state = evolve_state(state, config.dx, dt, params.gamma, config, helper_data)
+        state = run_physics_modules(state, dt / 2, config, params, helper_data)
 
         return state
     
@@ -67,8 +84,8 @@ def time_integration_adaptive_steps(primitive_state, config, params, helper_data
             def update_checkpoint_data(checkpoint_data):
                 times = checkpoint_data.times.at[checkpoint_data.current_checkpoint].set(time)
                 states = checkpoint_data.states.at[checkpoint_data.current_checkpoint].set(state)
-                total_mass_proxy = checkpoint_data.total_mass_proxy.at[checkpoint_data.current_checkpoint].set(calculate_total_mass_proxy(state, helper_data, config.dx, config.num_ghost_cells))
-                total_energy_proxy = checkpoint_data.total_energy_proxy.at[checkpoint_data.current_checkpoint].set(calculate_total_energy_proxy(state, helper_data, config.dx, params.gamma, config.num_ghost_cells))
+                total_mass_proxy = checkpoint_data.total_mass_proxy.at[checkpoint_data.current_checkpoint].set(calculate_total_mass(state, helper_data, config.dx, config.num_ghost_cells))
+                total_energy_proxy = checkpoint_data.total_energy_proxy.at[checkpoint_data.current_checkpoint].set(calculate_total_energy(state, helper_data, config.dx, params.gamma, config.num_ghost_cells))
                 current_checkpoint = checkpoint_data.current_checkpoint + 1
                 checkpoint_data = checkpoint_data._replace(times = times, states = states, total_mass_proxy = total_mass_proxy, total_energy_proxy = total_energy_proxy, current_checkpoint = current_checkpoint)
                 return checkpoint_data
@@ -84,11 +101,18 @@ def time_integration_adaptive_steps(primitive_state, config, params, helper_data
         else:
             time, state = carry
 
-        dt = _cfl_time_step(state, config.dx, params.dt_max, params.gamma, params.C_cfl)
+        # dt = _cfl_time_step(state, config.dx, params.dt_max, params.gamma, params.C_cfl)
 
-        state = add_physical_sources(state, dt / 2, config, params, helper_data)
-        state = evolve_state(state, config.dx, dt, params.gamma, config, params, helper_data)
-        state = add_physical_sources(state, dt / 2, config, params, helper_data)
+        # do not differentiate through the choice of the time step
+        dt = jax.lax.stop_gradient(_source_term_aware_time_step(state, config, params, helper_data))
+
+        # for now we mainly consider the stellar wind, a constant source term term, 
+        # so the source is handled via a simple Euler step but generally 
+        # a higher order method (in a split fashion) may be used
+
+        state = run_physics_modules(state, dt / 2, config, params, helper_data)
+        state = evolve_state(state, config.dx, dt, params.gamma, config, helper_data)
+        state = run_physics_modules(state, dt / 2, config, params, helper_data)
 
         time += dt
 
@@ -132,11 +156,14 @@ def time_integration_adaptive_backwards(primitive_state, config, params, helper_
 
         time, state = carry
 
-        dt = _cfl_time_step(state, config.dx, params.dt_max, params.gamma, params.C_cfl)
+        # dt = _cfl_time_step(state, config.dx, params.dt_max, params.gamma, params.C_cfl)
 
-        state = add_physical_sources(state, dt / 2, config, params, helper_data)
-        state = evolve_state(state, config.dx, dt, params.gamma, config, params, helper_data)
-        state = add_physical_sources(state, dt / 2, config, params, helper_data)
+        # do not differentiate through the choice of the time step
+        dt = jax.lax.stop_gradient(_source_term_aware_time_step(state, config, params, helper_data))
+
+        state = run_physics_modules(state, dt / 2, config, params, helper_data)
+        state = evolve_state(state, config.dx, dt, params.gamma, config, helper_data)
+        state = run_physics_modules(state, dt / 2, config, params, helper_data)
 
         time += dt
 
