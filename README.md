@@ -7,6 +7,9 @@ jf1uid is written in a way such that mass and energy are conserved based on the 
 The solver's code can be found in the jf1uis folder. You can find a simple example for getting
 started under [simple_example.ipynb](simple_example.ipynb).
 
+## Note on the development version
+For reproducibility we for now leave this main-branch as is but have continued development here: [https://anonymous.4open.science/r/jf1uids-dev/](https://anonymous.4open.science/r/jf1uids-dev/). The development version is already on pip and supports backwards-differentiation with adaptive timestepping and checkpointing. We have also restructured the code a bit (streamlining is still ongoing).
+
 ## Installation
 For now, during the double-blind review phase, we recommend downloading the repository on [https://anonymous.4open.science/r/jf1uids/](https://anonymous.4open.science/r/jf1uids/). You can then test the code by running and adapting the example notebooks.
 
@@ -26,7 +29,7 @@ installed.
 All the results from the paper can easily be reproduced via the notebooks provided
 
 - figure 1 &rarr; [conservational_properties.ipynb](conservational_properties.ipynb): For a radial shock problem, conservation of mass and energy in jf1uids are showcased.
-- figure 2 &rarr; [gradiends_through_stellar_wind.ipynb](gradiends_through_stellar_wind.ipynb): The gradients of the final fluid state with respect to the wind's velocity are analyzed.
+- figure 2 &rarr; [gradients_through_stellar_wind.ipynb](gradients_through_stellar_wind.ipynb): The gradients of the final fluid state with respect to the wind's velocity are analyzed.
 - figure 3 &rarr; [wind_parameter_optimization.ipynb](wind_parameter_optimization.ipynb): Finding wind parameters from the final fluid state via
 gradient-descent is shown.
 
