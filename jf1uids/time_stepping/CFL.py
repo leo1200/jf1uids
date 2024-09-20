@@ -2,6 +2,9 @@ import jax.numpy as jnp
 from jf1uids.fluid_equations.euler import _euler_flux
 from jf1uids.fluid_equations.fluid import speed_of_sound
 import jax
+from functools import partial
+
+from jf1uids.physics_modules.run_physics_modules import _run_physics_modules
 
 @jax.jit
 def _cfl_time_step(primitive_states, dx, dt_max, gamma, C_CFL = 0.8):
@@ -27,3 +30,19 @@ def _cfl_time_step(primitive_states, dx, dt_max, gamma, C_CFL = 0.8):
     dt = C_CFL * dx / max_wave_speed
 
     return jnp.minimum(dt, dt_max)
+
+@partial(jax.jit, static_argnames=['config'])
+def _source_term_aware_time_step(state, config, params, helper_data):
+    """
+    Calculate the time step based on the CFL condition and the source terms
+    """
+
+    # calculate the time step based on the CFL condition
+    dt = _cfl_time_step(state, config.dx, params.dt_max, params.gamma, params.C_cfl)
+
+    # == experimental: correct the CFL time step based on the physical sources ==
+    hypothetical_new_state = _run_physics_modules(state, dt, config, params, helper_data)
+    dt = _cfl_time_step(hypothetical_new_state, config.dx, params.dt_max, params.gamma, params.C_cfl)
+    # ===========================================================================
+
+    return dt

@@ -8,18 +8,13 @@ The solver's code can be found in the jf1uis folder. You can find a simple examp
 started under [simple_example.ipynb](simple_example.ipynb).
 
 ## Installation
-For now, during the double-blind review phase, we recommend downloading the repository on [https://anonymous.4open.science/r/jf1uids/](https://anonymous.4open.science/r/jf1uids/). You can then test the code by running and adapting the example notebooks.
+jf1uids can be installed via pip:
 
-You will need to have
+```bash
+pip install jf1uids
+```
 
-- jax
-- optax
-- matplotlib
-- astropy (for unit-handling for the stellar wind)
-- scipy (for the Weaver (1977) solution)
-- numpy
-
-installed.
+For running the notebooks you will also need to install matplotlib (and jupyter).
 
 ## Reproducing the results from the paper
 

@@ -5,29 +5,13 @@ from functools import partial
 from equinox.internal._loop.checkpointed import checkpointed_while_loop
 
 from jf1uids.option_classes.simulation_config import BACKWARDS
-from jf1uids.time_stepping.CFL import _cfl_time_step
+from jf1uids.time_stepping.CFL import _cfl_time_step, _source_term_aware_time_step
 from jf1uids.fluid_equations.fluid import calculate_total_energy, calculate_total_mass
-from jf1uids.spatial_reconstruction.muscl_scheme import evolve_state
-from jf1uids.physics_modules.run_physics_modules import run_physics_modules
+from jf1uids.spatial_reconstruction.muscl_scheme import _evolve_state
+from jf1uids.physics_modules.run_physics_modules import _run_physics_modules
 from jf1uids.data_classes.simulation_checkpoint_data import CheckpointData
 
 from timeit import default_timer as timer
-
-@partial(jax.jit, static_argnames=['config'])
-def _source_term_aware_time_step(state, config, params, helper_data):
-    """
-    Calculate the time step based on the CFL condition and the source terms
-    """
-
-    # calculate the time step based on the CFL condition
-    dt = _cfl_time_step(state, config.dx, params.dt_max, params.gamma, params.C_cfl)
-
-    # == experimental: correct the CFL time step based on the physical sources ==
-    hypothetical_new_state = run_physics_modules(state, dt, config, params, helper_data)
-    dt = _cfl_time_step(hypothetical_new_state, config.dx, params.dt_max, params.gamma, params.C_cfl)
-    # ===========================================================================
-
-    return dt
 
 @partial(jax.jit, static_argnames=['config'])
 def time_integration(primitive_state, config, params, helper_data):
@@ -53,9 +37,9 @@ def time_integration_fixed_steps(primitive_state, config, params, helper_data):
 
     def update_step(_, state):
 
-        state = run_physics_modules(state, dt / 2, config, params, helper_data)
-        state = evolve_state(state, config.dx, dt, params.gamma, config, helper_data)
-        state = run_physics_modules(state, dt / 2, config, params, helper_data)
+        state = _run_physics_modules(state, dt / 2, config, params, helper_data)
+        state = _evolve_state(state, config.dx, dt, params.gamma, config, helper_data)
+        state = _run_physics_modules(state, dt / 2, config, params, helper_data)
 
         return state
     
@@ -110,9 +94,9 @@ def time_integration_adaptive_steps(primitive_state, config, params, helper_data
         # so the source is handled via a simple Euler step but generally 
         # a higher order method (in a split fashion) may be used
 
-        state = run_physics_modules(state, dt / 2, config, params, helper_data)
-        state = evolve_state(state, config.dx, dt, params.gamma, config, helper_data)
-        state = run_physics_modules(state, dt / 2, config, params, helper_data)
+        state = _run_physics_modules(state, dt / 2, config, params, helper_data)
+        state = _evolve_state(state, config.dx, dt, params.gamma, config, helper_data)
+        state = _run_physics_modules(state, dt / 2, config, params, helper_data)
 
         time += dt
 
@@ -161,9 +145,9 @@ def time_integration_adaptive_backwards(primitive_state, config, params, helper_
         # do not differentiate through the choice of the time step
         dt = jax.lax.stop_gradient(_source_term_aware_time_step(state, config, params, helper_data))
 
-        state = run_physics_modules(state, dt / 2, config, params, helper_data)
-        state = evolve_state(state, config.dx, dt, params.gamma, config, helper_data)
-        state = run_physics_modules(state, dt / 2, config, params, helper_data)
+        state = _run_physics_modules(state, dt / 2, config, params, helper_data)
+        state = _evolve_state(state, config.dx, dt, params.gamma, config, helper_data)
+        state = _run_physics_modules(state, dt / 2, config, params, helper_data)
 
         time += dt
 
