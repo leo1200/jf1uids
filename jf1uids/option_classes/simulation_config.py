@@ -43,7 +43,7 @@ class SimulationConfig(NamedTuple):
     num_timesteps: int = 1000
 
     # TODO: combine intermediate_saves and checkpointing
-    differentiation_mode = FORWARDS
+    differentiation_mode: int = FORWARDS
     num_checkpoints: int = 100
 
     # intermediate saving of the simulation
