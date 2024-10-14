@@ -1,19 +1,39 @@
 from typing import NamedTuple
 import jax.numpy as jnp
-from jf1uids.geometry.geometry import CARTESIAN, SPHERICAL, CYLINDRICAL, _center_of_volume, _r_hat_alpha
+from jf1uids._geometry.geometry import CARTESIAN, SPHERICAL, CYLINDRICAL, _center_of_volume, _r_hat_alpha
+from jf1uids.option_classes.simulation_config import SimulationConfig
 
 # Helper data like the radii and cell volumes 
 # in the simulation or cooling tables etc.
 
 class HelperData(NamedTuple):
+    """Helper data used throughout the simulation."""
+
+    #: The geometric centers of the cells.
     geometric_centers: jnp.ndarray = None
+
+    #: The volumetric centers of the cells.
+    #: Same as the geometric centers for Cartesian geometry.
     volumetric_centers: jnp.ndarray = None
+
+    #: A helper variable, defined as
+    #: \hat{r}^\alpha = V_j / (2 * \alpha * \pi * \Delta r)
+    #: with V_j the volume of cell j, \alpha the geometry factor
+    #: and \Delta r the cell width.
     r_hat_alpha: jnp.ndarray = None
+
+    #: The cell volumes.
     cell_volumes: jnp.ndarray = None
+
+    #: Coordinates of the inner cell boundaries.
     inner_cell_boundaries: jnp.ndarray = None
+
+    #: Coordinates of the outer cell boundaries.
     outer_cell_boundaries: jnp.ndarray = None
 
-def get_helper_data(config):
+def get_helper_data(config: SimulationConfig) -> HelperData:
+    """Generate the helper data for the simulation from the configuration."""
+
     dx = config.box_size / (config.num_cells - 1)
     if config.geometry == CARTESIAN:
         r = jnp.linspace(0, config.box_size, config.num_cells)

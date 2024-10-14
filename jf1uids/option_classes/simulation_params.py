@@ -1,19 +1,27 @@
 from typing import NamedTuple
 
-from jf1uids.physics_modules.stellar_wind.stellar_wind import WindParams
-
-# Different from the simulation configuration, the simulation parameters
-# do not require recompilation when changed.
-
-# Examples are the CFL number or settings of any physics module
-# that might be implemented.
+from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindParams
 
 class SimulationParams(NamedTuple):
+    """Different from the simulation configuration, the simulation parameters
+        do not require recompilation when changed. The simulation can be 
+        differentiated with respect to them.
+    """
+
+    #: The Courant-Friedrichs-Lewy number, a factor
+    #: in the time step calculation.
     C_cfl: float = 0.8
+
+    #: The adiabatic index of the gas.
     gamma: float = 5/3
 
+    #: The maximum time step.
     dt_max: float = 0.001
+
+    #: The final time of the simulation.
     t_end: float = 0.2
 
     # parameters of physics modules
+
+    #: The parameters of the stellar wind module.
     wind_params: WindParams = WindParams()

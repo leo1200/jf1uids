@@ -1,25 +1,36 @@
 from typing import NamedTuple
 
-from jf1uids.physics_modules.stellar_wind.stellar_wind import WindConfig
+from jf1uids._geometry.boundaries import OPEN_BOUNDARY
+from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindConfig
+
+from jf1uids import CARTESIAN
 
 FORWARDS = 0
 BACKWARDS = 1
 
-# The simulation configuration are parameters defining the simulation
-# where changes necessitate recompilation.
-
 class SimulationConfig(NamedTuple):
+    """Configuration object for the simulation.
+    The simulation configuration are parameters defining 
+    the simulation where changes necessitate recompilation."""
+
     # Simulation parameters
-    geometry: int = 0 # 0 -> cartesian, 1 -> cylindrical, 2 -> spherical
+
+    #: The geometry of the simulation.
+    geometry: int = CARTESIAN
+
+    #: The size of the simulation box.
     box_size: float = 1.0
+
+    #: The number of cells in the simulation (including ghost cells).
     num_cells: int = 400
 
+    #: The reconstruction order is the number of 
+    #: cells on each side of the cell of interest
+    #: used to calculate the gradients for the
+    #: reconstruction at the interfaces.
     reconstruction_order: int = 1
-    # The reconstruction order is the number of 
-    # cells on each side of the cell of interest
-    # used to calculate the gradients for the
-    # reconstruction at the interfaces.
 
+    # Explanation of the ghost cells
     #                                |---------|
     #                           |---------|
     # stencil              |---------|
@@ -28,29 +39,46 @@ class SimulationConfig(NamedTuple):
     # fluxes                     -->  -->
     # update                      | 3c'|
     # --> all others are ghost cells
+
+    #: The number of ghost cells.
     num_ghost_cells: int = reconstruction_order + 1
 
-    # HAS TO BE UPDATED MANUALLY
+    #: The width of the cells.
     dx: float = box_size / (num_cells - 1)
 
-    left_boundary: int = 0 # 0 -> open, 1 -> reflective
-    right_boundary: int = 0 # 0 -> open, 1 -> reflective
+    #: The left boundary condition.
+    left_boundary: int = OPEN_BOUNDARY
 
-    # if you want to use a fixed timestep
-    # this changes how the simulation is
-    # compiled, mind the CFL criterion
+    #: The right boundary condition.
+    right_boundary: int = OPEN_BOUNDARY
+
+    #: Enables a fixed timestep for the simulation
+    #: based on the specified number of timesteps.
     fixed_timestep: bool = False
+
+    #: The number of timesteps for the fixed timestep mode.
     num_timesteps: int = 1000
 
-    # TODO: combine intermediate_saves and checkpointing
+    #: The differentiation mode one whats to use
+    #: the solver in (forwards or backwards).
     differentiation_mode: int = FORWARDS
+
+    #: The number of checkpoints used in the setup
+    #: with backwards differetiability and adaptive
+    #: time stepping.
     num_checkpoints: int = 100
 
-    # intermediate saving of the simulation
-    intermediate_saves: bool = False
-    num_saves: int = 10
+    #: Return intermediate snapshots of the time evolution
+    #: insteat of only the final fluid state.
+    return_snapshots: bool = False
 
+    #: The number of snapshots to return.
+    num_snapshots: int = 10
+
+    #: Fallback to the first order Godunov scheme.
     first_order_fallback: bool = False
 
     # physical modules
+
+    #: The configuration for the stellar wind module.
     wind_config: WindConfig = WindConfig()
