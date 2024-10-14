@@ -4,6 +4,7 @@
 node_modules/
 package.json
 package-lock.json
+.firebase/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
