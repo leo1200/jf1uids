@@ -7,8 +7,6 @@
 :gutter: 1 1 1 2
 
 :::{grid-item-card} {octicon}`zap;1.5em;sd-mr-1` Fast and Differentiable
-:link: notebooks/gradients_through_stellar_wind.ipynb
-:link-type: ref
 
 Written in `JAX`, `jf1uids` is fully differentiable - a simulation can be differentiated with respect to any input parameter - and just-in-time compiled for fast execution on CPU, GPU, or TPU.
 
@@ -17,8 +15,6 @@ Written in `JAX`, `jf1uids` is fully differentiable - a simulation can be differ
 :::
 
 :::{grid-item-card} {octicon}`shield-check;1.5em;sd-mr-1` Well-considered Numerical Methods
-:link: notebooks/conservational_properties.ipynb
-:link-type: ref
 
 Conservative properties of the flow are maintained in the radial simulations based on the approach of [Crittenden and Balachandar (2018)](https://doi.org/10.1007/s00193-017-0784-y) with a well-tested MUSCL-Hancock Riemann solver at its core.
 
@@ -27,8 +23,6 @@ Conservative properties of the flow are maintained in the radial simulations bas
 :::
 
 :::{grid-item-card} {octicon}`tools;1.5em;sd-mr-1` Extensible
-:link: notebooks/wind_parameter_optimization.ipynb
-:link-type: ref
 
 Physical modules, like one for stellar winds, can be easily added to the simulation. As we 
 are dealing with a differentiable simulator, these modules can include parameters (or neural
@@ -60,7 +54,6 @@ as a dependency. For a GPU-compatible installation of `JAX`, please refer to the
 :caption: Introduction
 
 self
-introduction.md
 ```
 
 ```{toctree}

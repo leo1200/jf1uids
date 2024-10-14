@@ -13,5 +13,5 @@ Submodules
    :titlesonly:
    :maxdepth: 1
 
-   jf1uids.option_classes.simulation_params
    jf1uids.option_classes.simulation_config
+   jf1uids.option_classes.simulation_params

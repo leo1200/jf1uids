@@ -16,5 +16,5 @@ Submodules
    :maxdepth: 1
 
    jf1uids._physics_modules._stellar_wind.stellar_wind
-   jf1uids._physics_modules._stellar_wind.weaver
    jf1uids._physics_modules._stellar_wind.stellar_wind_options
+   jf1uids._physics_modules._stellar_wind.weaver
