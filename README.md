@@ -7,6 +7,9 @@ jf1uid is written in a way such that mass and energy are conserved based on the 
 The solver's code can be found in the jf1uis folder. You can find a simple example for getting
 started under [simple_example.ipynb](simple_example.ipynb).
 
+## Note on the development version
+For reproducibility we for now leave this main-branch as is but have continued development here: [https://anonymous.4open.science/r/jf1uids-dev/](https://anonymous.4open.science/r/jf1uids-dev/). The development version is already on pip and supports backwards-differentiation with adaptive timestepping and checkpointing. We have also restructured the code a bit (streamlining is still ongoing).
+
 ## Installation
 jf1uids can be installed via pip:
 
