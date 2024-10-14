@@ -2,7 +2,7 @@
 name = "jf1uids"
 version = "0.1.7"
 description = "conservative, differentiable, radial 1d fluid solver with astrophysical modules"
-authors = ["anonymous"]
+authors = ["Leonard Storcks"]
 readme = "README.md"
 packages = [{include = "jf1uids"}]
 
