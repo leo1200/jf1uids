@@ -34,6 +34,10 @@ network terms) which can be optimized directly in the solver.
 
 ::::
 
+:::{seealso}
+The corresponding paper for this project is available on [arXiv](https://arxiv.org/abs/2410.23093).
+:::
+
 ## Installation
 
 `jf1uids` can be installed via `pip`
@@ -47,6 +51,22 @@ as a dependency. For a GPU-compatible installation of `JAX`, please refer to the
 [JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html).
 
 :::{tip} Get started with this [simple example](notebooks/simple_example.ipynb).
+:::
+
+## Roadmap
+
+:::{seealso}
+A baseline hydrodynamical code for dynamic adaptive mesh refinement (AMR) in `JAX` in one dimension, `jamr`, is available on [GitHub](https://github.com/leo1200/jamr).
+:::
+
+- [x] Implement a conservative 1d radial fluid solver with simple to implement yet powerful numerical schemes.
+- [x] Implement a simple stellar wind model, first analyses on the gradients of the final fluid state with respect to the wind parameters.
+- [ ] Implementation of higher-order reconstruction methods like WENO-Z+, etc. 
+- [ ] Implementation of different Riemann solvers
+- [ ] Two-fluid cosmic-ray model
+- [ ] Implementation of a shock finder
+- [ ] Generalize to 2D and 3D
+
 
 ```{toctree}
 :hidden:

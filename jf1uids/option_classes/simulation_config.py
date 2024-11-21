@@ -69,7 +69,7 @@ class SimulationConfig(NamedTuple):
     num_checkpoints: int = 100
 
     #: Return intermediate snapshots of the time evolution
-    #: insteat of only the final fluid state.
+    #: instead of only the final fluid state.
     return_snapshots: bool = False
 
     #: The number of snapshots to return.

@@ -8,9 +8,16 @@ from beartype import beartype as typechecker
 from typing import Union
 
 from jf1uids.data_classes.simulation_helper_data import HelperData
+from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 
 # The default state jf1uids operates on 
 # are the primitive variables rho, u, p.
+
+# We might want to add more variables to the
+# state array, e.g. a tracer for stelar wind
+# mass or cosmic ray pressure. 
+
+
 
 # ======= Create the primitive state ========
 
@@ -30,34 +37,36 @@ def construct_primitive_state(rho: Float[Array, "num_cells"], u: Float[Array, "n
     return jnp.stack([rho, u, p], axis = 0)
 
 @jaxtyped(typechecker=typechecker)
-@jax.jit
-def density(primitive_states: Float[Array, "num_vars num_cells"]) -> Float[Array, "num_cells"]:
+@partial(jax.jit, static_argnames=['registered_variables'])
+def density(registered_variables: RegisteredVariables, primitive_states: Float[Array, "num_vars num_cells"]) -> Float[Array, "num_cells"]:
     """Extract the density from the primitive state array.
 
     Args:
+        registered_variables: The indices of the variables in the state array.
         primitive_states: The primitive state array.
 
     Returns:
         The density.
     """
-    return primitive_states[0]
+    return primitive_states[registered_variables.density_index]
 
 @jaxtyped(typechecker=typechecker)
-@jax.jit
-def velocity(primitive_states: Float[Array, "num_vars num_cells"]) -> Float[Array, "num_cells"]:
+@partial(jax.jit, static_argnames=['registered_variables'])
+def velocity(registered_variables: RegisteredVariables, primitive_states: Float[Array, "num_vars num_cells"]) -> Float[Array, "num_cells"]:
     """Extract the velocity from the primitive state array.
 
     Args:
+        registered_variables: The indices of the variables in the state array.
         primitive_states: The primitive state array.
 
     Returns:
         The velocity.
     """
-    return primitive_states[1]
+    return primitive_states[registered_variables.velocity_index]
 
 @jaxtyped(typechecker=typechecker)
-@jax.jit
-def pressure(primitive_states: Float[Array, "num_vars num_cells"]) -> Float[Array, "num_cells"]:
+@partial(jax.jit, static_argnames=['registered_variables'])
+def pressure(registered_variables: RegisteredVariables, primitive_states: Float[Array, "num_vars num_cells"]) -> Float[Array, "num_cells"]:
     """Extract the pressure from the primitive state array.
 
     Args:
@@ -67,7 +76,7 @@ def pressure(primitive_states: Float[Array, "num_vars num_cells"]) -> Float[Arra
         The pressure.
     """
 
-    return primitive_states[2]
+    return primitive_states[registered_variables.pressure_index]
 
 @jaxtyped(typechecker=typechecker)
 @jax.jit

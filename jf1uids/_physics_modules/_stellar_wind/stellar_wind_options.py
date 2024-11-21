@@ -9,6 +9,7 @@ class WindConfig(NamedTuple):
     stellar_wind: bool = False
     num_injection_cells: int = 10
     wind_injection_scheme: int = EI
+    trace_wind_density: bool = False
 
 class WindParams(NamedTuple):
     wind_mass_loss_rate: float = 0.0
