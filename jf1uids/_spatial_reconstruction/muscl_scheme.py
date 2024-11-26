@@ -7,6 +7,7 @@ from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.fluid_equations.fluid import primitive_state_from_conserved, speed_of_sound, conserved_state_from_primitive
 from jf1uids._geometry.geometry import CARTESIAN
+from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import SimulationConfig
 from jf1uids._spatial_reconstruction.limiters import _minmod
 from jf1uids._riemann_solver.hll import _hll_solver
@@ -56,8 +57,8 @@ def _calculate_limited_gradients(primitive_states: Float[Array, "num_vars num_ce
     return limited_gradients
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['geometry', 'first_order_fallback'])
-def _reconstruct_at_interface(primitive_states: Float[Array, "num_vars num_cells"], dt: Float[Array, ""], dx: Union[float, Float[Array, ""]], gamma: Union[float, Float[Array, ""]], geometry: int, first_order_fallback: bool, helper_data: HelperData) -> tuple[Float[Array, "num_vars num_interfaces"], Float[Array, "num_vars num_interfaces"]]:
+@partial(jax.jit, static_argnames=['geometry', 'first_order_fallback', 'registered_variables'])
+def _reconstruct_at_interface(primitive_states: Float[Array, "num_vars num_cells"], dt: Float[Array, ""], dx: Union[float, Float[Array, ""]], gamma: Union[float, Float[Array, ""]], geometry: int, first_order_fallback: bool, helper_data: HelperData, registered_variables: RegisteredVariables) -> tuple[Float[Array, "num_vars num_interfaces"], Float[Array, "num_vars num_interfaces"]]:
     """Limited linear reconstruction of the primitive variables at the interfaces.
 
     Args:
@@ -74,7 +75,9 @@ def _reconstruct_at_interface(primitive_states: Float[Array, "num_vars num_cells
     """
 
     # get fluid variables for convenience
-    rho, u, p = primitive_states
+    rho = primitive_states[registered_variables.density_index]
+    u = primitive_states[registered_variables.velocity_index]
+    p = primitive_states[registered_variables.pressure_index]
 
     if geometry == CARTESIAN:
         distances_to_left_interfaces = dx / 2 # distances r_i - r_{i-1/2}
@@ -97,14 +100,26 @@ def _reconstruct_at_interface(primitive_states: Float[Array, "num_vars num_cells
     c = speed_of_sound(rho, p, gamma)
 
     # calculate the vectors making up A_W
-    A_W_1 = jnp.stack([u, jnp.zeros_like(u), jnp.zeros_like(u)], axis = 0)
-    A_W_2 = jnp.stack([rho, u, rho * c ** 2], axis = 0)
-    A_W_3 = jnp.stack([jnp.zeros_like(u), 1 / rho, u], axis = 0)
-    # maybe better construct A_W as a 3x3xN tensor
-    # A_W = jnp.stack([A_W_1, A_W_2, A_W_3], axis = 0)
+    A_W_1 = jnp.zeros_like(primitive_states)
+    A_W_1 = A_W_1.at[registered_variables.density_index].set(u)
 
+    A_W_2 = jnp.zeros_like(primitive_states)
+    A_W_2 = A_W_2.at[registered_variables.density_index].set(rho)
+    A_W_2 = A_W_2.at[registered_variables.velocity_index].set(u)
+    A_W_2 = A_W_2.at[registered_variables.pressure_index].set(rho * c ** 2)
+
+    A_W_3 = jnp.zeros_like(primitive_states)
+    A_W_3 = A_W_3.at[registered_variables.velocity_index].set(1 / rho)
+    A_W_3 = A_W_3.at[registered_variables.pressure_index].set(u)
+
+    # TODO: generalize this for more than 3 variables
     projected_gradients = A_W_1[:, 1:-1] * limited_gradients[0, :] + A_W_2[:, 1:-1] * limited_gradients[1, :] + A_W_3[:, 1:-1] * limited_gradients[2, :]
 
+    if registered_variables.wind_density_active:
+        A_W_4 = jnp.zeros_like(primitive_states)
+        A_W_4 = A_W_4.at[registered_variables.wind_density_index].set(u)
+        projected_gradients += A_W_4[:, 1:-1] * limited_gradients[registered_variables.wind_density_index, :]
+    
     # predictor step
     predictors = primitive_states.at[:, 1:-1].add(-dt / 2 * projected_gradients)
 
@@ -117,8 +132,8 @@ def _reconstruct_at_interface(primitive_states: Float[Array, "num_vars num_cells
     return primitives_right[:, 1:-2], primitives_left[:, 2:-1]
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['geometry'])
-def _pressure_nozzling_source(primitive_states: Float[Array, "num_vars num_cells"], dx: Union[float, Float[Array, ""]], r: Float[Array, "num_cells"], rv: Float[Array, "num_cells"], r_hat_alpha: Float[Array, "num_cells"], geometry: int) -> Float[Array, "num_vars num_cells-2"]:
+@partial(jax.jit, static_argnames=['geometry', 'registered_variables'])
+def _pressure_nozzling_source(primitive_states: Float[Array, "num_vars num_cells"], dx: Union[float, Float[Array, ""]], r: Float[Array, "num_cells"], rv: Float[Array, "num_cells"], r_hat_alpha: Float[Array, "num_cells"], geometry: int, registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells-2"]:
     """Pressure nozzling source term as of the geometry of the domain.
 
     Args:
@@ -132,18 +147,22 @@ def _pressure_nozzling_source(primitive_states: Float[Array, "num_vars num_cells
     Returns:
         The pressure nozzling source
     """
-    _, _, p = primitive_states
+    p = primitive_states[registered_variables.pressure_index]
 
     # calculate the limited gradients on the cells
-    _, _, dp_dr = _calculate_limited_gradients(primitive_states, dx, geometry, rv)
+    dp_dr = _calculate_limited_gradients(primitive_states, dx, geometry, rv)[registered_variables.pressure_index]
 
     pressure_nozzling = r[1:-1] ** (geometry - 1) * p[1:-1] + (r_hat_alpha[1:-1] - rv[1:-1] * r[1:-1] ** (geometry - 1)) * dp_dr
 
-    return jnp.stack([jnp.zeros_like(pressure_nozzling), geometry * pressure_nozzling, jnp.zeros_like(pressure_nozzling)], axis = 0)
+    nozzling = jnp.zeros((registered_variables.num_vars, p.shape[0] - 2))
+    nozzling = nozzling.at[registered_variables.velocity_index].set(geometry * pressure_nozzling)
+
+    return nozzling
+
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config'])
-def _get_conservative_derivative(conservative_states: Float[Array, "num_vars num_cells"], dx: Union[float, Float[Array, ""]], dt: Float[Array, ""], gamma: Union[float, Float[Array, ""]], config: SimulationConfig, helper_data: HelperData) -> Float[Array, "num_vars num_cells"]:
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def _get_conservative_derivative(conservative_states: Float[Array, "num_vars num_cells"], dx: Union[float, Float[Array, ""]], dt: Float[Array, ""], gamma: Union[float, Float[Array, ""]], config: SimulationConfig, helper_data: HelperData, registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells"]:
     """
     Time derivative of the conserved variables.
 
@@ -158,7 +177,7 @@ def _get_conservative_derivative(conservative_states: Float[Array, "num_vars num
     Returns:
         The time derivative of the conserved variables.
     """
-    primitive_states = primitive_state_from_conserved(conservative_states, gamma)
+    primitive_states = primitive_state_from_conserved(conservative_states, gamma, registered_variables)
 
     primitive_states = _boundary_handler(primitive_states, config.left_boundary, config.right_boundary)
     
@@ -166,10 +185,10 @@ def _get_conservative_derivative(conservative_states: Float[Array, "num_vars num
     conservative_deriv = jnp.zeros_like(conservative_states)
 
     # get the left and right states at the interfaces
-    primitives_left_of_interface, primitives_right_of_interface = _reconstruct_at_interface(primitive_states, dt, dx, gamma, config.geometry, config.first_order_fallback, helper_data)
+    primitives_left_of_interface, primitives_right_of_interface = _reconstruct_at_interface(primitive_states, dt, dx, gamma, config.geometry, config.first_order_fallback, helper_data, registered_variables)
 
     # calculate the fluxes at the interfaces
-    fluxes = _hll_solver(primitives_left_of_interface, primitives_right_of_interface, gamma)
+    fluxes = _hll_solver(primitives_left_of_interface, primitives_right_of_interface, gamma, registered_variables)
 
     # update the conserved variables using the fluxes
     if config.geometry == CARTESIAN:
@@ -185,7 +204,7 @@ def _get_conservative_derivative(conservative_states: Float[Array, "num_vars num
         r_minus_half = r.at[config.num_ghost_cells:-config.num_ghost_cells].add(-dx / 2)
 
         # calculate the source terms
-        nozzling_source = _pressure_nozzling_source(primitive_states, dx, r, rv, r_hat_alpha, config.geometry)
+        nozzling_source = _pressure_nozzling_source(primitive_states, dx, r, rv, r_hat_alpha, config.geometry, registered_variables)
 
         # update the conserved variables using the fluxes and source terms
         conservative_deriv = conservative_deriv.at[:, config.num_ghost_cells:-config.num_ghost_cells].add(1 / r_hat_alpha[config.num_ghost_cells:-config.num_ghost_cells] * (
@@ -196,8 +215,8 @@ def _get_conservative_derivative(conservative_states: Float[Array, "num_vars num
     return conservative_deriv
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config'])
-def _evolve_state(primitive_states: Float[Array, "num_vars num_cells"], dx: Union[float, Float[Array, ""]], dt: Float[Array, ""], gamma: Union[float, Float[Array, ""]], config: SimulationConfig, helper_data: HelperData) -> Float[Array, "num_vars num_cells"]:
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def _evolve_state(primitive_states: Float[Array, "num_vars num_cells"], dx: Union[float, Float[Array, ""]], dt: Float[Array, ""], gamma: Union[float, Float[Array, ""]], config: SimulationConfig, helper_data: HelperData, registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells"]:
     """Evolve the primitive state array.
 
     Args:
@@ -213,12 +232,12 @@ def _evolve_state(primitive_states: Float[Array, "num_vars num_cells"], dx: Unio
     """
 
     # get the conserved variables
-    conservative_states = conserved_state_from_primitive(primitive_states, gamma)
+    conservative_states = conserved_state_from_primitive(primitive_states, gamma, registered_variables)
 
     # ===================== euler time step =====================
 
     # get the time derivative of the conservative variables
-    conservative_deriv = _get_conservative_derivative(conservative_states, dx, dt, gamma, config, helper_data)
+    conservative_deriv = _get_conservative_derivative(conservative_states, dx, dt, gamma, config, helper_data, registered_variables)
     
     # update the conservative variables, here with an Euler step
     conservative_states = conservative_states + dt * conservative_deriv
@@ -226,6 +245,6 @@ def _evolve_state(primitive_states: Float[Array, "num_vars num_cells"], dx: Unio
     # ===========================================================
 
     # update the primitive variables
-    primitive_states = primitive_state_from_conserved(conservative_states, gamma)
+    primitive_states = primitive_state_from_conserved(conservative_states, gamma, registered_variables)
 
     return primitive_states

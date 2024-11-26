@@ -20,16 +20,17 @@ class RegisteredVariables(NamedTuple):
     density_index: int = 0
 
     #: pressure index
-    pressure_index: int = 1
+    velocity_index: int = 1
 
     #: Energy index
-    energy_index: int = 2
+    pressure_index: int = 2
 
     # Additional variables, these
     # have to be registered
 
     #: stellar wind density index
-    wind_density_index: int = jnp.inf
+    wind_density_index: int = -1
+    wind_density_active: bool = False
 
     # here you can add more variables
 
@@ -49,6 +50,7 @@ def get_registered_variables(config: SimulationConfig) -> RegisteredVariables:
     if config.wind_config.trace_wind_density:
         registered_variables = registered_variables._replace(wind_density_index = registered_variables.num_vars)
         registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 1)
+        registered_variables = registered_variables._replace(wind_density_active = True)
 
     # here you can register more variables
 

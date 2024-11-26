@@ -5,6 +5,7 @@ from jf1uids.fluid_equations.fluid import speed_of_sound
 import jax
 from functools import partial
 
+from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import SimulationConfig
 from jf1uids.option_classes.simulation_params import SimulationParams
 from jf1uids._physics_modules.run_physics_modules import _run_physics_modules
@@ -15,8 +16,8 @@ from beartype import beartype as typechecker
 from typing import Union
 
 @jaxtyped(typechecker=typechecker)
-@jax.jit
-def _cfl_time_step(primitive_states: Float[Array, "num_vars num_cells"], dx: Union[float, Float[Array, ""]], dt_max: Union[float, Float[Array, ""]], gamma: Union[float, Float[Array, ""]], C_CFL: Union[float, Float[Array, ""]] = 0.8) -> Float[Array, ""]:
+@partial(jax.jit, static_argnames=['registered_variables'])
+def _cfl_time_step(primitive_states: Float[Array, "num_vars num_cells"], dx: Union[float, Float[Array, ""]], dt_max: Union[float, Float[Array, ""]], gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables, C_CFL: Union[float, Float[Array, ""]] = 0.8) -> Float[Array, ""]:
 
     """Calculate the time step based on the CFL condition.
 
@@ -35,8 +36,13 @@ def _cfl_time_step(primitive_states: Float[Array, "num_vars num_cells"], dx: Uni
     primitives_left = primitive_states[:, :-1]
     primitives_right = primitive_states[:, 1:]
 
-    rho_L, u_L, p_L = primitives_left
-    rho_R, u_R, p_R = primitives_right
+    rho_L = primitives_left[registered_variables.density_index]
+    u_L = primitives_left[registered_variables.velocity_index]
+    p_L = primitives_left[registered_variables.pressure_index]
+
+    rho_R = primitives_right[registered_variables.density_index]
+    u_R = primitives_right[registered_variables.velocity_index]
+    p_R = primitives_right[registered_variables.pressure_index]
 
     # calculate the sound speeds
     c_L = speed_of_sound(rho_L, p_L, gamma)
@@ -56,8 +62,8 @@ def _cfl_time_step(primitive_states: Float[Array, "num_vars num_cells"], dx: Uni
     return jnp.minimum(dt, dt_max)
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config'])
-def _source_term_aware_time_step(primitive_states: Float[Array, "num_vars num_cells"], config: SimulationConfig, params: SimulationParams, helper_data: HelperData) -> Float[Array, ""]:
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def _source_term_aware_time_step(primitive_states: Float[Array, "num_vars num_cells"], config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> Float[Array, ""]:
     """
     Calculate the time step based on the CFL condition and the source terms. What timestep
     would be chosen if the source terms were added under the current CFL time step?
@@ -73,11 +79,11 @@ def _source_term_aware_time_step(primitive_states: Float[Array, "num_vars num_ce
     """
 
     # calculate the time step based on the CFL condition
-    dt = _cfl_time_step(primitive_states, config.dx, params.dt_max, params.gamma, params.C_cfl)
+    dt = _cfl_time_step(primitive_states, config.dx, params.dt_max, params.gamma, registered_variables, params.C_cfl)
 
     # == experimental: correct the CFL time step based on the physical sources ==
-    hypothetical_new_state = _run_physics_modules(primitive_states, dt, config, params, helper_data)
-    dt = _cfl_time_step(hypothetical_new_state, config.dx, params.dt_max, params.gamma, params.C_cfl)
+    hypothetical_new_state = _run_physics_modules(primitive_states, dt, config, params, helper_data, registered_variables)
+    dt = _cfl_time_step(hypothetical_new_state, config.dx, params.dt_max, params.gamma, registered_variables, params.C_cfl)
     # ===========================================================================
 
     return dt

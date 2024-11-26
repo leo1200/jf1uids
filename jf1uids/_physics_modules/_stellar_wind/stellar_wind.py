@@ -9,6 +9,7 @@ from beartype import beartype as typechecker
 
 from functools import partial
 
+from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import SimulationConfig
 from jf1uids.option_classes.simulation_params import SimulationParams
 
@@ -18,8 +19,8 @@ from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindConf
 from typing import Union
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config'])
-def _wind_injection(primitive_state: Float[Array, "num_vars num_cells"], dt: Float[Array, ""], config: SimulationConfig, params: SimulationParams, helper_data: HelperData) -> Float[Array, "num_vars num_cells"]:
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def _wind_injection(primitive_state: Float[Array, "num_vars num_cells"], dt: Float[Array, ""], config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells"]:
     """Inject stellar wind into the simulation.
 
     Args:
@@ -35,9 +36,9 @@ def _wind_injection(primitive_state: Float[Array, "num_vars num_cells"], dt: Flo
     if config.wind_config.wind_injection_scheme == MEO:
         primitive_state = _wind_meo(params.wind_params, primitive_state, dt, helper_data, config.num_ghost_cells, config.wind_config.num_injection_cells, params.gamma)
     elif config.wind_config.wind_injection_scheme == MEI:
-        primitive_state = _wind_mei(params.wind_params, primitive_state, dt, helper_data, config.num_ghost_cells, config.wind_config.num_injection_cells, params.gamma)
+        primitive_state = _wind_mei(params.wind_params, primitive_state, dt, helper_data, config.num_ghost_cells, config.wind_config.num_injection_cells, params.gamma, registered_variables)
     elif config.wind_config.wind_injection_scheme == EI:
-        primitive_state = _wind_ei(params.wind_params, primitive_state, dt, helper_data, config.num_ghost_cells, config.wind_config.num_injection_cells, params.gamma)
+        primitive_state = _wind_ei(params.wind_params, primitive_state, dt, helper_data, config.num_ghost_cells, config.wind_config.num_injection_cells, params.gamma, registered_variables)
     else:
         raise ValueError("Invalid wind injection scheme")
 
@@ -79,8 +80,8 @@ def _wind_meo(wind_params: WindParams, primitive_state: Float[Array, "num_vars n
     return primitive_state
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['num_ghost_cells', 'num_injection_cells'])
-def _wind_mei(wind_params: WindParams, primitive_state: Float[Array, "num_vars num_cells"], dt: Float[Array, ""], helper_data: HelperData, num_ghost_cells: int, num_injection_cells: int, gamma: Union[float, Float[Array, ""]]) -> Float[Array, "num_vars num_cells"]:
+@partial(jax.jit, static_argnames=['num_ghost_cells', 'num_injection_cells', 'registered_variables'])
+def _wind_mei(wind_params: WindParams, primitive_state: Float[Array, "num_vars num_cells"], dt: Float[Array, ""], helper_data: HelperData, num_ghost_cells: int, num_injection_cells: int, gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells"]:
     """Inject stellar wind into the simulation by a momentum-and-energy-injection scheme (MEI).
     
     Args:
@@ -96,7 +97,7 @@ def _wind_mei(wind_params: WindParams, primitive_state: Float[Array, "num_vars n
         The primitive state array with the stellar wind injected.
     """
 
-    conservative_state = conserved_state_from_primitive(primitive_state, gamma)
+    conservative_state = conserved_state_from_primitive(primitive_state, gamma, registered_variables)
 
     V_inj = 4/3 * jnp.pi * helper_data.outer_cell_boundaries[num_injection_cells + num_ghost_cells]**3
 
@@ -108,14 +109,14 @@ def _wind_mei(wind_params: WindParams, primitive_state: Float[Array, "num_vars n
     conservative_state = conservative_state.at[1, num_ghost_cells:num_injection_cells + num_ghost_cells].add(dmomentum)
     conservative_state = conservative_state.at[2, num_ghost_cells:num_injection_cells + num_ghost_cells].add(denergy)
 
-    primitive_state = primitive_state_from_conserved(conservative_state, gamma)
+    primitive_state = primitive_state_from_conserved(conservative_state, gamma, registered_variables)
 
     return primitive_state
 
 # not really ei
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['num_ghost_cells', 'num_injection_cells'])
-def _wind_ei(wind_params: WindParams, primitive_state: Float[Array, "num_vars num_cells"], dt: Float[Array, ""], helper_data: HelperData, num_ghost_cells: int, num_injection_cells: int, gamma: Union[float, Float[Array, ""]]) -> Float[Array, "num_vars num_cells"]:
+@partial(jax.jit, static_argnames=['num_ghost_cells', 'num_injection_cells', 'registered_variables'])
+def _wind_ei(wind_params: WindParams, primitive_state: Float[Array, "num_vars num_cells"], dt: Float[Array, ""], helper_data: HelperData, num_ghost_cells: int, num_injection_cells: int, gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells"]:
     """Inject stellar wind into the simulation by an thermal-energy-injection scheme (EI).
 
     Args:
@@ -143,6 +144,9 @@ def _wind_ei(wind_params: WindParams, primitive_state: Float[Array, "num_vars nu
     drho_dt = wind_params.wind_mass_loss_rate / V
     source_term = source_term.at[0, num_ghost_cells:num_injection_cells + num_ghost_cells].set(drho_dt)
     updated_density = primitive_state[0, num_ghost_cells:num_injection_cells + num_ghost_cells] + drho_dt * dt
+
+    if registered_variables.wind_density_active:
+        source_term = source_term.at[registered_variables.wind_density_index, num_ghost_cells:num_injection_cells + num_ghost_cells].set(drho_dt)
 
     # energy injection
     dE_dt = 0.5 * wind_params.wind_final_velocity**2 * wind_params.wind_mass_loss_rate / V

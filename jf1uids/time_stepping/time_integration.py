@@ -5,6 +5,7 @@ from functools import partial
 from equinox.internal._loop.checkpointed import checkpointed_while_loop
 
 from jf1uids.data_classes.simulation_helper_data import HelperData
+from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import BACKWARDS, SimulationConfig
 from jf1uids.option_classes.simulation_params import SimulationParams
 from jf1uids.time_stepping._CFL import _cfl_time_step, _source_term_aware_time_step
@@ -21,8 +22,8 @@ from beartype import beartype as typechecker
 from typing import Union
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config'])
-def time_integration(primitive_state: Float[Array, "num_vars num_cells"], config: SimulationConfig, params: SimulationParams, helper_data: HelperData) -> Union[Float[Array, "num_vars num_cells"], SnapshotData]:
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def time_integration(primitive_state: Float[Array, "num_vars num_cells"], config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> Union[Float[Array, "num_vars num_cells"], SnapshotData]:
     """Integrate the fluid equations in time. For the options of
     the time integration see the simulation configuration and
     the simulation parameters.
@@ -43,16 +44,16 @@ def time_integration(primitive_state: Float[Array, "num_vars num_cells"], config
     config = config._replace(dx = config.box_size / (config.num_cells - 1))
 
     if config.fixed_timestep:
-        return _time_integration_fixed_steps(primitive_state, config, params, helper_data)
+        return _time_integration_fixed_steps(primitive_state, config, params, helper_data, registered_variables)
     else:
         if config.differentiation_mode == BACKWARDS:
-            return _time_integration_adaptive_backwards(primitive_state, config, params, helper_data)
+            return _time_integration_adaptive_backwards(primitive_state, config, params, helper_data, registered_variables)
         else:
-            return _time_integration_adaptive_steps(primitive_state, config, params, helper_data)
+            return _time_integration_adaptive_steps(primitive_state, config, params, helper_data, registered_variables)
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config'])
-def _time_integration_fixed_steps(primitive_state: Float[Array, "num_vars num_cells"], config: SimulationConfig, params: SimulationParams, helper_data: HelperData) -> Union[Float[Array, "num_vars num_cells"], SnapshotData]:
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def _time_integration_fixed_steps(primitive_state: Float[Array, "num_vars num_cells"], config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> Union[Float[Array, "num_vars num_cells"], SnapshotData]:
     """ Fixed time stepping integration of the fluid equations.
 
     Args:
@@ -73,9 +74,9 @@ def _time_integration_fixed_steps(primitive_state: Float[Array, "num_vars num_ce
 
     def update_step(_, state):
 
-        state = _run_physics_modules(state, dt / 2, config, params, helper_data)
-        state = _evolve_state(state, config.dx, dt, params.gamma, config, helper_data)
-        state = _run_physics_modules(state, dt / 2, config, params, helper_data)
+        state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
+        state = _evolve_state(state, config.dx, dt, params.gamma, config, helper_data, registered_variables)
+        state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
 
         return state
     
@@ -85,8 +86,8 @@ def _time_integration_fixed_steps(primitive_state: Float[Array, "num_vars num_ce
     return state  
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config'])
-def _time_integration_adaptive_steps(primitive_state: Float[Array, "num_vars num_cells"], config: SimulationConfig, params: SimulationParams, helper_data: HelperData) -> Union[Float[Array, "num_vars num_cells"], SnapshotData]:
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def _time_integration_adaptive_steps(primitive_state: Float[Array, "num_vars num_cells"], config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> Union[Float[Array, "num_vars num_cells"], SnapshotData]:
     """Adaptive time stepping integration of the fluid equations.
 
     Args:
@@ -136,15 +137,15 @@ def _time_integration_adaptive_steps(primitive_state: Float[Array, "num_vars num
         # dt = _cfl_time_step(state, config.dx, params.dt_max, params.gamma, params.C_cfl)
 
         # do not differentiate through the choice of the time step
-        dt = jax.lax.stop_gradient(_source_term_aware_time_step(state, config, params, helper_data))
+        dt = jax.lax.stop_gradient(_source_term_aware_time_step(state, config, params, helper_data, registered_variables))
 
         # for now we mainly consider the stellar wind, a constant source term term, 
         # so the source is handled via a simple Euler step but generally 
         # a higher order method (in a split fashion) may be used
 
-        state = _run_physics_modules(state, dt / 2, config, params, helper_data)
-        state = _evolve_state(state, config.dx, dt, params.gamma, config, helper_data)
-        state = _run_physics_modules(state, dt / 2, config, params, helper_data)
+        state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
+        state = _evolve_state(state, config.dx, dt, params.gamma, config, helper_data, registered_variables)
+        state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
 
         time += dt
 
@@ -181,8 +182,8 @@ def _time_integration_adaptive_steps(primitive_state: Float[Array, "num_vars num
         return state
     
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config'])
-def _time_integration_adaptive_backwards(primitive_state: Float[Array, "num_vars num_cells"], config: SimulationConfig, params: SimulationParams, helper_data: HelperData) -> Union[Float[Array, "num_vars num_cells"], SnapshotData]:
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def _time_integration_adaptive_backwards(primitive_state: Float[Array, "num_vars num_cells"], config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> Union[Float[Array, "num_vars num_cells"], SnapshotData]:
     """Adaptive time stepping integration of the fluid equations in backwards mode.
 
     Args:
@@ -206,11 +207,11 @@ def _time_integration_adaptive_backwards(primitive_state: Float[Array, "num_vars
         # dt = _cfl_time_step(state, config.dx, params.dt_max, params.gamma, params.C_cfl)
 
         # do not differentiate through the choice of the time step
-        dt = jax.lax.stop_gradient(_source_term_aware_time_step(state, config, params, helper_data))
+        dt = jax.lax.stop_gradient(_source_term_aware_time_step(state, config, params, helper_data, registered_variables))
 
-        state = _run_physics_modules(state, dt / 2, config, params, helper_data)
-        state = _evolve_state(state, config.dx, dt, params.gamma, config, helper_data)
-        state = _run_physics_modules(state, dt / 2, config, params, helper_data)
+        state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
+        state = _evolve_state(state, config.dx, dt, params.gamma, config, helper_data, registered_variables)
+        state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
 
         time += dt
 
