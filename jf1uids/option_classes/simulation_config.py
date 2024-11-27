@@ -82,3 +82,6 @@ class SimulationConfig(NamedTuple):
 
     #: The configuration for the stellar wind module.
     wind_config: WindConfig = WindConfig()
+
+    #: Cosmic rays
+    simplified_cosmic_rays: bool = False

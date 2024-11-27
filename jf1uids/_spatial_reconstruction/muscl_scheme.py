@@ -116,9 +116,14 @@ def _reconstruct_at_interface(primitive_states: Float[Array, "num_vars num_cells
     projected_gradients = A_W_1[:, 1:-1] * limited_gradients[0, :] + A_W_2[:, 1:-1] * limited_gradients[1, :] + A_W_3[:, 1:-1] * limited_gradients[2, :]
 
     if registered_variables.wind_density_active:
-        A_W_4 = jnp.zeros_like(primitive_states)
-        A_W_4 = A_W_4.at[registered_variables.wind_density_index].set(u)
-        projected_gradients += A_W_4[:, 1:-1] * limited_gradients[registered_variables.wind_density_index, :]
+        A_W_wind = jnp.zeros_like(primitive_states)
+        A_W_wind = A_W_wind.at[registered_variables.wind_density_index].set(u)
+        projected_gradients += A_W_wind[:, 1:-1] * limited_gradients[registered_variables.wind_density_index, :]
+
+    if registered_variables.cosmic_ray_n_active:
+        A_W_CR = jnp.zeros_like(primitive_states)
+        A_W_CR = A_W_CR.at[registered_variables.cosmic_ray_n_index].set(u)
+        projected_gradients += A_W_CR[:, 1:-1] * limited_gradients[registered_variables.cosmic_ray_n_index, :]
     
     # predictor step
     predictors = primitive_states.at[:, 1:-1].add(-dt / 2 * projected_gradients)

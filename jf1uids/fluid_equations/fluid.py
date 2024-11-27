@@ -14,7 +14,7 @@ from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 # are the primitive variables rho, u, p.
 
 # We might want to add more variables to the
-# state array, e.g. a tracer for stelar wind
+# state array, e.g. a tracer for stellar wind
 # mass or cosmic ray pressure. 
 
 

@@ -40,6 +40,9 @@ def _euler_flux(primitive_states: Float[Array, "num_vars num_cells"], gamma: Uni
     # for possible additional variables, check if they are registered and add fluxes
     # as needed
     if registered_variables.wind_density_active:
-        flux_vector = flux_vector.at[registered_variables.wind_density_index].set(m)
+        flux_vector = flux_vector.at[registered_variables.wind_density_index].set(u * primitive_states[registered_variables.wind_density_index])
+
+    if registered_variables.cosmic_ray_n_active:
+        flux_vector = flux_vector.at[registered_variables.cosmic_ray_n_index].set(u * primitive_states[registered_variables.cosmic_ray_n_index])
 
     return flux_vector

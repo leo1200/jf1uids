@@ -32,6 +32,14 @@ class RegisteredVariables(NamedTuple):
     wind_density_index: int = -1
     wind_density_active: bool = False
 
+    #: simplified cosmic rays
+    # in the simplest CR model witout CR diffusion,
+    # streaming and no explicitly modeled magnetic field
+    # n_CR = P_CR^(1/gamma_CR) is a conserved quantity.
+    # This is the cosmic_ray_n, the index below points to.
+    cosmic_ray_n_index: int = -1
+    cosmic_ray_n_active: bool = False
+
     # here you can add more variables
 
 
@@ -51,6 +59,11 @@ def get_registered_variables(config: SimulationConfig) -> RegisteredVariables:
         registered_variables = registered_variables._replace(wind_density_index = registered_variables.num_vars)
         registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 1)
         registered_variables = registered_variables._replace(wind_density_active = True)
+
+    if config.simplified_cosmic_rays:
+        registered_variables = registered_variables._replace(cosmic_ray_n_index = registered_variables.num_vars)
+        registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 1)
+        registered_variables = registered_variables._replace(cosmic_ray_n_active = True)
 
     # here you can register more variables
 
