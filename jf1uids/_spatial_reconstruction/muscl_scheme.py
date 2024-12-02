@@ -3,6 +3,7 @@ import jax
 
 from functools import partial
 
+from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import gas_pressure_from_primitives_with_crs
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.fluid_equations.fluid import primitive_state_from_conserved, speed_of_sound, conserved_state_from_primitive
@@ -77,6 +78,12 @@ def _reconstruct_at_interface(primitive_states: Float[Array, "num_vars num_cells
     # get fluid variables for convenience
     rho = primitive_states[registered_variables.density_index]
     u = primitive_states[registered_variables.velocity_index]
+
+    # if registered_variables.cosmic_ray_n_active:
+    #     p = gas_pressure_from_primitives_with_crs(primitive_states, registered_variables)
+    # else:
+    #     p = primitive_states[registered_variables.pressure_index]
+
     p = primitive_states[registered_variables.pressure_index]
 
     if geometry == CARTESIAN:

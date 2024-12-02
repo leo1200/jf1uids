@@ -1,5 +1,6 @@
 from functools import partial
 import jax.numpy as jnp
+from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import total_energy_from_primitives_with_crs
 from jf1uids.fluid_equations.fluid import total_energy_from_primitives
 import jax
 
@@ -29,7 +30,11 @@ def _euler_flux(primitive_states: Float[Array, "num_vars num_cells"], gamma: Uni
 
 
     m = rho * u
-    E = total_energy_from_primitives(rho, u, p, gamma)
+
+    if registered_variables.cosmic_ray_n_active:
+        E = total_energy_from_primitives_with_crs(primitive_states, registered_variables)
+    else:
+        E = total_energy_from_primitives(rho, u, p, gamma)
 
     # write flux vector
     flux_vector = jnp.zeros_like(primitive_states)

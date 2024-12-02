@@ -41,7 +41,7 @@ def get_helper_data(config: SimulationConfig) -> HelperData:
         cell_volumes = dx * jnp.ones_like(r)
         inner_cell_boundaries = r - dx / 2
         outer_cell_boundaries = r + dx / 2
-        return HelperData(geometric_centers = r, r_hat_alpha = r_hat, cell_volumes = cell_volumes, inner_cell_boundaries = inner_cell_boundaries, outer_cell_boundaries = outer_cell_boundaries)
+        return HelperData(geometric_centers = r, r_hat_alpha = r_hat, cell_volumes = cell_volumes, inner_cell_boundaries = inner_cell_boundaries, outer_cell_boundaries = outer_cell_boundaries, volumetric_centers = r)
     elif config.geometry == SPHERICAL or config.geometry == CYLINDRICAL:
         # r = jnp.linspace(- 3 * dx/2, config.box_size - 3 * dx / 2, config.num_cells)
         r = jnp.linspace(dx / 2, config.box_size + dx / 2, config.num_cells)

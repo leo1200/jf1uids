@@ -7,6 +7,7 @@ from beartype import beartype as typechecker
 
 from typing import Union
 
+from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import total_energy_from_primitives_with_crs, total_pressure_from_conserved_with_crs
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 
@@ -41,47 +42,6 @@ def construct_primitive_state(rho: Float[Array, "num_cells"], u: Float[Array, "n
     state = state.at[registered_variables.pressure_index].set(p)
     return state
 
-@jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['registered_variables'])
-def density(primitive_states: Float[Array, "num_vars num_cells"], registered_variables: RegisteredVariables) -> Float[Array, "num_cells"]:
-    """Extract the density from the primitive state array.
-
-    Args:
-        registered_variables: The indices of the variables in the state array.
-        primitive_states: The primitive state array.
-
-    Returns:
-        The density.
-    """
-    return primitive_states[registered_variables.density_index]
-
-@jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['registered_variables'])
-def velocity(primitive_states: Float[Array, "num_vars num_cells"], registered_variables: RegisteredVariables) -> Float[Array, "num_cells"]:
-    """Extract the velocity from the primitive state array.
-
-    Args:
-        registered_variables: The indices of the variables in the state array.
-        primitive_states: The primitive state array.
-
-    Returns:
-        The velocity.
-    """
-    return primitive_states[registered_variables.velocity_index]
-
-@jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['registered_variables'])
-def pressure(primitive_states: Float[Array, "num_vars num_cells"], registered_variables: RegisteredVariables) -> Float[Array, "num_cells"]:
-    """Extract the pressure from the primitive state array.
-
-    Args:
-        primitive_states: The primitive state array.
-
-    Returns:
-        The pressure.
-    """
-
-    return primitive_states[registered_variables.pressure_index]
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['registered_variables'])
@@ -105,7 +65,11 @@ def primitive_state_from_conserved(conserved_state: Float[Array, "num_vars num_c
 
     # calculate the primitive variables
     u = m / rho
-    p = pressure_from_energy(E, rho, u, gamma)
+
+    if registered_variables.cosmic_ray_n_active:
+        p = total_pressure_from_conserved_with_crs(conserved_state, registered_variables)
+    else:
+        p = pressure_from_energy(E, rho, u, gamma)
 
     # set the primitive state
     primitive_state = conserved_state.at[registered_variables.velocity_index].set(u)
@@ -136,7 +100,10 @@ def conserved_state_from_primitive(primitive_states: Float[Array, "num_vars num_
     u = primitive_states[registered_variables.velocity_index]
     p = primitive_states[registered_variables.pressure_index]
 
-    E = total_energy_from_primitives(rho, u, p, gamma)
+    if registered_variables.cosmic_ray_n_active:
+        E = total_energy_from_primitives_with_crs(primitive_states, registered_variables)
+    else:
+        E = total_energy_from_primitives(rho, u, p, gamma)
 
     conserved_state = primitive_states.at[registered_variables.pressure_index].set(E)
     conserved_state = conserved_state.at[registered_variables.velocity_index].set(rho * u)
