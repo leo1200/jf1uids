@@ -19,7 +19,6 @@ from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 # mass or cosmic ray pressure. 
 
 
-
 # ======= Create the primitive state ========
 
 @jaxtyped(typechecker=typechecker)

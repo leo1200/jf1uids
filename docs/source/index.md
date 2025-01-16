@@ -24,9 +24,8 @@ Conservative properties of the flow are maintained in the radial simulations bas
 
 :::{grid-item-card} {octicon}`tools;1.5em;sd-mr-1` Extensible
 
-Physical modules, like one for stellar winds, can be easily added to the simulation. As we 
-are dealing with a differentiable simulator, these modules can include parameters (or neural
-network terms) which can be optimized directly in the solver.
+Physical modules, like one for stellar winds, can be easily added to the simulation. These modules can include parameters (or neural network terms) which can be optimized directly in the solver. Further primitive variables,
+like those for a [cosmic ray fluid](notebooks/simple_example_cr.ipynb), are already implemented or can be added.
 
 +++
 [Learn more »](notebooks/wind_parameter_optimization.ipynb)
@@ -63,7 +62,8 @@ A baseline hydrodynamical code for dynamic adaptive mesh refinement (AMR) in `JA
 - [x] Implement a simple stellar wind model, first analyses on the gradients of the final fluid state with respect to the wind parameters.
 - [ ] Implementation of higher-order reconstruction methods like WENO-Z+, etc. 
 - [ ] Implementation of different Riemann solvers
-- [ ] Two-fluid cosmic-ray model
+- [x] (advection-only) two-fluid cosmic-ray model
+- [ ] cosmic ray diffusion
 - [ ] Implementation of a shock finder
 - [ ] Generalize to 2D and 3D
 
@@ -82,6 +82,7 @@ self
 :caption: Notebooks
 
 notebooks/simple_example.ipynb
+notebooks/simple_example_cr.ipynb
 notebooks/conservational_properties.ipynb
 notebooks/gradients_through_stellar_wind.ipynb
 notebooks/wind_parameter_optimization.ipynb

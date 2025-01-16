@@ -9,6 +9,7 @@ Submodules
 
    jf1uids.fluid_equations.euler
    jf1uids.fluid_equations.fluid
+   jf1uids.fluid_equations.registered_variables
 
 Module contents
 ---------------
