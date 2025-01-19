@@ -34,6 +34,7 @@ def _run_physics_modules(primitive_state: Float[Array, "num_vars num_cells"], dt
     if config.wind_config.stellar_wind:
         primitive_state = _wind_injection(primitive_state, dt, config, params, helper_data, registered_variables)
 
-    primitive_state = _boundary_handler(primitive_state, config.left_boundary, config.right_boundary)
+        # we might want to run the boundary handler after all physics modules have completed
+        primitive_state = _boundary_handler(primitive_state, config.left_boundary, config.right_boundary)
 
     return primitive_state

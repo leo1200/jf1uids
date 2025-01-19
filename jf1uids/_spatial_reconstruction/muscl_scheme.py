@@ -6,12 +6,12 @@ from functools import partial
 from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import gas_pressure_from_primitives_with_crs
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids._geometry.boundaries import _boundary_handler
-from jf1uids.fluid_equations.fluid import primitive_state_from_conserved, speed_of_sound, conserved_state_from_primitive
+from jf1uids.fluid_equations.fluid import conserved_state_from_primitive3D, primitive_state_from_conserved, primitive_state_from_conserved3D, speed_of_sound, conserved_state_from_primitive
 from jf1uids._geometry.geometry import CARTESIAN
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import SimulationConfig
 from jf1uids._spatial_reconstruction.limiters import _minmod
-from jf1uids._riemann_solver.hll import _hll_solver
+from jf1uids._riemann_solver.hll import _hll_solver, _hll_solver3D
 
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
@@ -266,5 +266,54 @@ def _evolve_state(primitive_states: Float[Array, "num_vars num_cells"], dx: Unio
 
     # update the primitive variables
     primitive_states = primitive_state_from_conserved(conservative_states, gamma, registered_variables)
+
+    return primitive_states
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def _evolve_state3D(primitive_states: Float[Array, "num_vars num_cells num_cells num_cells"], dx: Union[float, Float[Array, ""]], dt: Float[Array, ""], gamma: Union[float, Float[Array, ""]], config: SimulationConfig, helper_data: HelperData, registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells num_cells num_cells"]:
+    """Evolve the primitive state array.
+
+    Args:
+        primitive_states: The primitive state array.
+        dx: The cell width.
+        dt: The time step.
+        gamma: The adiabatic index.
+        config: The simulation configuration.
+        helper_data: The helper data.
+
+    Returns:
+        The evolved primitive state array.
+    """
+
+    # get conserved variables
+    conservative_states = conserved_state_from_primitive3D(primitive_states, gamma, registered_variables)
+
+    # flux in x-direction
+    primitive_states_left = primitive_states[:, :-1, :, :]
+    primitive_states_right = primitive_states[:, 1:, :, :]
+    fluxes_x = _hll_solver3D(primitive_states_left, primitive_states_right, gamma, registered_variables, 1)
+
+    # update the conserved variables
+    conservative_states = conservative_states.at[:, config.num_ghost_cells:-config.num_ghost_cells, :, :].add(-1 / dx * (fluxes_x[:, 1:, :, :] - fluxes_x[:, :-1, :, :]) * dt)
+    primitive_states = primitive_state_from_conserved3D(conservative_states, gamma, registered_variables)
+
+    # flux in y-direction
+    primitive_states_left = primitive_states[:, :, :-1, :]
+    primitive_states_right = primitive_states[:, :, 1:, :]
+    fluxes_y = _hll_solver3D(primitive_states_left, primitive_states_right, gamma, registered_variables, 2)
+
+    # update the conserved variables
+    conservative_states = conservative_states.at[:, :, config.num_ghost_cells:-config.num_ghost_cells, :].add(-1 / dx * (fluxes_y[:, :, 1:, :] - fluxes_y[:, :, :-1, :]) * dt)
+    primitive_states = primitive_state_from_conserved3D(conservative_states, gamma, registered_variables)
+
+    # flux in z-direction
+    primitive_states_left = primitive_states[:, :, :, :-1]
+    primitive_states_right = primitive_states[:, :, :, 1:]
+    fluxes_z = _hll_solver3D(primitive_states_left, primitive_states_right, gamma, registered_variables, 3)
+
+    # update the conserved variables
+    conservative_states = conservative_states.at[:, :, :, config.num_ghost_cells:-config.num_ghost_cells].add(-1 / dx * (fluxes_z[:, :, :, 1:] - fluxes_z[:, :, :, :-1]) * dt)
+    primitive_states = primitive_state_from_conserved3D(conservative_states, gamma, registered_variables)
 
     return primitive_states

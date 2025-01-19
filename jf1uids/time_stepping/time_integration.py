@@ -10,7 +10,7 @@ from jf1uids.option_classes.simulation_config import BACKWARDS, SimulationConfig
 from jf1uids.option_classes.simulation_params import SimulationParams
 from jf1uids.time_stepping._CFL import _cfl_time_step, _source_term_aware_time_step
 from jf1uids.fluid_equations.fluid import calculate_total_energy, calculate_total_mass
-from jf1uids._spatial_reconstruction.muscl_scheme import _evolve_state
+from jf1uids._spatial_reconstruction.muscl_scheme import _evolve_state, _evolve_state3D
 from jf1uids._physics_modules.run_physics_modules import _run_physics_modules
 from jf1uids.data_classes.simulation_snapshot_data import SnapshotData
 
@@ -83,7 +83,41 @@ def _time_integration_fixed_steps(primitive_state: Float[Array, "num_vars num_ce
     # use lax fori_loop to unroll the loop
     state = jax.lax.fori_loop(0, config.num_timesteps, update_step, primitive_state)
 
-    return state  
+    return state
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def _time_integration_fixed_steps3D(primitive_state: Float[Array, "num_vars num_cells num_cells num_cells"], config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> Union[Float[Array, "num_vars num_cells num_cells num_cells"], SnapshotData]:
+    """ Fixed time stepping integration of the fluid equations.
+
+    Args:
+        primitive_state: The primitive state array.
+        config: The simulation configuration.
+        params: The simulation parameters.
+        helper_data: The helper data.
+
+    Returns:
+        Depending on the configuration (return_snapshots, num_snapshots) either the final state of the fluid
+        after the time integration of snapshots of the time evolution
+    """
+
+    config = config._replace(dx = config.box_size / (config.num_cells - 1))
+
+    if config.return_snapshots:
+        raise NotImplementedError("return_snapshots only implemented with adaptive time stepping with forward mode option")
+
+    dt = params.t_end / config.num_timesteps
+
+    def update_step(_, state):
+
+        state = _evolve_state3D(state, config.dx, dt, params.gamma, config, helper_data, registered_variables)
+
+        return state
+    
+    # use lax fori_loop to unroll the loop
+    state = jax.lax.fori_loop(0, config.num_timesteps, update_step, primitive_state)
+
+    return state
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])

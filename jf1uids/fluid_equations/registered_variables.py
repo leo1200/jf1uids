@@ -2,7 +2,16 @@ from typing import NamedTuple
 
 import jax.numpy as jnp
 
+from jaxtyping import Array, Float, Int
+
+from typing import Union
+
 from jf1uids.option_classes.simulation_config import SimulationConfig
+
+class StaticIntVector(NamedTuple):
+    x: int
+    y: int
+    z: int
 
 class RegisteredVariables(NamedTuple):
     """The registered variables are the variables that are
@@ -19,8 +28,9 @@ class RegisteredVariables(NamedTuple):
     #: Density index
     density_index: int = 0
 
-    #: pressure index
-    velocity_index: int = 1
+    #: Velocity index
+    velocity_index: Union[int, StaticIntVector] = 1
+    # in e.g. 3D, we have three velocity components, each with its own index
 
     #: Energy index
     pressure_index: int = 2
@@ -54,6 +64,16 @@ def get_registered_variables(config: SimulationConfig) -> RegisteredVariables:
     """
 
     registered_variables = RegisteredVariables()
+
+    if config.dimensionality == 3:
+        # we have three velocity components
+        registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 2)
+
+        # update the velocity index to be an array
+        registered_variables = registered_variables._replace(velocity_index = StaticIntVector(1, 2, 3))
+
+        # update the pressure index
+        registered_variables = registered_variables._replace(pressure_index = registered_variables.num_vars - 1)
 
     if config.wind_config.trace_wind_density:
         registered_variables = registered_variables._replace(wind_density_index = registered_variables.num_vars)

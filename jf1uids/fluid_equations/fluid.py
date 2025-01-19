@@ -44,6 +44,33 @@ def construct_primitive_state(rho: Float[Array, "num_cells"], u: Float[Array, "n
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['registered_variables'])
+def construct_primitive_state3D(rho: Float[Array, "num_cells num_cells num_cells"], u_x: Float[Array, "num_cells num_cells num_cells"], u_y: Float[Array, "num_cells num_cells num_cells"], u_z: Float[Array, "num_cells num_cells num_cells"], p: Float[Array, "num_cells num_cells num_cells"], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells num_cells num_cells"]:
+    """Stack the primitive variables into the state array.
+    
+    Args:
+        rho: The density of the fluid.
+        u: The velocity of the fluid.
+        p: The pressure of the fluid.
+        registered_variables: The indices of the variables in the state array.
+        
+    Returns:
+        The state array.
+    """
+
+    state = jnp.zeros((registered_variables.num_vars, rho.shape[0], rho.shape[1], rho.shape[2]))
+    state = state.at[registered_variables.density_index].set(rho)
+
+    state = state.at[registered_variables.velocity_index.x].set(u_x)
+    state = state.at[registered_variables.velocity_index.y].set(u_y)
+    state = state.at[registered_variables.velocity_index.z].set(u_z)
+
+    state = state.at[registered_variables.pressure_index].set(p)
+
+    return state
+
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['registered_variables'])
 def primitive_state_from_conserved(conserved_state: Float[Array, "num_vars num_cells"], gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells"]:
     """Convert the conserved state to the primitive state.
 
@@ -72,6 +99,49 @@ def primitive_state_from_conserved(conserved_state: Float[Array, "num_vars num_c
 
     # set the primitive state
     primitive_state = conserved_state.at[registered_variables.velocity_index].set(u)
+    primitive_state = primitive_state.at[registered_variables.pressure_index].set(p)
+    # for all other variables assume that primitive and conserved state are the same
+    # as for the mass density
+
+    return primitive_state
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['registered_variables'])
+def primitive_state_from_conserved3D(conserved_state: Float[Array, "num_vars num_cells_x num_cells_y num_cells_z"], gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells_x num_cells_y num_cells_z"]:
+    """Convert the conserved state to the primitive state.
+
+    Args:
+        conserved_state: The conserved state.
+        gamma: The adiabatic index of the fluid.
+
+    Returns:
+        The primitive state.
+    """
+    # note the indices of the conserved variables
+    # are the same as the indices of the primitive variables
+    # so velocity and moentum density have the same index
+
+    rho = conserved_state[registered_variables.density_index]
+
+    mx = conserved_state[registered_variables.velocity_index.x]
+    my = conserved_state[registered_variables.velocity_index.y]
+    mz = conserved_state[registered_variables.velocity_index.z]
+
+    E = conserved_state[registered_variables.pressure_index]
+
+    # calculate the primitive variables
+    ux = mx / rho
+    uy = my / rho
+    uz = mz / rho
+
+    u = jnp.sqrt(ux**2 + uy**2 + uz**2)
+
+    p = pressure_from_energy(E, rho, u, gamma)
+
+    # set the primitive state
+    primitive_state = conserved_state.at[registered_variables.velocity_index.x].set(ux)
+    primitive_state = primitive_state.at[registered_variables.velocity_index.y].set(uy)
+    primitive_state = primitive_state.at[registered_variables.velocity_index.z].set(uz)
     primitive_state = primitive_state.at[registered_variables.pressure_index].set(p)
     # for all other variables assume that primitive and conserved state are the same
     # as for the mass density
@@ -107,6 +177,35 @@ def conserved_state_from_primitive(primitive_states: Float[Array, "num_vars num_
     conserved_state = primitive_states.at[registered_variables.pressure_index].set(E)
     conserved_state = conserved_state.at[registered_variables.velocity_index].set(rho * u)
 
+    return conserved_state
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['registered_variables'])
+def conserved_state_from_primitive3D(primitive_states: Float[Array, "num_vars num_cells_x num_cells_y num_cells_z"], gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells_x num_cells_y num_cells_z"]:
+    """Convert the primitive state to the conserved state.
+
+    Args:
+        primitive_state: The primitive state.
+        gamma: The adiabatic index of the fluid.
+
+    Returns:
+        The conserved state.
+    """
+    
+    rho = primitive_states[registered_variables.density_index]
+
+    u = jnp.sqrt(primitive_states[registered_variables.velocity_index.x]**2 + primitive_states[registered_variables.velocity_index.y]**2 + primitive_states[registered_variables.velocity_index.z]**2)
+
+    p = primitive_states[registered_variables.pressure_index]
+
+    E = total_energy_from_primitives(rho, u, p, gamma)
+
+    conserved_state = primitive_states.at[registered_variables.pressure_index].set(E)
+
+    conserved_state = conserved_state.at[registered_variables.velocity_index.x].set(rho * primitive_states[registered_variables.velocity_index.x])
+    conserved_state = conserved_state.at[registered_variables.velocity_index.y].set(rho * primitive_states[registered_variables.velocity_index.y])
+    conserved_state = conserved_state.at[registered_variables.velocity_index.z].set(rho * primitive_states[registered_variables.velocity_index.z])
+    
     return conserved_state
 
 # ===========================================

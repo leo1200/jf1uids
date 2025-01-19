@@ -34,6 +34,10 @@ class HelperData(NamedTuple):
 def get_helper_data(config: SimulationConfig) -> HelperData:
     """Generate the helper data for the simulation from the configuration."""
 
+    if config.dimensionality > 1:
+        # Helper Data is currently only necessary for 1D simulations.
+        return HelperData()
+
     dx = config.box_size / (config.num_cells - 1)
     if config.geometry == CARTESIAN:
         r = jnp.linspace(0, config.box_size, config.num_cells)
