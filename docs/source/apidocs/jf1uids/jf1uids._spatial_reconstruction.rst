@@ -15,5 +15,5 @@ Submodules
    :titlesonly:
    :maxdepth: 1
 
-   jf1uids._spatial_reconstruction.limiters
    jf1uids._spatial_reconstruction.muscl_scheme
+   jf1uids._spatial_reconstruction.limiters

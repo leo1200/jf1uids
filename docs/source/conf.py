@@ -23,7 +23,7 @@ extensions = [
     'autodoc2',
     'sphinx.ext.autosummary',
     'sphinx.ext.autodoc',
-    # 'sphinxcontrib.apidoc',
+    'sphinxcontrib.apidoc',
 
     # enable google style docstrings
     'sphinx.ext.napoleon',
@@ -43,9 +43,9 @@ extensions = [
 ]
 
 
-# apidoc_module_dir = '../../jf1uids'
-# apidoc_output_dir = 'source'
-# apidoc_separate_modules = True
+apidoc_module_dir = '../../jf1uids'
+apidoc_output_dir = 'source'
+apidoc_separate_modules = True
 
 autodoc2_packages = [
     "../../jf1uids",

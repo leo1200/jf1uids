@@ -13,5 +13,6 @@ Submodules
    :titlesonly:
    :maxdepth: 1
 
+   jf1uids.fluid_equations.registered_variables
    jf1uids.fluid_equations.euler
    jf1uids.fluid_equations.fluid

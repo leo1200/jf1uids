@@ -15,6 +15,9 @@ class SimulationConfig(NamedTuple):
 
     # Simulation parameters
 
+    #: The number of dimensions of the simulation.
+    dimensions: int = 1
+
     #: The geometry of the simulation.
     geometry: int = CARTESIAN
 

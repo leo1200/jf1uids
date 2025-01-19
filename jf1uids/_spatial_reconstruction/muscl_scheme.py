@@ -43,18 +43,26 @@ def _calculate_limited_gradients(primitive_states: Float[Array, "num_vars num_ce
         cell_distances_right = rv[2:] - rv[1:-1]
 
     # formulation 1:
-    # a = (primitive_states[:, 1:-1] - primitive_states[:, :-2]) / cell_distances_left
-    # b = (primitive_states[:, 2:] - primitive_states[:, 1:-1]) / cell_distances_right
-    # g = jnp.where(a != 0, jnp.divide(b, a), jnp.zeros_like(a))
-    # slope_limited = jnp.maximum(0, jnp.minimum(1, g)) # minmod
-    # limited_gradients = slope_limited * a
-
-    # formulation 2:
-    limited_gradients = _minmod(
-        (primitive_states[:, 1:-1] - primitive_states[:, :-2]) / cell_distances_left,
-        (primitive_states[:, 2:] - primitive_states[:, 1:-1]) / cell_distances_right
+    epsilon = 1e-11  # Small constant to prevent division by zero
+    a = (primitive_states[:, 1:-1] - primitive_states[:, :-2]) / cell_distances_left
+    b = (primitive_states[:, 2:] - primitive_states[:, 1:-1]) / cell_distances_right
+    g = jnp.where(
+        jnp.abs(a) > epsilon,  # Avoid division if `a` is very small
+        b / (a + epsilon),  # Add epsilon to `a` for numerical stability
+        jnp.zeros_like(a)
     )
-    
+    # slope_limited = jnp.maximum(0, jnp.minimum(1, g))  # Minmod limiter
+    slope_limited = jnp.maximum(0, jnp.minimum(1.3, g))  # Osher limiter with beta = 1.3
+    # ospre limiter
+    # slope_limited = (1.5 * (g ** 2 + g)) / (g ** 2 + g + 1)
+    limited_gradients = slope_limited * a
+
+    # # formulation 2:
+    # limited_gradients = _minmod(
+    #     (primitive_states[:, 1:-1] - primitive_states[:, :-2]) / cell_distances_left,
+    #     (primitive_states[:, 2:] - primitive_states[:, 1:-1]) / cell_distances_right
+    # )
+
     return limited_gradients
 
 @jaxtyped(typechecker=typechecker)

@@ -15,5 +15,5 @@ Submodules
    :titlesonly:
    :maxdepth: 1
 
-   jf1uids._geometry.boundaries
    jf1uids._geometry.geometry
+   jf1uids._geometry.boundaries
