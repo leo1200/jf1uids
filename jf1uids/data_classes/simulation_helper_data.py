@@ -16,6 +16,10 @@ class HelperData(NamedTuple):
     #: Same as the geometric centers for Cartesian geometry.
     volumetric_centers: jnp.ndarray = None
 
+    #: cell center to box center distances
+    #: only for config.dimensionality > 1
+    r: jnp.ndarray = None
+
     #: A helper variable, defined as
     #: \hat{r}^\alpha = V_j / (2 * \alpha * \pi * \Delta r)
     #: with V_j the volume of cell j, \alpha the geometry factor
@@ -35,8 +39,20 @@ def get_helper_data(config: SimulationConfig) -> HelperData:
     """Generate the helper data for the simulation from the configuration."""
 
     if config.dimensionality > 1:
-        # Helper Data is currently only necessary for 1D simulations.
-        return HelperData()
+        x = jnp.linspace(0, config.box_size, config.num_cells)
+        y = jnp.linspace(0, config.box_size, config.num_cells)
+        z = jnp.linspace(0, config.box_size, config.num_cells)
+        geometric_centers = jnp.meshgrid(x, y, z)
+
+        # calculate the distances from the cell centers to the box center
+        box_center = jnp.array([0.5, 0.5, 0.5]) * config.box_size
+        geometric_centers = jnp.array(geometric_centers)
+        geometric_centers = jnp.moveaxis(geometric_centers, 0, -1)
+        volumetric_centers = geometric_centers
+
+        r = jnp.linalg.norm(geometric_centers - box_center, axis = -1)
+
+        return HelperData(geometric_centers = geometric_centers, volumetric_centers = volumetric_centers, r = r)
 
     dx = config.box_size / (config.num_cells - 1)
     if config.geometry == CARTESIAN:

@@ -1,5 +1,6 @@
 from functools import partial
 import jax.numpy as jnp
+from jf1uids._geometry.geometry import STATE_TYPE
 from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import total_energy_from_primitives_with_crs
 from jf1uids.fluid_equations.fluid import total_energy_from_primitives
 import jax
@@ -13,7 +14,7 @@ from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['registered_variables'])
-def _euler_flux(primitive_states: Float[Array, "num_vars num_cells"], gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells"]:
+def _euler_flux(primitive_states: STATE_TYPE, gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables) -> STATE_TYPE:
     """Compute the Euler fluxes for the given primitive states.
 
     Args:
@@ -55,7 +56,7 @@ def _euler_flux(primitive_states: Float[Array, "num_vars num_cells"], gamma: Uni
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['registered_variables', 'flux_direction_index'])
-def _euler_flux3D(primitive_states: Float[Array, "num_vars num_cells_x num_cells_y num_cells_z"], gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables, flux_direction_index: int) -> Float[Array, "num_vars num_cells_x num_cells_y num_cells_z"]:
+def _euler_flux3D(primitive_states: STATE_TYPE, gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables, flux_direction_index: int) -> STATE_TYPE:
     """Compute the Euler fluxes for the given primitive states.
 
     Args:

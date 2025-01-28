@@ -1,6 +1,7 @@
 from functools import partial
 import jax.numpy as jnp
 import jax
+from jf1uids._geometry.geometry import STATE_TYPE
 from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import gas_pressure_from_primitives_with_crs
 from jf1uids.fluid_equations.euler import _euler_flux, _euler_flux3D
 from jf1uids.fluid_equations.fluid import conserved_state_from_primitive3D, speed_of_sound, conserved_state_from_primitive
@@ -68,7 +69,7 @@ def _hll_solver(primitives_left: Float[Array, "num_vars num_interfaces"], primit
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['registered_variables', 'flux_direction_index'])
-def _hll_solver3D(primitives_left: Float[Array, "num_vars cells_x cells_y cells_z"], primitives_right: Float[Array, "num_vars cells_x cells_y cells_z"], gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables, flux_direction_index: int) -> Float[Array, "num_vars cells_x cells_y cells_z"]:
+def _hll_solver3D(primitives_left: STATE_TYPE, primitives_right: STATE_TYPE, gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables, flux_direction_index: int) -> STATE_TYPE:
     """
     Returns the conservative fluxes.
 
@@ -84,11 +85,11 @@ def _hll_solver3D(primitives_left: Float[Array, "num_vars cells_x cells_y cells_
     
     rho_L = primitives_left[registered_variables.density_index]
 
-    u_L = jnp.sqrt(primitives_left[registered_variables.velocity_index.x]**2 + primitives_left[registered_variables.velocity_index.y]**2 + primitives_left[registered_variables.velocity_index.z]**2)
+    u_L = primitives_left[flux_direction_index]
 
     rho_R = primitives_right[registered_variables.density_index]
 
-    u_R = jnp.sqrt(primitives_right[registered_variables.velocity_index.x]**2 + primitives_right[registered_variables.velocity_index.y]**2 + primitives_right[registered_variables.velocity_index.z]**2)
+    u_R = primitives_right[flux_direction_index]
     
     # if registered_variables.cosmic_ray_n_active:
     #     p_L = gas_pressure_from_primitives_with_crs(primitives_left, registered_variables)
@@ -111,6 +112,9 @@ def _hll_solver3D(primitives_left: Float[Array, "num_vars cells_x cells_y cells_
     # very simple approach for the wave velocities
     wave_speeds_right_plus = jnp.maximum(jnp.maximum(u_L + c_L, u_R + c_R), 0)
     wave_speeds_left_minus = jnp.minimum(jnp.minimum(u_L - c_L, u_R - c_R), 0)
+
+    # wave_speeds_right_plus = jnp.maximum(u_L - c_L, 0)
+    # wave_speeds_left_minus = jnp.minimum(u_R + c_R, 0)
 
     # get the left and right conserved variables
     conservatives_left = conserved_state_from_primitive3D(primitives_left, gamma, registered_variables)

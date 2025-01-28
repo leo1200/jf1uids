@@ -286,9 +286,8 @@ def speed_of_sound(rho, p, gamma):
     Returns:
         The speed of sound.
     """
-
-    # produces nans if p or rho are negative
     return jnp.sqrt(gamma * p / rho)
+
 
 # ===========================================
 

@@ -15,6 +15,11 @@ class SimulationConfig(NamedTuple):
 
     # Simulation parameters
 
+    #: Debug runtime errors, throws exceptions
+    #: on e.g. negative pressure or density.
+    #: Significantly reduces performance.
+    runtime_debugging: bool = False
+
     #: The number of dimensions of the simulation.
     dimensionality: int = 1
 

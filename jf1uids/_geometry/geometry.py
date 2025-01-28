@@ -10,6 +10,8 @@ CARTESIAN = 0
 CYLINDRICAL = 1
 SPHERICAL = 2
 
+STATE_TYPE = Union[Float[Array, "num_vars num_cells_x"], Float[Array, "num_vars num_cells_x num_cells_y"], Float[Array, "num_vars num_cells_x num_cells_y num_cells_z"]]
+
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['geometry'])
 def _r_hat_alpha(r: Float[Array, "num_cells"], dr: Union[float, Float[Array, ""]], geometry: int) -> Float[Array, "num_cells"]:

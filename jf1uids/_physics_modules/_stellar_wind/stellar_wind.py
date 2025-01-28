@@ -1,6 +1,7 @@
 
 import jax.numpy as jnp
 import jax
+from jf1uids._geometry.geometry import STATE_TYPE
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.fluid import pressure_from_energy, primitive_state_from_conserved, conserved_state_from_primitive
 
@@ -20,7 +21,7 @@ from typing import Union
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _wind_injection(primitive_state: Float[Array, "num_vars num_cells"], dt: Float[Array, ""], config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells"]:
+def _wind_injection(primitive_state: STATE_TYPE, dt: Float[Array, ""], config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> STATE_TYPE:
     """Inject stellar wind into the simulation.
 
     Args:
@@ -33,14 +34,23 @@ def _wind_injection(primitive_state: Float[Array, "num_vars num_cells"], dt: Flo
     Returns:
         The primitive state array with the stellar wind injected.
     """
-    if config.wind_config.wind_injection_scheme == MEO:
-        primitive_state = _wind_meo(params.wind_params, primitive_state, dt, helper_data, config.num_ghost_cells, config.wind_config.num_injection_cells, params.gamma)
-    elif config.wind_config.wind_injection_scheme == MEI:
-        primitive_state = _wind_mei(params.wind_params, primitive_state, dt, helper_data, config.num_ghost_cells, config.wind_config.num_injection_cells, params.gamma, registered_variables)
-    elif config.wind_config.wind_injection_scheme == EI:
-        primitive_state = _wind_ei(params.wind_params, primitive_state, dt, helper_data, config.num_ghost_cells, config.wind_config.num_injection_cells, params.gamma, registered_variables)
+
+    if config.dimensionality == 1:
+        if config.wind_config.wind_injection_scheme == MEO:
+            primitive_state = _wind_meo(params.wind_params, primitive_state, dt, helper_data, config.num_ghost_cells, config.wind_config.num_injection_cells, params.gamma)
+        elif config.wind_config.wind_injection_scheme == MEI:
+            primitive_state = _wind_mei(params.wind_params, primitive_state, dt, helper_data, config.num_ghost_cells, config.wind_config.num_injection_cells, params.gamma, registered_variables)
+        elif config.wind_config.wind_injection_scheme == EI:
+            primitive_state = _wind_ei(params.wind_params, primitive_state, dt, helper_data, config.num_ghost_cells, config.wind_config.num_injection_cells, params.gamma, registered_variables)
+        else:
+            raise ValueError("Invalid wind injection scheme")
+    elif config.dimensionality == 3:
+        if config.wind_config.wind_injection_scheme == EI:
+            primitive_state = _wind_ei3D(params.wind_params, primitive_state, dt, config, helper_data, config.num_ghost_cells, config.wind_config.num_injection_cells, params.gamma, registered_variables)
+        else:
+            raise ValueError("Invalid wind injection scheme")
     else:
-        raise ValueError("Invalid wind injection scheme")
+        raise ValueError("Invalid dimensionality")
 
     return primitive_state
 
@@ -154,6 +164,66 @@ def _wind_ei(wind_params: WindParams, primitive_state: Float[Array, "num_vars nu
     dp_dt = pressure_from_energy(dE_dt, updated_density, primitive_state[1, num_ghost_cells:num_injection_cells + num_ghost_cells], gamma)
 
     source_term = source_term.at[2, num_ghost_cells:num_injection_cells + num_ghost_cells].set(dp_dt)
+
+    primitive_state = primitive_state + source_term * dt
+
+    return primitive_state
+
+# not really ei
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['num_ghost_cells', 'num_injection_cells', 'registered_variables'])
+def _wind_ei3D(wind_params: WindParams, primitive_state: STATE_TYPE, dt: Float[Array, ""], config: SimulationConfig, helper_data: HelperData, num_ghost_cells: int, num_injection_cells: int, gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables) -> STATE_TYPE:
+    """Inject stellar wind into the simulation by an thermal-energy-injection scheme (EI).
+
+    Args:
+        wind_params: The wind parameters.
+        primitive_state: The primitive state array.
+        dt: The time step.
+        helper_data: The helper data.
+        num_ghost_cells: The number of ghost cells.
+        num_injection_cells: The number of injection cells.
+        gamma: The adiabatic index.
+
+    Returns:
+        The primitive state array with the stellar wind injected.
+    """
+
+    source_term = jnp.zeros_like(primitive_state)
+    
+    r_inj = num_injection_cells * config.dx
+    V = 4/3 * jnp.pi * r_inj**3
+
+    # for now only allow injection at the box center
+    injection_mask = helper_data.r <= r_inj
+
+    # create a gaussian weighting mask for the injection with sigma = 1/3 of the injection radius
+    sigma = r_inj
+    gaussian_mask = jnp.exp(-0.5 * helper_data.r**2 / sigma**2)
+    gaussian_mask = jnp.where(injection_mask, gaussian_mask, 0)
+    # normalize the mask
+    gaussian_mask = gaussian_mask / jnp.sum(gaussian_mask) * jnp.sum(injection_mask)
+
+    # mass injection
+    drho_dt = wind_params.wind_mass_loss_rate / V
+    # source_term = source_term.at[registered_variables.density_index].set(jnp.where(injection_mask, drho_dt, source_term[registered_variables.density_index]))
+    source_term = source_term.at[registered_variables.density_index].set(drho_dt * gaussian_mask)
+
+    updated_density = primitive_state[registered_variables.density_index]
+    updated_density = jnp.where(injection_mask, updated_density + drho_dt * dt * gaussian_mask, updated_density)
+
+    # scale down the velocity in the primitive state to conserve momentum
+    # density_ratio = updated_density / primitive_state[registered_variables.density_index]
+    # primitive_state = primitive_state.at[registered_variables.velocity_index.x].set(jnp.where(injection_mask, primitive_state[registered_variables.velocity_index.x] * density_ratio, primitive_state[registered_variables.velocity_index.x]))
+    # primitive_state = primitive_state.at[registered_variables.velocity_index.y].set(jnp.where(injection_mask, primitive_state[registered_variables.velocity_index.y] * density_ratio, primitive_state[registered_variables.velocity_index.y]))
+    # primitive_state = primitive_state.at[registered_variables.velocity_index.z].set(jnp.where(injection_mask, primitive_state[registered_variables.velocity_index.z] * density_ratio, primitive_state[registered_variables.velocity_index.z]))
+
+    # energy injection
+    dE_dt = 0.5 * wind_params.wind_final_velocity**2 * wind_params.wind_mass_loss_rate / V
+
+    u = jnp.sqrt(primitive_state[registered_variables.velocity_index.x]**2 + primitive_state[registered_variables.velocity_index.y]**2 + primitive_state[registered_variables.velocity_index.z]**2)
+    dp_dt = pressure_from_energy(dE_dt, updated_density, u, gamma)
+    
+    source_term = source_term.at[registered_variables.pressure_index].set(dp_dt * gaussian_mask)
 
     primitive_state = primitive_state + source_term * dt
 

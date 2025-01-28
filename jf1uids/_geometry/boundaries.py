@@ -5,6 +5,8 @@ import jax
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
 
+from jf1uids._geometry.geometry import STATE_TYPE
+
 OPEN_BOUNDARY = 0
 REFLECTIVE_BOUNDARY = 1
 
@@ -36,6 +38,41 @@ def _boundary_handler(primitive_states: Float[Array, "num_vars num_cells"], left
         raise ValueError("Unknown right boundary condition")
     
     return primitive_states
+
+@jaxtyped(typechecker=typechecker)
+@jax.jit
+def _boundary_handler3D(primitive_states: STATE_TYPE):
+
+    # open boundaries in x direction
+    primitive_states = primitive_states.at[:, 0, :, :].set(primitive_states[:, 1, :, :])
+    primitive_states = primitive_states.at[:, -1, :, :].set(primitive_states[:, -2, :, :])
+
+    # open boundaries in y direction
+    primitive_states = primitive_states.at[:, :, 0, :].set(primitive_states[:, :, 1, :])
+    primitive_states = primitive_states.at[:, :, -1, :].set(primitive_states[:, :, -2, :])
+
+    # open boundaries in z direction
+    primitive_states = primitive_states.at[:, :, :, 0].set(primitive_states[:, :, :, 1])
+    primitive_states = primitive_states.at[:, :, :, -1].set(primitive_states[:, :, :, -2])
+
+    return primitive_states
+
+# @jaxtyped(typechecker=typechecker)
+# @jax.jit
+# def _boundary_handler3D(primitive_states: STATE_TYPE):
+#     # Periodic boundaries in x direction
+#     primitive_states = primitive_states.at[:, 0, :, :].set(primitive_states[:, -2, :, :])
+#     primitive_states = primitive_states.at[:, -1, :, :].set(primitive_states[:, 1, :, :])
+
+#     # Periodic boundaries in y direction
+#     primitive_states = primitive_states.at[:, :, 0, :].set(primitive_states[:, :, -2, :])
+#     primitive_states = primitive_states.at[:, :, -1, :].set(primitive_states[:, :, 1, :])
+
+#     # Periodic boundaries in z direction
+#     primitive_states = primitive_states.at[:, :, :, 0].set(primitive_states[:, :, :, -2])
+#     primitive_states = primitive_states.at[:, :, :, -1].set(primitive_states[:, :, :, 1])
+
+#     return primitive_states
 
 @jaxtyped(typechecker=typechecker)
 @jax.jit

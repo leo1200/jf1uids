@@ -4,6 +4,7 @@ from functools import partial
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
 
+from jf1uids._geometry.geometry import STATE_TYPE
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
@@ -13,7 +14,7 @@ from jf1uids._physics_modules._stellar_wind.stellar_wind import _wind_injection
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _run_physics_modules(primitive_state: Float[Array, "num_vars num_cells"], dt: Float[Array, ""], config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells"]:
+def _run_physics_modules(primitive_state: STATE_TYPE, dt: Float[Array, ""], config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> STATE_TYPE:
     """Run all the physics modules. The physics modules are switched on/off and
     configured in the simulation configuration. Parameters for the physics modules
     (with respect to which the simulation can be differentiated) are stored in the
@@ -35,6 +36,6 @@ def _run_physics_modules(primitive_state: Float[Array, "num_vars num_cells"], dt
         primitive_state = _wind_injection(primitive_state, dt, config, params, helper_data, registered_variables)
 
         # we might want to run the boundary handler after all physics modules have completed
-        primitive_state = _boundary_handler(primitive_state, config.left_boundary, config.right_boundary)
+        # primitive_state = _boundary_handler(primitive_state, config.left_boundary, config.right_boundary)
 
     return primitive_state

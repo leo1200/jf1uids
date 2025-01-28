@@ -5,9 +5,9 @@ from functools import partial
 
 from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import gas_pressure_from_primitives_with_crs
 from jf1uids.data_classes.simulation_helper_data import HelperData
-from jf1uids._geometry.boundaries import _boundary_handler
+from jf1uids._geometry.boundaries import _boundary_handler, _boundary_handler3D
 from jf1uids.fluid_equations.fluid import conserved_state_from_primitive3D, primitive_state_from_conserved, primitive_state_from_conserved3D, speed_of_sound, conserved_state_from_primitive
-from jf1uids._geometry.geometry import CARTESIAN
+from jf1uids._geometry.geometry import CARTESIAN, STATE_TYPE
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import SimulationConfig
 from jf1uids._spatial_reconstruction.limiters import _minmod
@@ -15,6 +15,8 @@ from jf1uids._riemann_solver.hll import _hll_solver, _hll_solver3D
 
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
+
+from jax.experimental import checkify
 
 from typing import Union
 
@@ -62,6 +64,36 @@ def _calculate_limited_gradients(primitive_states: Float[Array, "num_vars num_ce
     #     (primitive_states[:, 1:-1] - primitive_states[:, :-2]) / cell_distances_left,
     #     (primitive_states[:, 2:] - primitive_states[:, 1:-1]) / cell_distances_right
     # )
+
+    return limited_gradients
+
+# TODO: improve shape annotations, two smaller in the flux_direction_index dimension
+# or maybe better: equal shapes everywhere
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['axis'])
+def _calculate_limited_gradients3D(primitive_states: STATE_TYPE, dx: Union[float, Float[Array, ""]], axis: int) -> Float[Array, "num_vars num_cells_a num_cells_b num_cells_c"]:
+    # axis = 1 for x (0th axis are the primitive variables)
+
+    # formulation 1:
+    epsilon = 1e-11  # Small constant to prevent division by zero
+
+    # get array sizee along the axis
+    num_cells = primitive_states.shape[axis]
+    
+    a = (jax.lax.slice_in_dim(primitive_states, 1, num_cells - 1, axis = axis) - jax.lax.slice_in_dim(primitive_states, 0, num_cells - 2, axis = axis)) / dx
+    b = (jax.lax.slice_in_dim(primitive_states, 2, num_cells, axis = axis) - jax.lax.slice_in_dim(primitive_states, 1, num_cells - 1, axis = axis)) / dx
+    # g = jnp.where(
+    #     jnp.abs(a) > epsilon,  # Avoid division if `a` is very small
+    #     b / (a + epsilon),  # Add epsilon to `a` for numerical stability
+    #     jnp.zeros_like(a)
+    # )
+    # # slope_limited = jnp.maximum(0, jnp.minimum(1, g))  # Minmod limiter
+    # slope_limited = jnp.maximum(0, jnp.minimum(1.3, g))  # Osher limiter with beta = 1.3
+    # # ospre limiter
+    # # slope_limited = (1.5 * (g ** 2 + g)) / (g ** 2 + g + 1)
+    # limited_gradients = slope_limited * a
+
+    limited_gradients = _minmod(a, b)
 
     return limited_gradients
 
@@ -150,6 +182,66 @@ def _reconstruct_at_interface(primitive_states: Float[Array, "num_vars num_cells
     # the first entries are the state to the left and right
     # of the interface between cell 1 and 2
     return primitives_right[:, 1:-2], primitives_left[:, 2:-1]
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['registered_variables', 'axis'])
+def _reconstruct_at_interface3D(primitive_states: STATE_TYPE, dt: Float[Array, ""], dx: Union[float, Float[Array, ""]], gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables, axis: int) -> tuple[Float[Array, "num_vars num_cells_a num_cells_b num_cells_c"], Float[Array, "num_vars num_cells_a num_cells_b num_cells_c"]]:
+    """Limited linear reconstruction of the primitive variables at the interfaces.
+
+    Args:
+        primitive_states: The primitive state array.
+        dt: The time step.
+        dx: The cell width.
+        gamma: The adiabatic index.
+
+    Returns:
+        The primitive variables at both sides of the interfaces.
+    """
+
+    num_cells = primitive_states.shape[axis]
+
+    # get fluid variables for convenience
+    rho = primitive_states[registered_variables.density_index]
+    p = primitive_states[registered_variables.pressure_index]
+    u = primitive_states[axis]
+
+    # get the limited gradients on the cells
+    limited_gradients = _calculate_limited_gradients3D(primitive_states, dx, axis)
+
+    # calculate the sound speed
+    c = speed_of_sound(rho, p, gamma)
+
+    # calculate the vectors making up A_W
+    A_W_1 = jnp.zeros_like(primitive_states)
+    A_W_1 = A_W_1.at[registered_variables.density_index].set(u)
+
+    A_W_2 = jnp.zeros_like(primitive_states)
+    A_W_2 = A_W_2.at[registered_variables.density_index].set(rho)
+    A_W_2 = A_W_2.at[registered_variables.velocity_index.x].set(u)
+    A_W_2 = A_W_2.at[registered_variables.velocity_index.y].set(u)
+    A_W_2 = A_W_2.at[registered_variables.velocity_index.z].set(u)
+    A_W_2 = A_W_2.at[registered_variables.pressure_index].set(rho * c ** 2)
+
+    A_W_3 = jnp.zeros_like(primitive_states)
+    A_W_3 = A_W_3.at[registered_variables.velocity_index.x].set(1 / rho)
+    A_W_3 = A_W_3.at[registered_variables.velocity_index.y].set(1 / rho)
+    A_W_3 = A_W_3.at[registered_variables.velocity_index.z].set(1 / rho)
+
+    A_W_3 = A_W_3.at[registered_variables.pressure_index].set(u)
+
+    projected_gradients = jax.lax.slice_in_dim(A_W_1, 1, num_cells - 1, axis = axis) * limited_gradients[0, :, :, :] + jax.lax.slice_in_dim(A_W_2, 1, num_cells - 1, axis = axis) * limited_gradients[1, :, :, :] + jax.lax.slice_in_dim(A_W_3, 1, num_cells - 1, axis = axis) * limited_gradients[2, :, :, :]
+
+    # predictor step
+    predictors = jax.lax.slice_in_dim(primitive_states, 1, num_cells - 1, axis = axis) - dt / 2 * projected_gradients
+
+    # compute primitives at the interfaces
+    primitives_left = predictors - dx/2 * limited_gradients
+    primitives_right = predictors + dx/2 * limited_gradients
+
+    # the first entries are the state to the left and right
+    # of the interface between cell 1 and 2
+    num_prim = primitives_left.shape[axis]
+    return jax.lax.slice_in_dim(primitives_right, 0, num_prim - 1, axis = axis), jax.lax.slice_in_dim(primitives_left, 1, num_prim, axis = axis)
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['geometry', 'registered_variables'])
@@ -270,6 +362,152 @@ def _evolve_state(primitive_states: Float[Array, "num_vars num_cells"], dx: Unio
     return primitive_states
 
 @jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'registered_variables', 'axis'])
+def _evolve_state3D_in_one_dimension(primitive_states: Float[Array, "num_vars num_cells num_cells num_cells"], dx: Union[float, Float[Array, ""]], dt: Float[Array, ""], gamma: Union[float, Float[Array, ""]], config: SimulationConfig, helper_data: HelperData, registered_variables: RegisteredVariables, axis: int) -> Float[Array, "num_vars num_cells num_cells num_cells"]:
+    
+    primitive_states = _boundary_handler3D(primitive_states)
+
+    # get conserved variables
+    conservative_states = conserved_state_from_primitive3D(primitive_states, gamma, registered_variables)
+
+    num_cells = primitive_states.shape[axis]
+
+    # flux in x-direction
+    if config.first_order_fallback:
+        primitive_states_left = jax.lax.slice_in_dim(primitive_states, 0, num_cells - 1, axis = axis)
+        primitive_states_right = jax.lax.slice_in_dim(primitive_states, 1, num_cells, axis = axis)
+    else:
+        primitive_states_left, primitive_states_right = _reconstruct_at_interface3D(primitive_states, dt, dx, gamma, registered_variables, axis)
+    
+    fluxes_x = _hll_solver3D(primitive_states_left, primitive_states_right, gamma, registered_variables, axis)
+
+    flux_length = fluxes_x.shape[axis]
+
+    # update the conserved variables
+    conserved_change = -1 / dx * (jax.lax.slice_in_dim(fluxes_x, 1, flux_length, axis = axis) - jax.lax.slice_in_dim(fluxes_x, 0, flux_length - 1, axis = axis)) * dt
+
+    if axis == 1:
+        conservative_states = conservative_states.at[:, config.num_ghost_cells:-config.num_ghost_cells, :, :].add(conserved_change)
+    elif axis == 2:
+        conservative_states = conservative_states.at[:, :, config.num_ghost_cells:-config.num_ghost_cells, :].add(conserved_change)
+    elif axis == 3:
+        conservative_states = conservative_states.at[:, :, :, config.num_ghost_cells:-config.num_ghost_cells].add(conserved_change)
+    else:
+        raise ValueError("Invalid axis")
+
+    primitive_states = primitive_state_from_conserved3D(conservative_states, gamma, registered_variables)
+    primitive_states = _boundary_handler3D(primitive_states)
+
+    # check if the pressure is still positive
+    p = primitive_states[registered_variables.pressure_index]
+    rho = primitive_states[registered_variables.density_index]
+
+    if config.runtime_debugging:
+        checkify.check(jnp.all(p >= 0), "pressure needs to be non-negative, minimum pressure {pmin} at index {index}", pmin=jnp.min(p), index=jnp.unravel_index(jnp.argmin(p), p.shape))
+        checkify.check(jnp.all(rho >= 0), "density needs to be non-negative, minimum density {rhomin} at index {index}", rhomin=jnp.min(rho), index=jnp.unravel_index(jnp.argmin(rho), rho.shape))
+    
+
+    return primitive_states
+
+
+# @jaxtyped(typechecker=typechecker)
+# @partial(jax.jit, static_argnames=['config', 'registered_variables'])
+# def _evolve_state3D(primitive_states: Float[Array, "num_vars num_cells num_cells num_cells"], dx: Union[float, Float[Array, ""]], dt: Float[Array, ""], gamma: Union[float, Float[Array, ""]], config: SimulationConfig, helper_data: HelperData, registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells num_cells num_cells"]:
+#     """Evolve the primitive state array.
+
+#     Args:
+#         primitive_states: The primitive state array.
+#         dx: The cell width.
+#         dt: The time step.
+#         gamma: The adiabatic index.
+#         config: The simulation configuration.
+#         helper_data: The helper data.
+
+#     Returns:
+#         The evolved primitive state array.
+#     """
+
+#     primitive_states = _boundary_handler3D(primitive_states)
+
+#     # get conserved variables
+#     conservative_states = conserved_state_from_primitive3D(primitive_states, gamma, registered_variables)
+
+#     # flux in x-direction
+#     if config.first_order_fallback:
+#         primitive_states_left = primitive_states[:, :-1, :, :]
+#         primitive_states_right = primitive_states[:, 1:, :, :]
+#     else:
+#         primitive_states_left, primitive_states_right = _reconstruct_at_interface3D(primitive_states, dt, dx, gamma, registered_variables, 1)
+    
+#     fluxes_x = _hll_solver3D(primitive_states_left, primitive_states_right, gamma, registered_variables, registered_variables.velocity_index.x)
+
+#     # update the conserved variables
+#     conservative_states = conservative_states.at[:, config.num_ghost_cells:-config.num_ghost_cells, :, :].add(-1 / dx * (fluxes_x[:, 1:, :, :] - fluxes_x[:, :-1, :, :]) * dt)
+#     primitive_states = primitive_state_from_conserved3D(conservative_states, gamma, registered_variables)
+#     primitive_states = _boundary_handler3D(primitive_states)
+
+#     # check if the pressure is still positive
+#     p = primitive_states[registered_variables.pressure_index]
+
+#     if config.runtime_debugging:
+#         checkify.check(jnp.all(p >= 0), "pressure needs to be non-negative, minimum pressure {pmin} at index {index}", pmin=jnp.min(p), index=jnp.unravel_index(jnp.argmin(p), p.shape))
+
+
+#     # flux in y-direction
+#     if config.first_order_fallback:
+#         primitive_states_left = primitive_states[:, :, :-1, :]
+#         primitive_states_right = primitive_states[:, :, 1:, :]
+#     else:
+#         primitive_states_left, primitive_states_right = _reconstruct_at_interface3D(primitive_states, dt, dx, gamma, registered_variables, 2)
+    
+#     fluxes_y = _hll_solver3D(primitive_states_left, primitive_states_right, gamma, registered_variables, registered_variables.velocity_index.y)
+
+#     # update the conserved variables
+#     conservative_states = conservative_states.at[:, :, config.num_ghost_cells:-config.num_ghost_cells, :].add(-1 / dx * (fluxes_y[:, :, 1:, :] - fluxes_y[:, :, :-1, :]) * dt)
+#     primitive_states = primitive_state_from_conserved3D(conservative_states, gamma, registered_variables)
+#     primitive_states = _boundary_handler3D(primitive_states)
+
+#     # check if the pressure is still positive
+#     p = primitive_states[registered_variables.pressure_index]
+
+#     if config.runtime_debugging:
+#         checkify.check(jnp.all(p >= 0), "pressure needs to be non-negative, minimum pressure {pmin} at index {index}", pmin=jnp.min(p), index=jnp.unravel_index(jnp.argmin(p), p.shape))
+
+#     # flux in z-direction
+#     if config.first_order_fallback:
+#         primitive_states_left = primitive_states[:, :, :, :-1]
+#         primitive_states_right = primitive_states[:, :, :, 1:]
+#     else:
+#         primitive_states_left, primitive_states_right = _reconstruct_at_interface3D(primitive_states, dt, dx, gamma, registered_variables, 3)
+    
+#     fluxes_z = _hll_solver3D(primitive_states_left, primitive_states_right, gamma, registered_variables, registered_variables.velocity_index.z)
+
+#     # update the conserved variables
+#     conservative_states = conservative_states.at[:, :, :, config.num_ghost_cells:-config.num_ghost_cells].add(-1 / dx * (fluxes_z[:, :, :, 1:] - fluxes_z[:, :, :, :-1]) * dt)
+#     primitive_states = primitive_state_from_conserved3D(conservative_states, gamma, registered_variables)
+#     primitive_states = _boundary_handler3D(primitive_states)
+
+#     # check if the pressure is still positive
+#     p = primitive_states[registered_variables.pressure_index]
+
+#     if config.runtime_debugging:
+#         checkify.check(jnp.all(p >= 0), "pressure needs to be non-negative, minimum pressure {pmin} at index {index}", pmin=jnp.min(p), index=jnp.unravel_index(jnp.argmin(p), p.shape))
+
+#     # # update the conserved variables
+#     # conservative_states = conservative_states.at[:, config.num_ghost_cells:-config.num_ghost_cells, :, :].add(-1 / dx * (fluxes_x[:, 1:, :, :] - fluxes_x[:, :-1, :, :]) * dt)
+#     # conservative_states = conservative_states.at[:, :, config.num_ghost_cells:-config.num_ghost_cells, :].add(-1 / dx * (fluxes_y[:, :, 1:, :] - fluxes_y[:, :, :-1, :]) * dt)
+#     # conservative_states = conservative_states.at[:, :, :, config.num_ghost_cells:-config.num_ghost_cells].add(-1 / dx * (fluxes_z[:, :, :, 1:] - fluxes_z[:, :, :, :-1]) * dt)
+
+#     # # update the primitive variables
+#     # primitive_states = primitive_state_from_conserved3D(conservative_states, gamma, registered_variables)
+
+#     # # check if the pressure is still positive
+#     # p = primitive_states[registered_variables.pressure_index]
+#     # checkify.check(jnp.all(p >= 0), "pressure needs to be non-negative, minimum pressure {pmin} at index {index}", pmin=jnp.min(p), index=jnp.unravel_index(jnp.argmin(p), p.shape))
+
+#     return primitive_states
+
+@jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
 def _evolve_state3D(primitive_states: Float[Array, "num_vars num_cells num_cells num_cells"], dx: Union[float, Float[Array, ""]], dt: Float[Array, ""], gamma: Union[float, Float[Array, ""]], config: SimulationConfig, helper_data: HelperData, registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells num_cells num_cells"]:
     """Evolve the primitive state array.
@@ -286,34 +524,16 @@ def _evolve_state3D(primitive_states: Float[Array, "num_vars num_cells num_cells
         The evolved primitive state array.
     """
 
-    # get conserved variables
-    conservative_states = conserved_state_from_primitive3D(primitive_states, gamma, registered_variables)
-
-    # flux in x-direction
-    primitive_states_left = primitive_states[:, :-1, :, :]
-    primitive_states_right = primitive_states[:, 1:, :, :]
-    fluxes_x = _hll_solver3D(primitive_states_left, primitive_states_right, gamma, registered_variables, 1)
-
-    # update the conserved variables
-    conservative_states = conservative_states.at[:, config.num_ghost_cells:-config.num_ghost_cells, :, :].add(-1 / dx * (fluxes_x[:, 1:, :, :] - fluxes_x[:, :-1, :, :]) * dt)
-    primitive_states = primitive_state_from_conserved3D(conservative_states, gamma, registered_variables)
-
-    # flux in y-direction
-    primitive_states_left = primitive_states[:, :, :-1, :]
-    primitive_states_right = primitive_states[:, :, 1:, :]
-    fluxes_y = _hll_solver3D(primitive_states_left, primitive_states_right, gamma, registered_variables, 2)
-
-    # update the conserved variables
-    conservative_states = conservative_states.at[:, :, config.num_ghost_cells:-config.num_ghost_cells, :].add(-1 / dx * (fluxes_y[:, :, 1:, :] - fluxes_y[:, :, :-1, :]) * dt)
-    primitive_states = primitive_state_from_conserved3D(conservative_states, gamma, registered_variables)
-
-    # flux in z-direction
-    primitive_states_left = primitive_states[:, :, :, :-1]
-    primitive_states_right = primitive_states[:, :, :, 1:]
-    fluxes_z = _hll_solver3D(primitive_states_left, primitive_states_right, gamma, registered_variables, 3)
-
-    # update the conserved variables
-    conservative_states = conservative_states.at[:, :, :, config.num_ghost_cells:-config.num_ghost_cells].add(-1 / dx * (fluxes_z[:, :, :, 1:] - fluxes_z[:, :, :, :-1]) * dt)
-    primitive_states = primitive_state_from_conserved3D(conservative_states, gamma, registered_variables)
+    if config.first_order_fallback:
+        primitive_states = _evolve_state3D_in_one_dimension(primitive_states, dx, dt, gamma, config, helper_data, registered_variables, 1)
+        primitive_states = _evolve_state3D_in_one_dimension(primitive_states, dx, dt, gamma, config, helper_data, registered_variables, 2)
+        primitive_states = _evolve_state3D_in_one_dimension(primitive_states, dx, dt, gamma, config, helper_data, registered_variables, 3)
+    else:
+        # advance in x by dt/2 -> y by dt/2 -> z by dt -> y by dt/2 -> x by dt/2
+        primitive_states = _evolve_state3D_in_one_dimension(primitive_states, dx, dt / 2, gamma, config, helper_data, registered_variables, 1)
+        primitive_states = _evolve_state3D_in_one_dimension(primitive_states, dx, dt / 2, gamma, config, helper_data, registered_variables, 2)
+        primitive_states = _evolve_state3D_in_one_dimension(primitive_states, dx, dt, gamma, config, helper_data, registered_variables, 3)
+        primitive_states = _evolve_state3D_in_one_dimension(primitive_states, dx, dt / 2, gamma, config, helper_data, registered_variables, 2)
+        primitive_states = _evolve_state3D_in_one_dimension(primitive_states, dx, dt / 2, gamma, config, helper_data, registered_variables, 1)
 
     return primitive_states
