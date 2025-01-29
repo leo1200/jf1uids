@@ -197,11 +197,12 @@ def _wind_ei3D(wind_params: WindParams, primitive_state: STATE_TYPE, dt: Float[A
     injection_mask = helper_data.r <= r_inj
 
     # create a gaussian weighting mask for the injection with sigma = 1/3 of the injection radius
-    sigma = r_inj
-    gaussian_mask = jnp.exp(-0.5 * helper_data.r**2 / sigma**2)
-    gaussian_mask = jnp.where(injection_mask, gaussian_mask, 0)
-    # normalize the mask
-    gaussian_mask = gaussian_mask / jnp.sum(gaussian_mask) * jnp.sum(injection_mask)
+    # sigma = r_inj
+    # gaussian_mask = jnp.exp(-0.5 * helper_data.r**2 / sigma**2)
+    # gaussian_mask = jnp.where(injection_mask, gaussian_mask, 0)
+    # # normalize the mask
+    # gaussian_mask = gaussian_mask / jnp.sum(gaussian_mask) * jnp.sum(injection_mask)
+    gaussian_mask = injection_mask
 
     # mass injection
     drho_dt = wind_params.wind_mass_loss_rate / V

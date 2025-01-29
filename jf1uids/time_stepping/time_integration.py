@@ -14,7 +14,7 @@ from jf1uids.option_classes.simulation_config import BACKWARDS, SimulationConfig
 from jf1uids.option_classes.simulation_params import SimulationParams
 from jf1uids.time_stepping._CFL import _cfl_time_step, _source_term_aware_time_step
 from jf1uids.fluid_equations.fluid import calculate_total_energy, calculate_total_mass
-from jf1uids._spatial_reconstruction.muscl_scheme import _evolve_state, _evolve_state3D
+from jf1uids._state_evolution.evolve_state import _evolve_state, _evolve_state3D
 from jf1uids._physics_modules.run_physics_modules import _run_physics_modules
 from jf1uids.data_classes.simulation_snapshot_data import SnapshotData
 
