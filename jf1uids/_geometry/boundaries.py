@@ -40,39 +40,41 @@ def _boundary_handler(primitive_states: Float[Array, "num_vars num_cells"], left
     return primitive_states
 
 @jaxtyped(typechecker=typechecker)
-@jax.jit
-def _boundary_handler3D(primitive_states: STATE_TYPE):
+@partial(jax.jit, static_argnames=['first_order_fallback'])
+def _boundary_handler3D(primitive_states: STATE_TYPE, first_order_fallback: bool) -> STATE_TYPE:
 
     # open boundaries in x direction
-    primitive_states = primitive_states.at[:, 0, :, :].set(primitive_states[:, 1, :, :])
-    primitive_states = primitive_states.at[:, -1, :, :].set(primitive_states[:, -2, :, :])
+    if first_order_fallback:
+        primitive_states = primitive_states.at[:, 0, :, :].set(primitive_states[:, 1, :, :])
+        primitive_states = primitive_states.at[:, -1, :, :].set(primitive_states[:, -2, :, :])
+    else:
+        primitive_states = primitive_states.at[:, 0, :, :].set(primitive_states[:, 2, :, :])
+        primitive_states = primitive_states.at[:, 1, :, :].set(primitive_states[:, 2, :, :])
+        primitive_states = primitive_states.at[:, -1, :, :].set(primitive_states[:, -3, :, :])
+        primitive_states = primitive_states.at[:, -2, :, :].set(primitive_states[:, -3, :, :])
+            
 
     # open boundaries in y direction
-    primitive_states = primitive_states.at[:, :, 0, :].set(primitive_states[:, :, 1, :])
-    primitive_states = primitive_states.at[:, :, -1, :].set(primitive_states[:, :, -2, :])
+    if first_order_fallback:
+        primitive_states = primitive_states.at[:, :, 0, :].set(primitive_states[:, :, 1, :])
+        primitive_states = primitive_states.at[:, :, -1, :].set(primitive_states[:, :, -2, :])
+    else:
+        primitive_states = primitive_states.at[:, :, 0, :].set(primitive_states[:, :, 2, :])
+        primitive_states = primitive_states.at[:, :, 1, :].set(primitive_states[:, :, 2, :])
+        primitive_states = primitive_states.at[:, :, -1, :].set(primitive_states[:, :, -3, :])
+        primitive_states = primitive_states.at[:, :, -2, :].set(primitive_states[:, :, -3, :])
 
     # open boundaries in z direction
-    primitive_states = primitive_states.at[:, :, :, 0].set(primitive_states[:, :, :, 1])
-    primitive_states = primitive_states.at[:, :, :, -1].set(primitive_states[:, :, :, -2])
+    if first_order_fallback:
+        primitive_states = primitive_states.at[:, :, :, 0].set(primitive_states[:, :, :, 1])
+        primitive_states = primitive_states.at[:, :, :, -1].set(primitive_states[:, :, :, -2])
+    else:
+        primitive_states = primitive_states.at[:, :, :, 0].set(primitive_states[:, :, :, 2])
+        primitive_states = primitive_states.at[:, :, :, 1].set(primitive_states[:, :, :, 2])
+        primitive_states = primitive_states.at[:, :, :, -1].set(primitive_states[:, :, :, -3])
+        primitive_states = primitive_states.at[:, :, :, -2].set(primitive_states[:, :, :, -3])
 
     return primitive_states
-
-# @jaxtyped(typechecker=typechecker)
-# @jax.jit
-# def _boundary_handler3D(primitive_states: STATE_TYPE):
-#     # Periodic boundaries in x direction
-#     primitive_states = primitive_states.at[:, 0, :, :].set(primitive_states[:, -2, :, :])
-#     primitive_states = primitive_states.at[:, -1, :, :].set(primitive_states[:, 1, :, :])
-
-#     # Periodic boundaries in y direction
-#     primitive_states = primitive_states.at[:, :, 0, :].set(primitive_states[:, :, -2, :])
-#     primitive_states = primitive_states.at[:, :, -1, :].set(primitive_states[:, :, 1, :])
-
-#     # Periodic boundaries in z direction
-#     primitive_states = primitive_states.at[:, :, :, 0].set(primitive_states[:, :, :, -2])
-#     primitive_states = primitive_states.at[:, :, :, -1].set(primitive_states[:, :, :, 1])
-
-#     return primitive_states
 
 @jaxtyped(typechecker=typechecker)
 @jax.jit

@@ -285,7 +285,7 @@ def _time_integration_adaptive_backwards(primitive_state: STATE_TYPE, config: Si
 
         # do not differentiate through the choice of the time step
         if config.dimensionality == 3:
-            state = _boundary_handler3D(state)
+            state = _boundary_handler3D(state, config.first_order_fallback)
 
         dt = jax.lax.stop_gradient(_source_term_aware_time_step(state, config, params, helper_data, registered_variables))
 
