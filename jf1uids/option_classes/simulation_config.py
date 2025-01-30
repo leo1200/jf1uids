@@ -5,8 +5,13 @@ from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindConf
 
 from jf1uids import CARTESIAN
 
+# differentiation modes
 FORWARDS = 0
 BACKWARDS = 1
+
+# limiter types
+MINMOD = 0
+OSHER = 1
 
 class SimulationConfig(NamedTuple):
     """Configuration object for the simulation.
@@ -37,6 +42,9 @@ class SimulationConfig(NamedTuple):
     #: used to calculate the gradients for the
     #: reconstruction at the interfaces.
     reconstruction_order: int = 1
+
+    #: The limiter for the reconstruction.
+    limiter: int = MINMOD
 
     # Explanation of the ghost cells
     #                                |---------|

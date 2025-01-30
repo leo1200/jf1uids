@@ -5,7 +5,7 @@ from functools import partial
 
 from jf1uids._geometry.geometric_terms import _pressure_nozzling_source
 from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import gas_pressure_from_primitives_with_crs
-from jf1uids._state_evolution.reconstruction import _reconstruct_at_interface, _reconstruct_at_interface3D
+from jf1uids._state_evolution.reconstruction import _reconstruct_at_interface
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids._geometry.boundaries import _boundary_handler, _boundary_handler3D
 from jf1uids.fluid_equations.fluid import conserved_state_from_primitive3D, primitive_state_from_conserved, primitive_state_from_conserved3D, conserved_state_from_primitive
@@ -23,7 +23,15 @@ from typing import Union
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _get_conservative_derivative(conservative_states: Float[Array, "num_vars num_cells"], dx: Union[float, Float[Array, ""]], dt: Float[Array, ""], gamma: Union[float, Float[Array, ""]], config: SimulationConfig, helper_data: HelperData, registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells"]:
+def _get_conservative_derivative(
+    conservative_states: Float[Array, "num_vars num_cells"],
+    dx: Union[float, Float[Array, ""]],
+    dt: Float[Array, ""],
+    gamma: Union[float, Float[Array, ""]],
+    config: SimulationConfig,
+    helper_data: HelperData,
+    registered_variables: RegisteredVariables
+) -> Float[Array, "num_vars num_cells"]:
     """
     Time derivative of the conserved variables.
 
@@ -46,7 +54,7 @@ def _get_conservative_derivative(conservative_states: Float[Array, "num_vars num
     conservative_deriv = jnp.zeros_like(conservative_states)
 
     # get the left and right states at the interfaces
-    primitives_left_of_interface, primitives_right_of_interface = _reconstruct_at_interface(primitive_states, dt, dx, gamma, config.geometry, config.first_order_fallback, helper_data, registered_variables)
+    primitives_left_of_interface, primitives_right_of_interface = _reconstruct_at_interface(primitive_states, dt, gamma, config, helper_data, registered_variables, axis = 1)
 
     # calculate the fluxes at the interfaces
     fluxes = _hll_solver(primitives_left_of_interface, primitives_right_of_interface, gamma, registered_variables)
@@ -65,7 +73,7 @@ def _get_conservative_derivative(conservative_states: Float[Array, "num_vars num
         r_minus_half = r.at[config.num_ghost_cells:-config.num_ghost_cells].add(-dx / 2)
 
         # calculate the source terms
-        nozzling_source = _pressure_nozzling_source(primitive_states, dx, r, rv, r_hat_alpha, config.geometry, registered_variables)
+        nozzling_source = _pressure_nozzling_source(primitive_states, config, helper_data, registered_variables)
 
         # update the conserved variables using the fluxes and source terms
         conservative_deriv = conservative_deriv.at[:, config.num_ghost_cells:-config.num_ghost_cells].add(1 / r_hat_alpha[config.num_ghost_cells:-config.num_ghost_cells] * (
@@ -77,7 +85,16 @@ def _get_conservative_derivative(conservative_states: Float[Array, "num_vars num
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _evolve_state(primitive_states: Float[Array, "num_vars num_cells"], dx: Union[float, Float[Array, ""]], dt: Float[Array, ""], gamma: Union[float, Float[Array, ""]], config: SimulationConfig, helper_data: HelperData, registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells"]:
+def _evolve_state(
+    primitive_states: Float[Array, "num_vars num_cells"],
+    dx: Union[float, Float[Array, ""]],
+    dt: Float[Array, ""],
+    gamma: Union[float, Float[Array, ""]],
+    config: SimulationConfig,
+    helper_data: HelperData,
+    registered_variables: RegisteredVariables
+) -> Float[Array, "num_vars num_cells"]:
+    
     """Evolve the primitive state array.
 
     Args:
@@ -112,7 +129,16 @@ def _evolve_state(primitive_states: Float[Array, "num_vars num_cells"], dx: Unio
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables', 'axis'])
-def _evolve_state3D_in_one_dimension(primitive_states: Float[Array, "num_vars num_cells num_cells num_cells"], dx: Union[float, Float[Array, ""]], dt: Float[Array, ""], gamma: Union[float, Float[Array, ""]], config: SimulationConfig, helper_data: HelperData, registered_variables: RegisteredVariables, axis: int) -> Float[Array, "num_vars num_cells num_cells num_cells"]:
+def _evolve_state3D_in_one_dimension(
+    primitive_states: Float[Array, "num_vars num_cells num_cells num_cells"],
+    dx: Union[float, Float[Array, ""]],
+    dt: Float[Array, ""],
+    gamma: Union[float, Float[Array, ""]],
+    config: SimulationConfig,
+    helper_data: HelperData,
+    registered_variables: RegisteredVariables,
+    axis: int
+) -> Float[Array, "num_vars num_cells num_cells num_cells"]:
     
     primitive_states = _boundary_handler3D(primitive_states, config.first_order_fallback)
 
@@ -126,7 +152,7 @@ def _evolve_state3D_in_one_dimension(primitive_states: Float[Array, "num_vars nu
         primitive_states_left = jax.lax.slice_in_dim(primitive_states, 0, num_cells - 1, axis = axis)
         primitive_states_right = jax.lax.slice_in_dim(primitive_states, 1, num_cells, axis = axis)
     else:
-        primitive_states_left, primitive_states_right = _reconstruct_at_interface3D(primitive_states, dt, dx, gamma, registered_variables, axis)
+        primitive_states_left, primitive_states_right = _reconstruct_at_interface(primitive_states, dt, gamma, config, helper_data, registered_variables, axis)
     
     fluxes_x = _hll_solver3D(primitive_states_left, primitive_states_right, gamma, registered_variables, axis)
 
@@ -161,7 +187,13 @@ def _evolve_state3D_in_one_dimension(primitive_states: Float[Array, "num_vars nu
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _evolve_state3D(primitive_states: Float[Array, "num_vars num_cells num_cells num_cells"], dx: Union[float, Float[Array, ""]], dt: Float[Array, ""], gamma: Union[float, Float[Array, ""]], config: SimulationConfig, helper_data: HelperData, registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells num_cells num_cells"]:
+def _evolve_state3D(
+    primitive_states: Float[Array, "num_vars num_cells num_cells num_cells"],
+    dx: Union[float, Float[Array, ""]], dt: Float[Array, ""],
+    gamma: Union[float, Float[Array, ""]],
+    config: SimulationConfig, helper_data: HelperData,
+    registered_variables: RegisteredVariables
+) -> Float[Array, "num_vars num_cells num_cells num_cells"]:
     """Evolve the primitive state array.
 
     Args:
