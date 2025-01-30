@@ -31,6 +31,7 @@ def get_primitive_state_with_crs(
 
     return state
 
+# TODO: make 2D and 3D ready
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['registered_variables'])
 def total_energy_from_primitives_with_crs(
@@ -78,6 +79,7 @@ def gas_pressure_from_primitives_with_crs(
     # return the gas pressure
     return primitive_states[registered_variables.pressure_index] - cosmic_ray_pressure
 
+# TODO: make 2D and 3D ready
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['registered_variables'])
 def total_pressure_from_conserved_with_crs(
