@@ -1,7 +1,6 @@
 
 import jax.numpy as jnp
 import jax
-from jf1uids._geometry.geometry import STATE_TYPE
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.fluid import pressure_from_energy
 
@@ -11,7 +10,7 @@ from beartype import beartype as typechecker
 from functools import partial
 
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import SimulationConfig
+from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfig
 from jf1uids.option_classes.simulation_params import SimulationParams
 
 from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindParams

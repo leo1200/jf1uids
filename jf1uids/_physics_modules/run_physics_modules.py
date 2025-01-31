@@ -4,11 +4,10 @@ from functools import partial
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
 
-from jf1uids._geometry.geometry import STATE_TYPE
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import SimulationConfig
+from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfig
 from jf1uids.option_classes.simulation_params import SimulationParams
 from jf1uids._physics_modules._stellar_wind.stellar_wind import _wind_injection
 

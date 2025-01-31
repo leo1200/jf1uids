@@ -1,9 +1,9 @@
-from typing import NamedTuple
+from types import NoneType
+from typing import NamedTuple, Union
 
-from jf1uids._geometry.boundaries import OPEN_BOUNDARY
 from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindConfig
 
-from jf1uids import CARTESIAN
+from jaxtyping import Array, Float
 
 # differentiation modes
 FORWARDS = 0
@@ -12,6 +12,30 @@ BACKWARDS = 1
 # limiter types
 MINMOD = 0
 OSHER = 1
+
+# Riemann solvers
+HLL = 0
+HLLC = 1
+
+OPEN_BOUNDARY = 0
+REFLECTIVE_BOUNDARY = 1
+PERIODIC_BOUNDARY = 2
+
+CARTESIAN = 0
+CYLINDRICAL = 1
+SPHERICAL = 2
+
+STATE_TYPE = Union[Float[Array, "num_vars num_cells_x"], Float[Array, "num_vars num_cells_x num_cells_y"], Float[Array, "num_vars num_cells_x num_cells_y num_cells_z"]]
+STATE_TYPE_ALTERED = Union[Float[Array, "num_vars num_cells_a"], Float[Array, "num_vars num_cells_a num_cells_b"], Float[Array, "num_vars num_cells_a num_cells_b num_cells_c"]]
+
+class BoundarySettings1D(NamedTuple):
+    left_boundary: int = OPEN_BOUNDARY
+    right_boundary: int = OPEN_BOUNDARY
+
+class BoundarySettings(NamedTuple):
+    x: BoundarySettings1D = BoundarySettings1D()
+    y: BoundarySettings1D = BoundarySettings1D()
+    z: BoundarySettings1D = BoundarySettings1D()
 
 class SimulationConfig(NamedTuple):
     """Configuration object for the simulation.
@@ -46,6 +70,9 @@ class SimulationConfig(NamedTuple):
     #: The limiter for the reconstruction.
     limiter: int = MINMOD
 
+    #: The Riemann solver used
+    riemann_solver: int = HLLC
+
     # Explanation of the ghost cells
     #                                |---------|
     #                           |---------|
@@ -62,11 +89,8 @@ class SimulationConfig(NamedTuple):
     #: The width of the cells.
     dx: float = box_size / (num_cells - 1)
 
-    #: The left boundary condition.
-    left_boundary: int = OPEN_BOUNDARY
-
-    #: The right boundary condition.
-    right_boundary: int = OPEN_BOUNDARY
+    #: Boundary settings for the simulation.
+    boundary_settings: Union[NoneType, BoundarySettings1D, BoundarySettings] = None
 
     #: Enables a fixed timestep for the simulation
     #: based on the specified number of timesteps.

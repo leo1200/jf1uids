@@ -9,9 +9,8 @@ from jaxtyping import jaxtyped
 from typing import Union
 
 # general jf1uids imports
-from jf1uids._geometry.geometry import CARTESIAN, SPHERICAL, STATE_TYPE, STATE_TYPE_ALTERED
 from jf1uids.data_classes.simulation_helper_data import HelperData
-from jf1uids.option_classes.simulation_config import MINMOD, OSHER, SimulationConfig
+from jf1uids.option_classes.simulation_config import CARTESIAN, MINMOD, OSHER, SPHERICAL, STATE_TYPE, STATE_TYPE_ALTERED, SimulationConfig
 
 # limiter imports
 from jf1uids._state_evolution.limiters import _minmod

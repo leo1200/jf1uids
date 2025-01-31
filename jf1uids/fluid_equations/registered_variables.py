@@ -65,7 +65,19 @@ def get_registered_variables(config: SimulationConfig) -> RegisteredVariables:
 
     registered_variables = RegisteredVariables()
 
+    if config.dimensionality == 2:
+
+        # we have two velocity components
+        registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 1)
+
+        # update the velocity index to be an integer
+        registered_variables = registered_variables._replace(velocity_index = StaticIntVector(1, 2, -1))
+
+        # update the pressure index
+        registered_variables = registered_variables._replace(pressure_index = registered_variables.num_vars - 1)
+
     if config.dimensionality == 3:
+        
         # we have three velocity components
         registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 2)
 

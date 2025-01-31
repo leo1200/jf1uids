@@ -9,8 +9,7 @@ from beartype import beartype as typechecker
 from jaxtyping import Array, Float, jaxtyped
 
 # general jf1uids imports
-from jf1uids.option_classes.simulation_config import SimulationConfig
-from jf1uids._geometry.geometry import CARTESIAN, STATE_TYPE, STATE_TYPE_ALTERED
+from jf1uids.option_classes.simulation_config import CARTESIAN, STATE_TYPE, STATE_TYPE_ALTERED, SimulationConfig
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 
@@ -68,7 +67,7 @@ def _reconstruct_at_interface(
     A_W = A_W.at[jnp.arange(registered_variables.num_vars), jnp.arange(registered_variables.num_vars)].set(u)
 
     # set rest
-    A_W = A_W.at[axis, registered_variables.density_index].set(rho)
+    A_W = A_W.at[registered_variables.density_index, axis].set(rho)
     A_W = A_W.at[registered_variables.pressure_index, 1].set(rho * c ** 2)
     A_W = A_W.at[axis, registered_variables.pressure_index].set(1 / rho)
 
@@ -88,8 +87,18 @@ def _reconstruct_at_interface(
     predictors = jax.lax.slice_in_dim(primitive_states, 1, num_cells - 1, axis = axis) - dt / 2 * projected_gradients
 
     # compute primitives at the interfaces
-    primitives_left = predictors - config.dx/2 * limited_gradients
-    primitives_right = predictors + config.dx/2 * limited_gradients
+    if config.geometry == CARTESIAN:
+        distances_to_left_interfaces = config.dx / 2 # distances r_i - r_{i-1/2}
+        distances_to_right_interfaces = config.dx / 2 # distances r_{i+1/2} - r_i
+    else:
+        r = helper_data.geometric_centers
+        rv = helper_data.volumetric_centers
+
+        distances_to_left_interfaces = rv[1:-1] - (r[1:-1] - config.dx / 2)
+        distances_to_right_interfaces = (r[1:-1] + config.dx / 2) - rv[1:-1]
+
+    primitives_left = predictors - distances_to_left_interfaces * limited_gradients
+    primitives_right = predictors + distances_to_right_interfaces * limited_gradients
 
     # the first entries are the state to the left and right
     # of the interface between cell 1 and 2

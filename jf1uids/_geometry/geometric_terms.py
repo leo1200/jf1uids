@@ -9,8 +9,7 @@ from beartype import beartype as typechecker
 from jaxtyping import Array, Float, jaxtyped
 
 # general jf1uids imports
-from jf1uids._geometry.geometry import STATE_TYPE, STATE_TYPE_ALTERED
-from jf1uids.option_classes.simulation_config import SimulationConfig
+from jf1uids.option_classes.simulation_config import STATE_TYPE, STATE_TYPE_ALTERED, SimulationConfig
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 

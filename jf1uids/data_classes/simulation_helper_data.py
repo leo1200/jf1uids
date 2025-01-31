@@ -1,7 +1,7 @@
 from typing import NamedTuple
 import jax.numpy as jnp
-from jf1uids._geometry.geometry import CARTESIAN, SPHERICAL, CYLINDRICAL, _center_of_volume, _r_hat_alpha
-from jf1uids.option_classes.simulation_config import SimulationConfig
+from jf1uids._geometry.geometry import _center_of_volume, _r_hat_alpha
+from jf1uids.option_classes.simulation_config import CARTESIAN, CYLINDRICAL, SPHERICAL, SimulationConfig
 
 # Helper data like the radii and cell volumes 
 # in the simulation or cooling tables etc.

@@ -6,11 +6,10 @@ from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
 from typing import Union
 
-from jf1uids._geometry.geometry import STATE_TYPE
 from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import total_energy_from_primitives_with_crs
 from jf1uids.fluid_equations.fluid import get_absolute_velocity, total_energy_from_primitives
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import SimulationConfig
+from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfig
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables', 'flux_direction_index'])

@@ -1,8 +1,3 @@
-# constants, TODO: bundle
-from jf1uids._geometry.boundaries import OPEN_BOUNDARY, REFLECTIVE_BOUNDARY
-from jf1uids._geometry.geometry import CARTESIAN, CYLINDRICAL, SPHERICAL
-from jf1uids._geometry.geometry import SPHERICAL
-
 # setup
 from jf1uids.option_classes.simulation_config import SimulationConfig
 from jf1uids.data_classes.simulation_helper_data import get_helper_data
@@ -20,7 +15,5 @@ from jf1uids.time_stepping.time_integration import time_integration
 
 # postprocessing
 from jf1uids.shock_finder.shock_finder import strongest_shock_radius
-from jf1uids.fluid_equations.fluid import construct_primitive_state
-
 # units
 from jf1uids.units import CodeUnits

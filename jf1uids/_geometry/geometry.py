@@ -6,12 +6,7 @@ from beartype import beartype as typechecker
 
 from typing import Union
 
-CARTESIAN = 0
-CYLINDRICAL = 1
-SPHERICAL = 2
-
-STATE_TYPE = Union[Float[Array, "num_vars num_cells_x"], Float[Array, "num_vars num_cells_x num_cells_y"], Float[Array, "num_vars num_cells_x num_cells_y num_cells_z"]]
-STATE_TYPE_ALTERED = Union[Float[Array, "num_vars num_cells_a"], Float[Array, "num_vars num_cells_a num_cells_b"], Float[Array, "num_vars num_cells_a num_cells_b num_cells_c"]]
+from jf1uids.option_classes.simulation_config import CYLINDRICAL, SPHERICAL
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['geometry'])

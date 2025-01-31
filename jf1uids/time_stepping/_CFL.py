@@ -1,5 +1,4 @@
 import jax.numpy as jnp
-from jf1uids._geometry.geometry import STATE_TYPE
 from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import gas_pressure_from_primitives_with_crs
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.euler import _euler_flux
@@ -8,7 +7,7 @@ import jax
 from functools import partial
 
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import SimulationConfig
+from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfig
 from jf1uids.option_classes.simulation_params import SimulationParams
 from jf1uids._physics_modules.run_physics_modules import _run_physics_modules
 

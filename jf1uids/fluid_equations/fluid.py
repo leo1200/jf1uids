@@ -7,11 +7,10 @@ from beartype import beartype as typechecker
 
 from typing import Union
 
-from jf1uids._geometry.geometry import STATE_TYPE
 from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import total_energy_from_primitives_with_crs, total_pressure_from_conserved_with_crs
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import SimulationConfig
+from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfig
 
 # The default state jf1uids operates on 
 # are the primitive variables rho, u, p.
@@ -25,7 +24,7 @@ from jf1uids.option_classes.simulation_config import SimulationConfig
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['registered_variables'])
-def construct_primitive_state(rho: Float[Array, "num_cells"], u: Float[Array, "num_cells"], p: Float[Array, "num_cells"], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells"]:
+def construct_primitive_state1D(rho: Float[Array, "num_cells"], u: Float[Array, "num_cells"], p: Float[Array, "num_cells"], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells"]:
     """Stack the primitive variables into the state array.
     
     Args:
@@ -41,6 +40,31 @@ def construct_primitive_state(rho: Float[Array, "num_cells"], u: Float[Array, "n
     state = state.at[registered_variables.density_index].set(rho)
     state = state.at[registered_variables.velocity_index].set(u)
     state = state.at[registered_variables.pressure_index].set(p)
+    return state
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['registered_variables'])
+def construct_primitive_state2D(rho: Float[Array, "num_cells num_cells"], u_x: Float[Array, "num_cells num_cells"], u_y: Float[Array, "num_cells num_cells"], p: Float[Array, "num_cells num_cells"], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells num_cells"]:
+    """Stack the primitive variables into the state array.
+    
+    Args:
+        rho: The density of the fluid.
+        u: The velocity of the fluid.
+        p: The pressure of the fluid.
+        registered_variables: The indices of the variables in the state array.
+        
+    Returns:
+        The state array.
+    """
+
+    state = jnp.zeros((registered_variables.num_vars, rho.shape[0], rho.shape[1]))
+    state = state.at[registered_variables.density_index].set(rho)
+
+    state = state.at[registered_variables.velocity_index.x].set(u_x)
+    state = state.at[registered_variables.velocity_index.y].set(u_y)
+
+    state = state.at[registered_variables.pressure_index].set(p)
+
     return state
 
 
