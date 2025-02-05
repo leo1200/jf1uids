@@ -32,6 +32,9 @@ class RegisteredVariables(NamedTuple):
     velocity_index: Union[int, StaticIntVector] = 1
     # in e.g. 3D, we have three velocity components, each with its own index
 
+    #: Magnetic field index
+    magnetic_index: Union[int, StaticIntVector] = -1
+
     #: Energy index
     pressure_index: int = 2
 
@@ -70,11 +73,19 @@ def get_registered_variables(config: SimulationConfig) -> RegisteredVariables:
         # we have two velocity components
         registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 1)
 
-        # update the velocity index to be an integer
+        # update the velocity index
         registered_variables = registered_variables._replace(velocity_index = StaticIntVector(1, 2, -1))
 
-        # update the pressure index
-        registered_variables = registered_variables._replace(pressure_index = registered_variables.num_vars - 1)
+        # TODO: unified MHD approach in 1D/2D/3D
+        # magnetic field index
+        if config.mhd:
+            # TODO: better indexing
+            registered_variables = registered_variables._replace(pressure_index = 3)
+            registered_variables = registered_variables._replace(magnetic_index = StaticIntVector(4, 5, 6))
+            registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 3)
+        else:
+            # update the pressure index
+            registered_variables = registered_variables._replace(pressure_index = registered_variables.num_vars - 1)
 
     if config.dimensionality == 3:
         

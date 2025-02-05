@@ -41,11 +41,15 @@ def get_helper_data(config: SimulationConfig) -> HelperData:
     if config.dimensionality > 1:
         x = jnp.linspace(0, config.box_size, config.num_cells)
         y = jnp.linspace(0, config.box_size, config.num_cells)
-        z = jnp.linspace(0, config.box_size, config.num_cells)
-        geometric_centers = jnp.meshgrid(x, y, z)
+
+        if config.dimensionality == 3:
+            z = jnp.linspace(0, config.box_size, config.num_cells)
+            geometric_centers = jnp.meshgrid(x, y, z)
+        else:
+            geometric_centers = jnp.meshgrid(x, y)
 
         # calculate the distances from the cell centers to the box center
-        box_center = jnp.array([0.5, 0.5, 0.5]) * config.box_size
+        box_center = jnp.zeros(config.dimensionality) + config.box_size / 2
         geometric_centers = jnp.array(geometric_centers)
         geometric_centers = jnp.moveaxis(geometric_centers, 0, -1)
         volumetric_centers = geometric_centers

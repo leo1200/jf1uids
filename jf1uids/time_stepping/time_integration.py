@@ -9,7 +9,7 @@ from equinox.internal._loop.checkpointed import checkpointed_while_loop
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import BACKWARDS, CARTESIAN, OPEN_BOUNDARY, REFLECTIVE_BOUNDARY, SPHERICAL, STATE_TYPE, BoundarySettings, BoundarySettings1D, SimulationConfig
+from jf1uids.option_classes.simulation_config import BACKWARDS, CARTESIAN, HLL, OPEN_BOUNDARY, REFLECTIVE_BOUNDARY, SPHERICAL, STATE_TYPE, BoundarySettings, BoundarySettings1D, SimulationConfig
 from jf1uids.option_classes.simulation_params import SimulationParams
 from jf1uids.time_stepping._CFL import _cfl_time_step, _source_term_aware_time_step
 from jf1uids.fluid_equations.fluid import calculate_total_energy, calculate_total_mass
@@ -80,13 +80,18 @@ def time_integration_entry(primitive_state: STATE_TYPE, config: SimulationConfig
     # set dx appropriately
     config = config._replace(dx = config.box_size / (config.num_cells - 1))
 
+    if config.geometry == SPHERICAL:
+        config = config._replace(riemann_solver = HLL)
+
     # set boundary conditions if not set
     if config.boundary_settings is None:
         if config.geometry == CARTESIAN:
-            config = config._replace(boundary_settings = BoundarySettings())
+            if config.dimensionality == 1:
+                config = config._replace(boundary_settings = BoundarySettings1D(left_boundary = OPEN_BOUNDARY, right_boundary = OPEN_BOUNDARY))
+            else:
+                config = config._replace(boundary_settings = BoundarySettings())
         elif config.geometry == SPHERICAL and config.dimensionality == 1:
             config = config._replace(boundary_settings = BoundarySettings1D(left_boundary = REFLECTIVE_BOUNDARY, right_boundary = OPEN_BOUNDARY))
-
     if config.fixed_timestep:
         if config.dimensionality == 3:
             return _time_integration_fixed_steps3D(primitive_state, config, params, helper_data, registered_variables)
@@ -100,7 +105,7 @@ def time_integration_entry(primitive_state: STATE_TYPE, config: SimulationConfig
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _time_integration_fixed_steps(primitive_state: Float[Array, "num_vars num_cells"], config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> Union[Float[Array, "num_vars num_cells"], SnapshotData]:
+def _time_integration_fixed_steps(primitive_state: STATE_TYPE, config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> Union[STATE_TYPE, SnapshotData]:
     """ Fixed time stepping integration of the fluid equations.
 
     Args:
@@ -231,6 +236,9 @@ def _time_integration_adaptive_steps(primitive_state: STATE_TYPE, config: Simula
         state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
 
         time += dt
+
+        if config.progress_bar:
+            jax.debug.print("time {time} of {total_time}", time = time, total_time = params.t_end)
 
         if config.return_snapshots:
             carry = (time, state, snapshot_data)

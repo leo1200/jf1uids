@@ -12,6 +12,7 @@ from beartype import beartype as typechecker
 from typing import Union
 
 # general jf1uids imports
+from jf1uids._physics_modules._mhd.mhd_maths import magnetic_update
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import CARTESIAN, HLL, HLLC, SPHERICAL, STATE_TYPE, SimulationConfig
@@ -108,7 +109,7 @@ def _evolve_state_along_axis(
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _evolve_state(
+def _evolve_gas_state(
     primitive_states: STATE_TYPE,
     dx: Union[float, Float[Array, ""]], dt: Float[Array, ""],
     gamma: Union[float, Float[Array, ""]],
@@ -145,3 +146,42 @@ def _evolve_state(
         raise ValueError("Dimensionality not supported.")
 
     return primitive_states
+
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def _evolve_state(
+    primitive_states: STATE_TYPE,
+    dx: Union[float, Float[Array, ""]], dt: Float[Array, ""],
+    gamma: Union[float, Float[Array, ""]],
+    config: SimulationConfig, helper_data: HelperData,
+    registered_variables: RegisteredVariables
+) -> STATE_TYPE:
+    
+    if config.mhd:
+
+        if config.dimensionality == 2:
+
+            # THIS IS VERY PRELIMINARY; THIS KIND OF SPLITTING SHOULD NOT HAPPEN
+            # IN EVERY EVOLVE_STATE CALL
+            registered_variables_gas = registered_variables._replace(num_vars = registered_variables.num_vars - 3)
+
+            gas_state = jnp.zeros((registered_variables_gas.num_vars, *primitive_states.shape[1:]), dtype = jnp.float64)
+            gas_state = primitive_states[:-3, ...]
+            magnetic_field = primitive_states[-3:, ...]
+
+            # evolve gas state by half a time step
+            evolved_gas = _evolve_gas_state(gas_state, dx, dt / 2, gamma, config, helper_data, registered_variables_gas)
+
+            magnetic_field, evolved_gas = magnetic_update(magnetic_field, evolved_gas, dx, dt, registered_variables, config)
+
+            # evolve gas state by half a time step
+            evolved_gas = _evolve_gas_state(evolved_gas, dx, dt / 2, gamma, config, helper_data, registered_variables_gas)
+
+            return jnp.concatenate((evolved_gas, magnetic_field), axis = 0)
+        else:
+            # error
+            raise ValueError("MHD currently not supported in 1D or 3D.")
+
+    else:
+        return _evolve_gas_state(primitive_states, dx, dt, gamma, config, helper_data, registered_variables)

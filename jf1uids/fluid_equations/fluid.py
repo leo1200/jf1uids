@@ -67,6 +67,65 @@ def construct_primitive_state2D(rho: Float[Array, "num_cells num_cells"], u_x: F
 
     return state
 
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['registered_variables'])
+def construct_primitive_state2D_mhd(rho: Float[Array, "num_cells num_cells"], u_x: Float[Array, "num_cells num_cells"], u_y: Float[Array, "num_cells num_cells"], B_x: Float[Array, "num_cells num_cells"], B_y: Float[Array, "num_cells num_cells"], B_z: Float[Array, "num_cells num_cells"], p: Float[Array, "num_cells num_cells"], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells num_cells"]:
+    """Stack the primitive variables into the state array.
+    
+    Args:
+        rho: The density of the fluid.
+        u: The velocity of the fluid.
+        p: The pressure of the fluid.
+        registered_variables: The indices of the variables in the state array.
+        
+    Returns:
+        The state array.
+    """
+
+    state = jnp.zeros((registered_variables.num_vars, rho.shape[0], rho.shape[1]))
+    state = state.at[registered_variables.density_index].set(rho)
+
+    state = state.at[registered_variables.velocity_index.x].set(u_x)
+    state = state.at[registered_variables.velocity_index.y].set(u_y)
+
+    state = state.at[registered_variables.magnetic_index.x].set(B_x)
+    state = state.at[registered_variables.magnetic_index.y].set(B_y)
+    state = state.at[registered_variables.magnetic_index.z].set(B_z)
+
+    state = state.at[registered_variables.pressure_index].set(p)
+
+    return state
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['registered_variables'])
+def construct_primitive_state3D_mhd(rho: Float[Array, "num_cells num_cells"], u_x: Float[Array, "num_cells num_cells"], u_y: Float[Array, "num_cells num_cells"], u_z: Float[Array, "num_cells num_cells"], B_x: Float[Array, "num_cells num_cells"], B_y: Float[Array, "num_cells num_cells"], B_z: Float[Array, "num_cells num_cells"], p: Float[Array, "num_cells num_cells"], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells num_cells"]:
+    """Stack the primitive variables into the state array.
+    
+    Args:
+        rho: The density of the fluid.
+        u: The velocity of the fluid.
+        p: The pressure of the fluid.
+        registered_variables: The indices of the variables in the state array.
+        
+    Returns:
+        The state array.
+    """
+
+    state = jnp.zeros((registered_variables.num_vars, rho.shape[0], rho.shape[1]))
+    state = state.at[registered_variables.density_index].set(rho)
+
+    state = state.at[registered_variables.velocity_index.x].set(u_x)
+    state = state.at[registered_variables.velocity_index.y].set(u_y)
+    state = state.at[registered_variables.velocity_index.z].set(u_z)
+
+    state = state.at[registered_variables.magnetic_index.x].set(B_x)
+    state = state.at[registered_variables.magnetic_index.y].set(B_y)
+    state = state.at[registered_variables.magnetic_index.z].set(B_z)
+
+    state = state.at[registered_variables.pressure_index].set(p)
+
+    return state
+
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['registered_variables'])

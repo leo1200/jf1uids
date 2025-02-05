@@ -49,11 +49,17 @@ class SimulationConfig(NamedTuple):
     #: Significantly reduces performance.
     runtime_debugging: bool = False
 
+    #: Activate progress bar
+    progress_bar: bool = False
+
     #: The number of dimensions of the simulation.
     dimensionality: int = 1
 
     #: The geometry of the simulation.
     geometry: int = CARTESIAN
+
+    #: Magnetohydrodynamics switch.
+    mhd: bool = False
 
     #: The size of the simulation box.
     box_size: float = 1.0
