@@ -3,6 +3,7 @@ import jax.numpy as jnp
 from jaxtyping import Array, Float, jaxtyped
 import jax
 
+from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.fluid_equations.fluid import pressure_from_energy, total_energy_from_primitives
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 
@@ -23,11 +24,11 @@ def curl2D(field, dx: float):
     """
     curl = jnp.zeros_like(field)
 
-    curl = curl.at[0, :, 1:-1].add(0.5 * (field[2, :, 2:] - field[2, :, :-2]) / dx)
-    curl = curl.at[1, 1:-1, :].add(-0.5 * (field[2, 2:, :] - field[2, :-2, :]) / dx)
+    curl = curl.at[0, 1:-1, 1:-1].add(0.5 * (field[2, 1:-1, 2:] - field[2, 1:-1, :-2]) / dx)
+    curl = curl.at[1, 1:-1, 1:-1].add(-0.5 * (field[2, 2:, 1:-1] - field[2, :-2, 1:-1]) / dx)
 
-    curl = curl.at[2, 1:-1, :].add(0.5 * (field[1, 2:, :] - field[1, :-2, :]) / dx)
-    curl = curl.at[2, :, 1:-1].add(-0.5 * (field[0, :, 2:] - field[0, :, :-2]) / dx)
+    curl = curl.at[2, 1:-1, 1:-1].add(0.5 * (field[1, 2:, 1:-1] - field[1, :-2, 1:-1]) / dx)
+    curl = curl.at[2, 1:-1, 1:-1].add(-0.5 * (field[0, 1:-1, 2:] - field[0, 1:-1, :-2]) / dx)
 
     return curl
 
@@ -118,6 +119,9 @@ def magnetic_update(magnetic_field, gas_state, dx, dt, registered_variables, con
 
         return phi1, phi2
     
+    magnetic_field = _boundary_handler(magnetic_field, config)
+    velocity = _boundary_handler(velocity, config)
+    
     B_0 = magnetic_field
     v_0 = velocity
 
@@ -128,6 +132,9 @@ def magnetic_update(magnetic_field, gas_state, dx, dt, registered_variables, con
 
     B_1 = magnetic_field - dt * phiA
     v_1 = velocity - dt * phiB
+
+    B_1 = _boundary_handler(B_1, config)
+    v_1 = _boundary_handler(v_1, config)
 
     def while_condition(state):
         B_k, v_k, B_kp1, v_kp1, current_iter = state
@@ -150,6 +157,9 @@ def magnetic_update(magnetic_field, gas_state, dx, dt, registered_variables, con
 
         B_kp1 = magnetic_field - dt * phiA
         v_kp1 = velocity - dt * phiB
+        
+        B_kp1 = _boundary_handler(B_kp1, config)
+        v_kp1 = _boundary_handler(v_kp1, config)
 
         return B_k, v_k, B_kp1, v_kp1, current_iter + 1
     
@@ -178,6 +188,8 @@ def magnetic_update(magnetic_field, gas_state, dx, dt, registered_variables, con
     # update the gas state
     gas_state = gas_state.at[registered_variables.velocity_index.x:registered_variables.velocity_index.x + 2, ...].set(v_n[:2, ...])
     gas_state = gas_state.at[registered_variables.pressure_index, ...].set(pressure_updated)
+
+    # gas_state = _boundary_handler(gas_state, config)
 
     return B_n, gas_state
 

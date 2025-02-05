@@ -85,6 +85,9 @@ def time_integration_entry(primitive_state: STATE_TYPE, config: SimulationConfig
 
     # set boundary conditions if not set
     if config.boundary_settings is None:
+
+        jax.debug.print("Setting boundary conditions")
+
         if config.geometry == CARTESIAN:
             if config.dimensionality == 1:
                 config = config._replace(boundary_settings = BoundarySettings1D(left_boundary = OPEN_BOUNDARY, right_boundary = OPEN_BOUNDARY))
@@ -92,6 +95,7 @@ def time_integration_entry(primitive_state: STATE_TYPE, config: SimulationConfig
                 config = config._replace(boundary_settings = BoundarySettings())
         elif config.geometry == SPHERICAL and config.dimensionality == 1:
             config = config._replace(boundary_settings = BoundarySettings1D(left_boundary = REFLECTIVE_BOUNDARY, right_boundary = OPEN_BOUNDARY))
+    
     if config.fixed_timestep:
         if config.dimensionality == 3:
             return _time_integration_fixed_steps3D(primitive_state, config, params, helper_data, registered_variables)

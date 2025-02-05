@@ -47,6 +47,8 @@ def _boundary_handler(primitive_states: STATE_TYPE, config: SimulationConfig) ->
     # TODO: implement reflective boundaries for 2D and 3D
     # / throw error here
 
+    # jax.debug.print("boundary handled, left {lb}, right {rb}", lb = config.boundary_settings.left_boundary, rb = config.boundary_settings.right_boundary)
+
     if config.dimensionality == 1:
         if config.boundary_settings.left_boundary == OPEN_BOUNDARY:
             primitive_states = _open_left_boundary(primitive_states, axis = 1)
@@ -159,6 +161,8 @@ def _periodic_boundaries(primitive_states: STATE_TYPE, axis: int) -> STATE_TYPE:
         The primitive state array with the periodic boundary condition applied.
 
     """
+
+    # jax.debug.print("Setting boundary conditions")
 
     primitive_states = _set_along_axis(primitive_states, axis, 0, -4)
     primitive_states = _set_along_axis(primitive_states, axis, 1, -3)
