@@ -20,11 +20,11 @@ def _set_along_axis(primitive_state, axis: int, set_index: int, get_index: int):
     return primitive_state
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['axis', 'set_index', 'get_index', 'var_index_a', 'var_index_b', 'factor'])
-def _set_along_axis_with_selection(primitive_state, axis: int, set_index: int, get_index: int, var_index_a: int, var_index_b: int, factor: float):
+@partial(jax.jit, static_argnames=['axis', 'set_index', 'get_index', 'var_index', 'factor'])
+def _set_specific_var_along_axis(primitive_state, axis: int, set_index: int, get_index: int, var_index: int, factor: float):
 
-    s_set = (slice(var_index_a, var_index_b),) * axis + (set_index,) + (slice(None),)*(primitive_state.ndim - axis - 1)
-    s_get = (slice(var_index_a, var_index_b),) * axis + (get_index,) + (slice(None),)*(primitive_state.ndim - axis - 1)
+    s_set = (var_index,) * axis + (set_index,) + (slice(None),)*(primitive_state.ndim - axis - 1)
+    s_get = (var_index,) * axis + (get_index,) + (slice(None),)*(primitive_state.ndim - axis - 1)
 
     primitive_state = primitive_state.at[s_set].set(factor * primitive_state[s_get])
 
@@ -51,71 +51,101 @@ def _boundary_handler(primitive_state: STATE_TYPE, config: SimulationConfig) -> 
 
     if config.dimensionality == 1:
         if config.boundary_settings.left_boundary == OPEN_BOUNDARY:
-            primitive_state = _open_left_boundary(primitive_state, axis = 1)
+            primitive_state = _open_left_boundary(primitive_state, config.num_ghost_cells, axis = 1)
         elif config.boundary_settings.left_boundary == REFLECTIVE_BOUNDARY:
             primitive_state = _reflective_left_boundary1d(primitive_state)
 
         if config.boundary_settings.right_boundary == OPEN_BOUNDARY:
-            primitive_state = _open_right_boundary(primitive_state, axis = 1)
+            primitive_state = _open_right_boundary(primitive_state, config.num_ghost_cells, axis = 1)
         elif config.boundary_settings.right_boundary == REFLECTIVE_BOUNDARY:
             primitive_state = _reflective_right_boundary1d(primitive_state)
 
         if config.boundary_settings.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.right_boundary == PERIODIC_BOUNDARY:
-            primitive_state = _periodic_boundaries(primitive_state, axis = 1)
+            primitive_state = _periodic_boundaries(primitive_state, config.num_ghost_cells, axis = 1)
 
     if config.dimensionality == 2:
         if config.boundary_settings.x.left_boundary == OPEN_BOUNDARY:
-            primitive_state = _open_left_boundary(primitive_state, axis = 1)
+            primitive_state = _open_left_boundary(primitive_state, config.num_ghost_cells, axis = 1)
 
         if config.boundary_settings.x.right_boundary == OPEN_BOUNDARY:
-            primitive_state = _open_right_boundary(primitive_state, axis = 1)
+            primitive_state = _open_right_boundary(primitive_state, config.num_ghost_cells, axis = 1)
 
         if config.boundary_settings.y.left_boundary == OPEN_BOUNDARY:
-            primitive_state = _open_left_boundary(primitive_state, axis = 2)
+            primitive_state = _open_left_boundary(primitive_state, config.num_ghost_cells, axis = 2)
 
         if config.boundary_settings.y.right_boundary == OPEN_BOUNDARY:
-            primitive_state = _open_right_boundary(primitive_state, axis = 2)
+            primitive_state = _open_right_boundary(primitive_state, config.num_ghost_cells, axis = 2)
+
+        if config.boundary_settings.x.left_boundary == REFLECTIVE_BOUNDARY:
+            primitive_state = _reflective_left_boundary(primitive_state, config.num_ghost_cells, axis = 1)
+
+        if config.boundary_settings.x.right_boundary == REFLECTIVE_BOUNDARY:
+            primitive_state = _reflective_right_boundary(primitive_state, config.num_ghost_cells, axis = 1)
+
+        if config.boundary_settings.y.left_boundary == REFLECTIVE_BOUNDARY:
+            primitive_state = _reflective_left_boundary(primitive_state, config.num_ghost_cells, axis = 2)
+
+        if config.boundary_settings.y.right_boundary == REFLECTIVE_BOUNDARY:
+            primitive_state = _reflective_right_boundary(primitive_state, config.num_ghost_cells, axis = 2)
 
         if config.boundary_settings.x.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.x.right_boundary == PERIODIC_BOUNDARY:
-            primitive_state = _periodic_boundaries(primitive_state, axis = 1)
+            primitive_state = _periodic_boundaries(primitive_state, config.num_ghost_cells, axis = 1)
 
         if config.boundary_settings.y.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.y.right_boundary == PERIODIC_BOUNDARY:
-            primitive_state = _periodic_boundaries(primitive_state, axis = 2)
+            primitive_state = _periodic_boundaries(primitive_state, config.num_ghost_cells, axis = 2)
 
     if config.dimensionality == 3:
         if config.boundary_settings.x.left_boundary == OPEN_BOUNDARY:
-            primitive_state = _open_left_boundary(primitive_state, axis = 1)
+            primitive_state = _open_left_boundary(primitive_state, config.num_ghost_cells, axis = 1)
 
         if config.boundary_settings.x.right_boundary == OPEN_BOUNDARY:
-            primitive_state = _open_right_boundary(primitive_state, axis = 1)
+            primitive_state = _open_right_boundary(primitive_state, config.num_ghost_cells, axis = 1)
 
         if config.boundary_settings.y.left_boundary == OPEN_BOUNDARY:
-            primitive_state = _open_left_boundary(primitive_state, axis = 2)
+            primitive_state = _open_left_boundary(primitive_state, config.num_ghost_cells, axis = 2)
 
         if config.boundary_settings.y.right_boundary == OPEN_BOUNDARY:
-            primitive_state = _open_right_boundary(primitive_state, axis = 2)
+            primitive_state = _open_right_boundary(primitive_state, config.num_ghost_cells, axis = 2)
 
         if config.boundary_settings.z.left_boundary == OPEN_BOUNDARY:
-            primitive_state = _open_left_boundary(primitive_state, axis = 3)
+            primitive_state = _open_left_boundary(primitive_state, config.num_ghost_cells, axis = 3)
 
         if config.boundary_settings.z.right_boundary == OPEN_BOUNDARY:
-            primitive_state = _open_right_boundary(primitive_state, axis = 3)
+            primitive_state = _open_right_boundary(primitive_state, config.num_ghost_cells, axis = 3)
+
+        if config.boundary_settings.x.left_boundary == REFLECTIVE_BOUNDARY:
+            primitive_state = _reflective_left_boundary(primitive_state, config.num_ghost_cells, axis = 1)
+
+        if config.boundary_settings.x.right_boundary == REFLECTIVE_BOUNDARY:
+            primitive_state = _reflective_right_boundary(primitive_state, config.num_ghost_cells, axis = 1)
+
+        if config.boundary_settings.y.left_boundary == REFLECTIVE_BOUNDARY:
+            primitive_state = _reflective_left_boundary(primitive_state, config.num_ghost_cells, axis = 2)
+
+        if config.boundary_settings.y.right_boundary == REFLECTIVE_BOUNDARY:
+            primitive_state = _reflective_right_boundary(primitive_state, config.num_ghost_cells, axis = 2)
+
+        if config.boundary_settings.z.left_boundary == REFLECTIVE_BOUNDARY:
+            primitive_state = _reflective_left_boundary(primitive_state, config.num_ghost_cells, axis = 3)
+
+        if config.boundary_settings.z.right_boundary == REFLECTIVE_BOUNDARY:
+            primitive_state = _reflective_right_boundary(primitive_state, config.num_ghost_cells, axis = 3)
 
         if config.boundary_settings.x.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.x.right_boundary == PERIODIC_BOUNDARY:
-            primitive_state = _periodic_boundaries(primitive_state, axis = 1)
+            primitive_state = _periodic_boundaries(primitive_state, config.num_ghost_cells, axis = 1)
 
         if config.boundary_settings.y.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.y.right_boundary == PERIODIC_BOUNDARY:
-            primitive_state = _periodic_boundaries(primitive_state, axis = 2)
+            primitive_state = _periodic_boundaries(primitive_state, config.num_ghost_cells, axis = 2)
 
         if config.boundary_settings.z.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.z.right_boundary == PERIODIC_BOUNDARY:
-            primitive_state = _periodic_boundaries(primitive_state, axis = 3)
+            primitive_state = _periodic_boundaries(primitive_state, config.num_ghost_cells, axis = 3)
 
     return primitive_state
 
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['axis'])
-def _open_right_boundary(primitive_state: STATE_TYPE, axis: int) -> STATE_TYPE:
+@partial(jax.jit, static_argnames=['axis', 'num_ghost_cells'])
+def _open_right_boundary(primitive_state: STATE_TYPE, num_ghost_cells: int, axis: int) -> STATE_TYPE:
     """Apply the open boundary condition to the right boundary.
     
     Args:
@@ -125,14 +155,16 @@ def _open_right_boundary(primitive_state: STATE_TYPE, axis: int) -> STATE_TYPE:
         The primitive state array with the open boundary condition applied.
     """
 
-    primitive_state = _set_along_axis(primitive_state, axis, -1, -3)
-    primitive_state = _set_along_axis(primitive_state, axis, -2, -3)
+    get_index = -num_ghost_cells - 1
+    
+    for set_index in range(-num_ghost_cells, 0):
+        primitive_state = _set_along_axis(primitive_state, axis, set_index, get_index)
 
     return primitive_state
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['axis'])
-def _open_left_boundary(primitive_state: STATE_TYPE, axis: int) -> STATE_TYPE:
+@partial(jax.jit, static_argnames=['axis', 'num_ghost_cells'])
+def _open_left_boundary(primitive_state: STATE_TYPE, num_ghost_cells: int, axis: int) -> STATE_TYPE:
     """Apply the open boundary condition to the left boundary.
 
     Args:
@@ -144,14 +176,16 @@ def _open_left_boundary(primitive_state: STATE_TYPE, axis: int) -> STATE_TYPE:
 
     """
 
-    primitive_state = _set_along_axis(primitive_state, axis, 0, 2)
-    primitive_state = _set_along_axis(primitive_state, axis, 1, 2)
+    get_index = num_ghost_cells
+
+    for set_index in range(num_ghost_cells):
+        primitive_state = _set_along_axis(primitive_state, axis, set_index, get_index)
 
     return primitive_state
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['axis'])
-def _periodic_boundaries(primitive_state: STATE_TYPE, axis: int) -> STATE_TYPE:
+@partial(jax.jit, static_argnames=['axis', 'num_ghost_cells'])
+def _periodic_boundaries(primitive_state: STATE_TYPE, num_ghost_cells: int, axis: int) -> STATE_TYPE:
     """Apply the periodic boundary condition to the primitive states.
 
     Args:
@@ -162,14 +196,52 @@ def _periodic_boundaries(primitive_state: STATE_TYPE, axis: int) -> STATE_TYPE:
 
     """
 
-    # jax.debug.print("Setting boundary conditions")
+    # primitive_state = _set_along_axis(primitive_state, axis, 0, -4)
+    # primitive_state = _set_along_axis(primitive_state, axis, 1, -3)
 
-    primitive_state = _set_along_axis(primitive_state, axis, 0, -4)
-    primitive_state = _set_along_axis(primitive_state, axis, 1, -3)
+    # primitive_state = _set_along_axis(primitive_state, axis, -2, 2)
+    # primitive_state = _set_along_axis(primitive_state, axis, -1, 3)
 
-    primitive_state = _set_along_axis(primitive_state, axis, -2, 2)
-    primitive_state = _set_along_axis(primitive_state, axis, -1, 3)
+    for i in range(num_ghost_cells):
 
+        # left boundary
+        set_index = i
+        get_index = i - 2 * num_ghost_cells
+        primitive_state = _set_along_axis(primitive_state, axis, set_index, get_index)
+
+        # right boundary
+        set_index = -i - 1
+        get_index = 2 * num_ghost_cells - i - 1
+        primitive_state = _set_along_axis(primitive_state, axis, set_index, get_index)
+
+    return primitive_state
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['axis', 'num_ghost_cells'])
+def _reflective_left_boundary(primitive_state: STATE_TYPE, num_ghost_cells: int, axis: int) -> STATE_TYPE:
+
+    # apply open boundary conditions as a baseline
+    primitive_state = _open_left_boundary(primitive_state, num_ghost_cells, axis)
+
+    # reflect the velocity component along the axis
+    get_index = num_ghost_cells
+    for set_index in range(num_ghost_cells):
+        primitive_state = _set_specific_var_along_axis(primitive_state, axis, set_index, get_index, axis, -1.0)
+
+    return primitive_state
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['axis', 'num_ghost_cells'])
+def _reflective_right_boundary(primitive_state: STATE_TYPE, num_ghost_cells: int, axis: int) -> STATE_TYPE:
+
+    # apply open boundary conditions as a baseline
+    primitive_state = _open_right_boundary(primitive_state, num_ghost_cells, axis)
+
+    # reflect the velocity component along the axis
+    get_index = -num_ghost_cells - 1
+    for set_index in range(-num_ghost_cells, 0):
+        primitive_state = _set_specific_var_along_axis(primitive_state, axis, set_index, get_index, axis, -1.0)
+        
     return primitive_state
 
 @jaxtyped(typechecker=typechecker)

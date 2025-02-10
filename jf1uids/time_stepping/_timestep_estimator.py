@@ -19,7 +19,13 @@ from typing import Union
 # TODO: merge duplicate code in this and hll.py
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['registered_variables', 'flux_direction_index'])
-def get_wave_speeds(primitives_left: STATE_TYPE, primitives_right: STATE_TYPE, gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables, flux_direction_index: int) -> Union[float, Float[Array, ""]]:
+def get_wave_speeds(
+    primitives_left: STATE_TYPE,
+    primitives_right: STATE_TYPE,
+    gamma: Union[float, Float[Array, ""]],
+    registered_variables: RegisteredVariables,
+    flux_direction_index: int
+) -> Union[float, Float[Array, ""]]:
     """
     Returns the conservative fluxes.
 
@@ -60,7 +66,15 @@ def get_wave_speeds(primitives_left: STATE_TYPE, primitives_right: STATE_TYPE, g
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _cfl_time_step(primitive_state: STATE_TYPE, dx: Union[float, Float[Array, ""]], dt_max: Union[float, Float[Array, ""]], gamma: Union[float, Float[Array, ""]], config: SimulationConfig, registered_variables: RegisteredVariables, C_CFL: Union[float, Float[Array, ""]] = 0.8) -> Float[Array, ""]:
+def _cfl_time_step(
+    primitive_state: STATE_TYPE,
+    dx: Union[float, Float[Array, ""]],
+    dt_max: Union[float, Float[Array, ""]],
+    gamma: Union[float, Float[Array, ""]],
+    config: SimulationConfig,
+    registered_variables: RegisteredVariables,
+    C_CFL: Union[float, Float[Array, ""]] = 0.8
+) -> Float[Array, ""]:
 
     """Calculate the time step based on the CFL condition.
 
@@ -120,7 +134,13 @@ def _cfl_time_step(primitive_state: STATE_TYPE, dx: Union[float, Float[Array, ""
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _source_term_aware_time_step(primitive_state: STATE_TYPE, config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> Float[Array, ""]:
+def _source_term_aware_time_step(
+    primitive_state: STATE_TYPE,
+    config: SimulationConfig,
+    params: SimulationParams,
+    helper_data: HelperData,
+    registered_variables: RegisteredVariables
+) -> Float[Array, ""]:
     """
     Calculate the time step based on the CFL condition and the source terms. What timestep
     would be chosen if the source terms were added under the current CFL time step?

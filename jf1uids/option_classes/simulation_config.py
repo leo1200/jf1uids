@@ -5,6 +5,8 @@ from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindConf
 
 from jaxtyping import Array, Float
 
+# ===================== constant definition =====================
+
 # differentiation modes
 FORWARDS = 0
 BACKWARDS = 1
@@ -16,19 +18,34 @@ OSHER = 1
 # Riemann solvers
 HLL = 0
 HLLC = 1
+HLLC_LM = 2
 
+# boundary conditions
 OPEN_BOUNDARY = 0
 REFLECTIVE_BOUNDARY = 1
 PERIODIC_BOUNDARY = 2
 
+# geometry types
 CARTESIAN = 0
 CYLINDRICAL = 1
 SPHERICAL = 2
+
+# axes
+VARAXIS = 0
+XAXIS = 1
+YAXIS = 2
+ZAXIS = 3
+
+# ============================================================
+
+# ===================== type definitions =====================
 
 STATE_TYPE = Union[Float[Array, "num_vars num_cells_x"], Float[Array, "num_vars num_cells_x num_cells_y"], Float[Array, "num_vars num_cells_x num_cells_y num_cells_z"]]
 STATE_TYPE_ALTERED = Union[Float[Array, "num_vars num_cells_a"], Float[Array, "num_vars num_cells_a num_cells_b"], Float[Array, "num_vars num_cells_a num_cells_b num_cells_c"]]
 
 FIELD_TYPE = Union[Float[Array, "num_cells_x"], Float[Array, "num_cells_x num_cells_y"], Float[Array, "num_cells_x num_cells_y num_cells_z"]]
+
+# =============================================================
 
 class BoundarySettings1D(NamedTuple):
     left_boundary: int = OPEN_BOUNDARY
@@ -133,6 +150,11 @@ class SimulationConfig(NamedTuple):
     #: Return intermediate snapshots of the time evolution
     #: instead of only the final fluid state.
     return_snapshots: bool = False
+
+    #: Call a user given function on the snapshot data,
+    #: e.g. for saving or plotting. Must have signature
+    #: callback(time, state, registered_variables).
+    activate_snapshot_callback: bool = False
 
     #: The number of snapshots to return.
     num_snapshots: int = 10

@@ -14,7 +14,7 @@ from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 # fluid stuff
 from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, speed_of_sound
 from jf1uids.fluid_equations.euler import _euler_flux
-from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfig
+from jf1uids.option_classes.simulation_config import HLLC_LM, STATE_TYPE, SimulationConfig
 
 
 @jaxtyped(typechecker=typechecker)
@@ -136,11 +136,12 @@ def _hllc_solver(primitives_left: STATE_TYPE, primitives_right: STATE_TYPE, gamm
     U_star_R = U_star_R * (S_R - u_R) / (S_R - S_star)
 
     # HLLC-LM adaptation
-    Ma_limit = 0.1
-    Ma_local = jnp.maximum(jnp.abs(u_L / c_L), jnp.abs(u_R / c_R))
-    phi = jnp.sin(jnp.minimum(1, Ma_local / Ma_limit) * jnp.pi / 2)
-    S_L = S_L * phi
-    S_R = S_R * phi
+    if config.riemann_solver == HLLC_LM:
+        Ma_limit = 0.1
+        Ma_local = jnp.maximum(jnp.abs(u_L / c_L), jnp.abs(u_R / c_R))
+        phi = jnp.sin(jnp.minimum(1, Ma_local / Ma_limit) * jnp.pi / 2)
+        S_L = S_L * phi
+        S_R = S_R * phi
 
     # calculate the interface HLLC fluxes
     F_star = 0.5 * (F_L + F_R) + 0.5 * (S_L * (U_star_L - U_L) + jnp.abs(S_star) * (U_star_L - U_star_R) + S_R * (U_star_R - U_R))

@@ -112,9 +112,12 @@ def _evolve_state_along_axis(
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
 def _evolve_gas_state(
     primitive_state: STATE_TYPE,
-    dx: Union[float, Float[Array, ""]], dt: Float[Array, ""],
+    dx: Union[float, Float[Array, ""]],
+    dt: Float[Array, ""],
     gamma: Union[float, Float[Array, ""]],
-    config: SimulationConfig, helper_data: HelperData,
+    gravitational_constant: Union[float, Float[Array, ""]],
+    config: SimulationConfig,
+    helper_data: HelperData,
     registered_variables: RegisteredVariables
 ) -> STATE_TYPE:
     """Evolve the primitive state array.
@@ -134,12 +137,12 @@ def _evolve_gas_state(
         primitive_state = _evolve_state_along_axis(primitive_state, dx, dt, gamma, config, helper_data, registered_variables, 1)
 
         if config.self_gravity:
-            primitive_state = _apply_self_gravity(primitive_state, config, registered_variables, gamma, dt)
+            primitive_state = _apply_self_gravity(primitive_state, config, registered_variables, gamma, gravitational_constant, dt)
 
     elif config.dimensionality == 2:
 
         if config.self_gravity:
-            primitive_state = _apply_self_gravity(primitive_state, config, registered_variables, gamma, dt)
+            primitive_state = _apply_self_gravity(primitive_state, config, registered_variables, gamma, gravitational_constant, dt)
 
         primitive_state = _evolve_state_along_axis(primitive_state, dx, dt/2, gamma, config, helper_data, registered_variables, 1)
         primitive_state = _evolve_state_along_axis(primitive_state, dx, dt, gamma, config, helper_data, registered_variables, 2)
@@ -150,7 +153,7 @@ def _evolve_gas_state(
     elif config.dimensionality == 3:
 
         if config.self_gravity:
-            primitive_state = _apply_self_gravity(primitive_state, config, registered_variables, gamma, dt)
+            primitive_state = _apply_self_gravity(primitive_state, config, registered_variables, gamma, gravitational_constant, dt)
 
 
         # advance in x by dt/2 -> y by dt/2 -> z by dt -> y by dt/2 -> x by dt/2
@@ -169,9 +172,12 @@ def _evolve_gas_state(
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
 def _evolve_state(
     primitive_state: STATE_TYPE,
-    dx: Union[float, Float[Array, ""]], dt: Float[Array, ""],
+    dx: Union[float, Float[Array, ""]],
+    dt: Float[Array, ""],
     gamma: Union[float, Float[Array, ""]],
-    config: SimulationConfig, helper_data: HelperData,
+    gravitational_constant: Union[float, Float[Array, ""]],
+    config: SimulationConfig,
+    helper_data: HelperData,
     registered_variables: RegisteredVariables
 ) -> STATE_TYPE:
     
@@ -188,12 +194,12 @@ def _evolve_state(
             magnetic_field = primitive_state[-3:, ...]
 
             # evolve gas state by half a time step
-            evolved_gas = _evolve_gas_state(gas_state, dx, dt / 2, gamma, config, helper_data, registered_variables_gas)
+            evolved_gas = _evolve_gas_state(gas_state, dx, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
 
             magnetic_field, evolved_gas = magnetic_update(magnetic_field, evolved_gas, dx, dt, registered_variables, config)
 
             # evolve gas state by half a time step
-            evolved_gas = _evolve_gas_state(evolved_gas, dx, dt / 2, gamma, config, helper_data, registered_variables_gas)
+            evolved_gas = _evolve_gas_state(evolved_gas, dx, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
 
             return jnp.concatenate((evolved_gas, magnetic_field), axis = 0)
         else:
@@ -201,4 +207,4 @@ def _evolve_state(
             raise ValueError("MHD currently not supported in 1D.")
 
     else:
-        return _evolve_gas_state(primitive_state, dx, dt, gamma, config, helper_data, registered_variables)
+        return _evolve_gas_state(primitive_state, dx, dt, gamma, gravitational_constant, config, helper_data, registered_variables)

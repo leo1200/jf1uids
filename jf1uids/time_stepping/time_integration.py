@@ -41,7 +41,8 @@ def time_integration(
     config: SimulationConfig,
     params: SimulationParams,
     helper_data: HelperData,
-    registered_variables: RegisteredVariables
+    registered_variables: RegisteredVariables,
+    snapshot_callable = None
 ) -> Union[STATE_TYPE, SnapshotData]:
     
     """Integrate the fluid equations in time. For the options of
@@ -66,23 +67,24 @@ def time_integration(
         errors = checkify.user_checks | checkify.index_checks | checkify.float_checks
         checked_integration = checkify.checkify(_time_integration, errors)
 
-        err, final_state = checked_integration(primitive_state, config, params, helper_data, registered_variables)
+        err, final_state = checked_integration(primitive_state, config, params, helper_data, registered_variables, snapshot_callable)
         err.throw()
 
         return final_state
     
     else:
-        return _time_integration(primitive_state, config, params, helper_data, registered_variables)
+        return _time_integration(primitive_state, config, params, helper_data, registered_variables, snapshot_callable)
 
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+@partial(jax.jit, static_argnames=['config', 'registered_variables', 'snapshot_callable'])
 def _time_integration(
     primitive_state: STATE_TYPE,
     config: SimulationConfig,
     params: SimulationParams,
     helper_data: HelperData,
-    registered_variables: RegisteredVariables
+    registered_variables: RegisteredVariables,
+    snapshot_callable = None
 ) -> Union[STATE_TYPE, SnapshotData]:
     
     """Time integration.
@@ -105,6 +107,9 @@ def _time_integration(
         total_energy = jnp.zeros(config.num_snapshots)
         current_checkpoint = 0
         snapshot_data = SnapshotData(times = times, states = states, total_mass = total_mass, total_energy = total_energy, current_checkpoint = current_checkpoint)
+    elif config.activate_snapshot_callback:
+        current_checkpoint = 0
+        snapshot_data = SnapshotData(times = None, states = None, total_mass = None, total_energy = None, current_checkpoint = current_checkpoint)
 
     def update_step(carry):
 
@@ -128,6 +133,24 @@ def _time_integration(
             num_iterations = snapshot_data.num_iterations + 1
             snapshot_data = snapshot_data._replace(num_iterations = num_iterations)
 
+        elif config.activate_snapshot_callback:
+            time, state, snapshot_data = carry
+
+            def update_snapshot_data(snapshot_data):
+                current_checkpoint = snapshot_data.current_checkpoint + 1
+                snapshot_data = snapshot_data._replace(current_checkpoint = current_checkpoint)
+
+                jax.debug.callback(snapshot_callable, time, state, registered_variables)
+
+                return snapshot_data
+            
+            def dont_update_snapshot_data(snapshot_data):
+                return snapshot_data
+
+            snapshot_data = jax.lax.cond(time >= snapshot_data.current_checkpoint * params.t_end / config.num_snapshots, update_snapshot_data, dont_update_snapshot_data, snapshot_data)
+
+            num_iterations = snapshot_data.num_iterations + 1
+            snapshot_data = snapshot_data._replace(num_iterations = num_iterations)
         else:
             time, state = carry
 
@@ -150,7 +173,7 @@ def _time_integration(
         # a higher order method (in a split fashion) may be used
 
         state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
-        state = _evolve_state(state, config.dx, dt, params.gamma, config, helper_data, registered_variables)
+        state = _evolve_state(state, config.dx, dt, params.gamma, params.gravitational_constant, config, helper_data, registered_variables)
         state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
 
         time += dt
@@ -158,7 +181,7 @@ def _time_integration(
         if config.progress_bar:
             jax.debug.callback(_show_progress, time, params.t_end)
 
-        if config.return_snapshots:
+        if config.return_snapshots or config.activate_snapshot_callback:
             carry = (time, state, snapshot_data)
         else:
             carry = (time, state)
@@ -169,13 +192,13 @@ def _time_integration(
         return update_step(carry)
     
     def condition(carry):
-        if config.return_snapshots:
+        if config.return_snapshots or config.activate_snapshot_callback:
             t, _, _ = carry
         else:
             t, _ = carry
         return t < params.t_end
     
-    if config.return_snapshots:
+    if config.return_snapshots or config.activate_snapshot_callback:
         carry = (0.0, primitive_state, snapshot_data)
     else:
         carry = (0.0, primitive_state)
@@ -195,10 +218,14 @@ def _time_integration(
     end = timer()
     duration = end - start
 
-    if config.return_snapshots:
+    if config.return_snapshots or config.activate_snapshot_callback:
         _, state, snapshot_data = carry
         snapshot_data = snapshot_data._replace(runtime = duration)
-        return snapshot_data
+
+        if config.return_snapshots:
+            return snapshot_data
+        else:
+            return state
     else:
         _, state = carry
         return state

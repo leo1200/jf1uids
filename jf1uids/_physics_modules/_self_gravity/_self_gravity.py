@@ -11,7 +11,7 @@ from jax.numpy.fft import fftn, ifftn
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, primitive_state_from_conserved
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import FIELD_TYPE, OPEN_BOUNDARY, STATE_TYPE, SimulationConfig
+from jf1uids.option_classes.simulation_config import FIELD_TYPE, OPEN_BOUNDARY, PERIODIC_BOUNDARY, STATE_TYPE, SimulationConfig
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['grid_spacing', 'config'])
@@ -30,22 +30,23 @@ def _compute_gravitational_potential(
 
     dimensionality = config.dimensionality
 
-    # we only use outflow boundaries if all boundaries are open
+    # we only use outflow if not all boundaries are periodic
+    # SO THERES EITHER ALL PERIODIC OR NONE
     # TODO: improve
 
-    outflow_boundaries = False
+    non_periodic_boundaries = False
 
     if dimensionality == 1:
-        if config.boundary_settings.left_boundary == OPEN_BOUNDARY and config.boundary_settings.right_boundary == OPEN_BOUNDARY:
-            outflow_boundaries = True
+        if not (config.boundary_settings.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.right_boundary == PERIODIC_BOUNDARY):
+            non_periodic_boundaries = True
     elif dimensionality == 2:
-        if config.boundary_settings.x.left_boundary == OPEN_BOUNDARY and config.boundary_settings.x.right_boundary == OPEN_BOUNDARY and config.boundary_settings.y.left_boundary == OPEN_BOUNDARY and config.boundary_settings.y.right_boundary == OPEN_BOUNDARY:
-            outflow_boundaries = True
+        if not (config.boundary_settings.x.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.x.right_boundary == PERIODIC_BOUNDARY and config.boundary_settings.y.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.y.right_boundary == PERIODIC_BOUNDARY):
+            non_periodic_boundaries = True
     elif dimensionality == 3:
-        if config.boundary_settings.x.left_boundary == OPEN_BOUNDARY and config.boundary_settings.x.right_boundary == OPEN_BOUNDARY and config.boundary_settings.y.left_boundary == OPEN_BOUNDARY and config.boundary_settings.y.right_boundary == OPEN_BOUNDARY and config.boundary_settings.z.left_boundary == OPEN_BOUNDARY and config.boundary_settings.z.right_boundary == OPEN_BOUNDARY:
-            outflow_boundaries = True
+        if not (config.boundary_settings.x.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.x.right_boundary == PERIODIC_BOUNDARY and config.boundary_settings.y.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.y.right_boundary == PERIODIC_BOUNDARY and config.boundary_settings.z.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.z.right_boundary == PERIODIC_BOUNDARY):
+            non_periodic_boundaries = True
 
-    if not outflow_boundaries:
+    if not non_periodic_boundaries:
         # -----------------------------
         # Periodic boundaries version
         # -----------------------------
@@ -177,12 +178,13 @@ def _apply_self_gravity(
     config: SimulationConfig,
     registered_variables: RegisteredVariables,
     gamma: Union[float, Float[Array, ""]],
+    gravitational_constant: Union[float, Float[Array, ""]],
     dt: Union[float, Float[Array, ""]]
     ) -> STATE_TYPE:
 
     rho = primitive_state[registered_variables.density_index]
 
-    potential = _compute_gravitational_potential(rho, config.dx, config)
+    potential = _compute_gravitational_potential(rho, config.dx, config, gravitational_constant)
 
     source_term = jnp.zeros_like(primitive_state)
 

@@ -12,6 +12,9 @@ class SimulationParams(NamedTuple):
     #: in the time step calculation.
     C_cfl: float = 0.8
 
+    #: Gravitational constant.
+    gravitational_constant: float = 1.0
+
     #: The adiabatic index of the gas.
     gamma: float = 5/3
 
