@@ -16,12 +16,12 @@ from jf1uids.option_classes.simulation_config import FIELD_TYPE, OPEN_BOUNDARY, 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['grid_spacing', 'config'])
 def _compute_gravitational_potential(
-    gas_density,
+    gas_density: FIELD_TYPE,
     grid_spacing: float,
     config: SimulationConfig,
-    G: float = 1.0,
+    G: Union[float, Float[Array, ""]] = 1.0,
     background_density: float = 0.0
-):
+) -> FIELD_TYPE:
     """
     Compute the gravitational potential using FFT to solve Poisson's equation.
     """
@@ -149,7 +149,7 @@ def _conservative_gravitational_source_term_along_axis(
         grid_spacing: float,
         registered_variables: RegisteredVariables,
         axis: int,
-    ) -> STATE_TYPE:
+) -> STATE_TYPE:
 
     num_cells = primitive_state.shape[axis]
 
@@ -180,7 +180,7 @@ def _apply_self_gravity(
     gamma: Union[float, Float[Array, ""]],
     gravitational_constant: Union[float, Float[Array, ""]],
     dt: Union[float, Float[Array, ""]]
-    ) -> STATE_TYPE:
+) -> STATE_TYPE:
 
     rho = primitive_state[registered_variables.density_index]
 

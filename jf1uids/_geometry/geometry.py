@@ -10,7 +10,11 @@ from jf1uids.option_classes.simulation_config import CYLINDRICAL, SPHERICAL
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['geometry'])
-def _r_hat_alpha(r: Float[Array, "num_cells"], dr: Union[float, Float[Array, ""]], geometry: int) -> Float[Array, "num_cells"]:
+def _r_hat_alpha(
+    r: Float[Array, "num_cells"],
+    dr: Union[float, Float[Array, ""]],
+    geometry: int
+) -> Float[Array, "num_cells"]:
     if geometry == SPHERICAL:
         return r ** 2 + 1/12 * dr ** 2
     elif geometry == CYLINDRICAL:
@@ -20,7 +24,11 @@ def _r_hat_alpha(r: Float[Array, "num_cells"], dr: Union[float, Float[Array, ""]
     
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['geometry'])
-def _center_of_volume(r: Float[Array, "num_cells"], dr: Union[float, Float[Array, ""]], geometry: int) -> Float[Array, "num_cells"]:
+def _center_of_volume(
+    r: Float[Array, "num_cells"],
+    dr: Union[float, Float[Array, ""]],
+    geometry: int
+) -> Float[Array, "num_cells"]:
     if geometry == CYLINDRICAL:
         return (r ** 2 + 1/12 * dr ** 2) / r ** 2 * r
     elif geometry == SPHERICAL:

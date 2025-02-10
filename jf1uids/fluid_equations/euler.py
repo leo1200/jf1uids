@@ -13,7 +13,13 @@ from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfi
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables', 'flux_direction_index'])
-def _euler_flux(primitive_state: STATE_TYPE, gamma: Union[float, Float[Array, ""]], config: SimulationConfig, registered_variables: RegisteredVariables, flux_direction_index: int) -> STATE_TYPE:
+def _euler_flux(
+    primitive_state: STATE_TYPE,
+    gamma: Union[float, Float[Array, ""]],
+    config: SimulationConfig,
+    registered_variables: RegisteredVariables,
+    flux_direction_index: int
+) -> STATE_TYPE:
     """Compute the Euler fluxes for the given primitive states.
 
     Args:

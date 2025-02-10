@@ -24,7 +24,12 @@ from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfi
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['registered_variables'])
-def construct_primitive_state1D(rho: Float[Array, "num_cells"], u: Float[Array, "num_cells"], p: Float[Array, "num_cells"], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells"]:
+def construct_primitive_state1D(
+    rho: Float[Array, "num_cells"],
+    u: Float[Array, "num_cells"],
+    p: Float[Array, "num_cells"],
+    registered_variables: RegisteredVariables
+) -> Float[Array, "num_vars num_cells"]:
     """Stack the primitive variables into the state array.
     
     Args:
@@ -44,7 +49,13 @@ def construct_primitive_state1D(rho: Float[Array, "num_cells"], u: Float[Array, 
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['registered_variables'])
-def construct_primitive_state2D(rho: Float[Array, "num_cells num_cells"], u_x: Float[Array, "num_cells num_cells"], u_y: Float[Array, "num_cells num_cells"], p: Float[Array, "num_cells num_cells"], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells num_cells"]:
+def construct_primitive_state2D(
+    rho: Float[Array, "num_cells num_cells"],
+    u_x: Float[Array, "num_cells num_cells"],
+    u_y: Float[Array, "num_cells num_cells"],
+    p: Float[Array, "num_cells num_cells"],
+    registered_variables: RegisteredVariables
+) -> Float[Array, "num_vars num_cells num_cells"]:
     """Stack the primitive variables into the state array.
     
     Args:
@@ -69,7 +80,16 @@ def construct_primitive_state2D(rho: Float[Array, "num_cells num_cells"], u_x: F
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['registered_variables'])
-def construct_primitive_state2D_mhd(rho: Float[Array, "num_cells num_cells"], u_x: Float[Array, "num_cells num_cells"], u_y: Float[Array, "num_cells num_cells"], B_x: Float[Array, "num_cells num_cells"], B_y: Float[Array, "num_cells num_cells"], B_z: Float[Array, "num_cells num_cells"], p: Float[Array, "num_cells num_cells"], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells num_cells"]:
+def construct_primitive_state2D_mhd(
+    rho: Float[Array, "num_cells num_cells"],
+    u_x: Float[Array, "num_cells num_cells"],
+    u_y: Float[Array, "num_cells num_cells"],
+    B_x: Float[Array, "num_cells num_cells"],
+    B_y: Float[Array, "num_cells num_cells"],
+    B_z: Float[Array, "num_cells num_cells"],
+    p: Float[Array, "num_cells num_cells"],
+    registered_variables: RegisteredVariables
+) -> Float[Array, "num_vars num_cells num_cells"]:
     """Stack the primitive variables into the state array.
     
     Args:
@@ -98,7 +118,17 @@ def construct_primitive_state2D_mhd(rho: Float[Array, "num_cells num_cells"], u_
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['registered_variables'])
-def construct_primitive_state3D_mhd(rho: Float[Array, "num_cells num_cells"], u_x: Float[Array, "num_cells num_cells"], u_y: Float[Array, "num_cells num_cells"], u_z: Float[Array, "num_cells num_cells"], B_x: Float[Array, "num_cells num_cells"], B_y: Float[Array, "num_cells num_cells"], B_z: Float[Array, "num_cells num_cells"], p: Float[Array, "num_cells num_cells"], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells num_cells"]:
+def construct_primitive_state3D_mhd(
+    rho: Float[Array, "num_cells num_cells"],
+    u_x: Float[Array, "num_cells num_cells"],
+    u_y: Float[Array, "num_cells num_cells"],
+    u_z: Float[Array, "num_cells num_cells"],
+    B_x: Float[Array, "num_cells num_cells"],
+    B_y: Float[Array, "num_cells num_cells"],
+    B_z: Float[Array, "num_cells num_cells"],
+    p: Float[Array, "num_cells num_cells"],
+    registered_variables: RegisteredVariables
+) -> Float[Array, "num_vars num_cells num_cells"]:
     """Stack the primitive variables into the state array.
     
     Args:
@@ -129,7 +159,14 @@ def construct_primitive_state3D_mhd(rho: Float[Array, "num_cells num_cells"], u_
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['registered_variables'])
-def construct_primitive_state3D(rho: Float[Array, "num_cells num_cells num_cells"], u_x: Float[Array, "num_cells num_cells num_cells"], u_y: Float[Array, "num_cells num_cells num_cells"], u_z: Float[Array, "num_cells num_cells num_cells"], p: Float[Array, "num_cells num_cells num_cells"], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells num_cells num_cells"]:
+def construct_primitive_state3D(
+    rho: Float[Array, "num_cells num_cells num_cells"],
+    u_x: Float[Array, "num_cells num_cells num_cells"],
+    u_y: Float[Array, "num_cells num_cells num_cells"],
+    u_z: Float[Array, "num_cells num_cells num_cells"],
+    p: Float[Array, "num_cells num_cells num_cells"],
+    registered_variables: RegisteredVariables
+) -> Float[Array, "num_vars num_cells num_cells num_cells"]:
     """Stack the primitive variables into the state array.
     
     Args:
@@ -155,7 +192,12 @@ def construct_primitive_state3D(rho: Float[Array, "num_cells num_cells num_cells
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def primitive_state_from_conserved(conserved_state: STATE_TYPE, gamma: Union[float, Float[Array, ""]], config: SimulationConfig, registered_variables: RegisteredVariables) -> STATE_TYPE:
+def primitive_state_from_conserved(
+    conserved_state: STATE_TYPE,
+    gamma: Union[float, Float[Array, ""]],
+    config: SimulationConfig,
+    registered_variables: RegisteredVariables
+) -> STATE_TYPE:
     """Convert the conserved state to the primitive state.
 
     Args:
@@ -216,7 +258,12 @@ def primitive_state_from_conserved(conserved_state: STATE_TYPE, gamma: Union[flo
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def conserved_state_from_primitive(primitive_state: STATE_TYPE, gamma: Union[float, Float[Array, ""]], config: SimulationConfig, registered_variables: RegisteredVariables) -> STATE_TYPE:
+def conserved_state_from_primitive(
+    primitive_state: STATE_TYPE,
+    gamma: Union[float, Float[Array, ""]],
+    config: SimulationConfig,
+    registered_variables: RegisteredVariables
+) -> STATE_TYPE:
     """Convert the primitive state to the conserved state.
 
     Args:
@@ -259,7 +306,11 @@ def conserved_state_from_primitive(primitive_state: STATE_TYPE, gamma: Union[flo
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def get_absolute_velocity(primitive_state: STATE_TYPE, config: SimulationConfig, registered_variables: RegisteredVariables) -> Union[Float[Array, "num_cells"], Float[Array, "num_cells_x num_cells_y"], Float[Array, "num_cells_x num_cells_y num_cells_z"]]:
+def get_absolute_velocity(
+    primitive_state: STATE_TYPE,
+    config: SimulationConfig,
+    registered_variables: RegisteredVariables
+) -> Union[Float[Array, "num_cells"], Float[Array, "num_cells_x num_cells_y"], Float[Array, "num_cells_x num_cells_y num_cells_z"]]:
     """Get the absolute velocity of the fluid.
 
     Args:
@@ -362,7 +413,11 @@ def speed_of_sound(rho, p, gamma):
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['num_ghost_cells'])
-def calculate_total_mass(primitive_state: Float[Array, "num_vars num_cells"], helper_data: HelperData, num_ghost_cells: int) -> Float[Array, ""]:
+def calculate_total_mass(
+    primitive_state: Float[Array, "num_vars num_cells"],
+    helper_data: HelperData,
+    num_ghost_cells: int
+) -> Float[Array, ""]:
     """
     Calculate the total mass in the domain.
 
@@ -378,7 +433,12 @@ def calculate_total_mass(primitive_state: Float[Array, "num_vars num_cells"], he
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['num_ghost_cells'])
-def calculate_total_energy(primitive_state: Float[Array, "num_vars num_cells"], helper_data: HelperData, gamma: Union[float, Float[Array, ""]], num_ghost_cells: int) -> Float[Array, ""]:
+def calculate_total_energy(
+    primitive_state: Float[Array, "num_vars num_cells"],
+    helper_data: HelperData,
+    gamma: Union[float, Float[Array, ""]],
+    num_ghost_cells: int
+) -> Float[Array, ""]:
     """
     Calculate the total energy in the domain.
 

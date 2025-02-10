@@ -18,7 +18,12 @@ from jf1uids._state_evolution.limited_gradients import _calculate_limited_gradie
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _pressure_nozzling_source(primitive_state: STATE_TYPE, config: SimulationConfig, helper_data: HelperData, registered_variables: RegisteredVariables) -> STATE_TYPE_ALTERED:
+def _pressure_nozzling_source(
+    primitive_state: STATE_TYPE,
+    config: SimulationConfig,
+    helper_data: HelperData,
+    registered_variables: RegisteredVariables
+) -> STATE_TYPE_ALTERED:
     """Pressure nozzling source term as of the geometry of the domain.
 
     Args:

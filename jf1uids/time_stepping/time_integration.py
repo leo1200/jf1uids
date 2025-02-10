@@ -102,7 +102,7 @@ def _time_integration(
 
     if config.return_snapshots:
         times = jnp.zeros(config.num_snapshots)
-        states = jnp.zeros((config.num_snapshots, primitive_state.shape[0], primitive_state.shape[1]))
+        states = jnp.zeros((config.num_snapshots, *primitive_state.shape))
         total_mass = jnp.zeros(config.num_snapshots)
         total_energy = jnp.zeros(config.num_snapshots)
         current_checkpoint = 0
@@ -119,10 +119,10 @@ def _time_integration(
             def update_snapshot_data(snapshot_data):
                 times = snapshot_data.times.at[snapshot_data.current_checkpoint].set(time)
                 states = snapshot_data.states.at[snapshot_data.current_checkpoint].set(state)
-                total_mass = snapshot_data.total_mass.at[snapshot_data.current_checkpoint].set(calculate_total_mass(state, helper_data, config.num_ghost_cells))
-                total_energy = snapshot_data.total_energy.at[snapshot_data.current_checkpoint].set(calculate_total_energy(state, helper_data, params.gamma, config.num_ghost_cells))
+                # total_mass = snapshot_data.total_mass.at[snapshot_data.current_checkpoint].set(calculate_total_mass(state, helper_data, config.num_ghost_cells))
+                # total_energy = snapshot_data.total_energy.at[snapshot_data.current_checkpoint].set(calculate_total_energy(state, helper_data, params.gamma, config.num_ghost_cells))
                 current_checkpoint = snapshot_data.current_checkpoint + 1
-                snapshot_data = snapshot_data._replace(times = times, states = states, total_mass = total_mass, total_energy = total_energy, current_checkpoint = current_checkpoint)
+                snapshot_data = snapshot_data._replace(times = times, states = states, current_checkpoint = current_checkpoint) # total_mass = total_mass, total_energy = total_energy, 
                 return snapshot_data
             
             def dont_update_snapshot_data(snapshot_data):

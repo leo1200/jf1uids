@@ -10,7 +10,12 @@ from jf1uids.option_classes.simulation_config import OPEN_BOUNDARY, PERIODIC_BOU
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['axis', 'set_index', 'get_index'])
-def _set_along_axis(primitive_state, axis: int, set_index: int, get_index: int):
+def _set_along_axis(
+    primitive_state: STATE_TYPE,
+    axis: int,
+    set_index: int,
+    get_index: int
+) -> STATE_TYPE:
 
     s_set = (slice(None),) * axis + (set_index,) + (slice(None),)*(primitive_state.ndim - axis - 1)
     s_get = (slice(None),) * axis + (get_index,) + (slice(None),)*(primitive_state.ndim - axis - 1)
@@ -21,7 +26,14 @@ def _set_along_axis(primitive_state, axis: int, set_index: int, get_index: int):
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['axis', 'set_index', 'get_index', 'var_index', 'factor'])
-def _set_specific_var_along_axis(primitive_state, axis: int, set_index: int, get_index: int, var_index: int, factor: float):
+def _set_specific_var_along_axis(
+    primitive_state: STATE_TYPE,
+    axis: int,
+    set_index: int,
+    get_index: int,
+    var_index: int,
+    factor: float
+) -> STATE_TYPE:
 
     s_set = (var_index,) * axis + (set_index,) + (slice(None),)*(primitive_state.ndim - axis - 1)
     s_get = (var_index,) * axis + (get_index,) + (slice(None),)*(primitive_state.ndim - axis - 1)
@@ -32,7 +44,10 @@ def _set_specific_var_along_axis(primitive_state, axis: int, set_index: int, get
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config'])
-def _boundary_handler(primitive_state: STATE_TYPE, config: SimulationConfig) -> STATE_TYPE:
+def _boundary_handler(
+    primitive_state: STATE_TYPE,
+    config: SimulationConfig
+) -> STATE_TYPE:
     """Apply the boundary conditions to the primitive states.
 
     Args:
@@ -145,7 +160,11 @@ def _boundary_handler(primitive_state: STATE_TYPE, config: SimulationConfig) -> 
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['axis', 'num_ghost_cells'])
-def _open_right_boundary(primitive_state: STATE_TYPE, num_ghost_cells: int, axis: int) -> STATE_TYPE:
+def _open_right_boundary(
+    primitive_state: STATE_TYPE,
+    num_ghost_cells: int,
+    axis: int
+) -> STATE_TYPE:
     """Apply the open boundary condition to the right boundary.
     
     Args:
@@ -164,7 +183,11 @@ def _open_right_boundary(primitive_state: STATE_TYPE, num_ghost_cells: int, axis
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['axis', 'num_ghost_cells'])
-def _open_left_boundary(primitive_state: STATE_TYPE, num_ghost_cells: int, axis: int) -> STATE_TYPE:
+def _open_left_boundary(
+    primitive_state: STATE_TYPE,
+    num_ghost_cells: int,
+    axis: int
+) -> STATE_TYPE:
     """Apply the open boundary condition to the left boundary.
 
     Args:
@@ -185,7 +208,11 @@ def _open_left_boundary(primitive_state: STATE_TYPE, num_ghost_cells: int, axis:
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['axis', 'num_ghost_cells'])
-def _periodic_boundaries(primitive_state: STATE_TYPE, num_ghost_cells: int, axis: int) -> STATE_TYPE:
+def _periodic_boundaries(
+    primitive_state: STATE_TYPE,
+    num_ghost_cells: int,
+    axis: int
+) -> STATE_TYPE:
     """Apply the periodic boundary condition to the primitive states.
 
     Args:
@@ -218,7 +245,11 @@ def _periodic_boundaries(primitive_state: STATE_TYPE, num_ghost_cells: int, axis
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['axis', 'num_ghost_cells'])
-def _reflective_left_boundary(primitive_state: STATE_TYPE, num_ghost_cells: int, axis: int) -> STATE_TYPE:
+def _reflective_left_boundary(
+    primitive_state: STATE_TYPE,
+    num_ghost_cells: int,
+    axis: int
+) -> STATE_TYPE:
 
     # apply open boundary conditions as a baseline
     primitive_state = _open_left_boundary(primitive_state, num_ghost_cells, axis)
@@ -232,7 +263,11 @@ def _reflective_left_boundary(primitive_state: STATE_TYPE, num_ghost_cells: int,
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['axis', 'num_ghost_cells'])
-def _reflective_right_boundary(primitive_state: STATE_TYPE, num_ghost_cells: int, axis: int) -> STATE_TYPE:
+def _reflective_right_boundary(
+    primitive_state: STATE_TYPE,
+    num_ghost_cells: int,
+    axis: int
+) -> STATE_TYPE:
 
     # apply open boundary conditions as a baseline
     primitive_state = _open_right_boundary(primitive_state, num_ghost_cells, axis)
@@ -246,7 +281,9 @@ def _reflective_right_boundary(primitive_state: STATE_TYPE, num_ghost_cells: int
 
 @jaxtyped(typechecker=typechecker)
 @jax.jit
-def _reflective_left_boundary1d(primitive_state: Float[Array, "num_vars num_cells"]) -> Float[Array, "num_vars num_cells"]:
+def _reflective_left_boundary1d(
+    primitive_state: Float[Array, "num_vars num_cells"]
+) -> Float[Array, "num_vars num_cells"]:
     """Apply the reflective boundary condition to the left boundary.
 
     Args:
@@ -268,7 +305,9 @@ def _reflective_left_boundary1d(primitive_state: Float[Array, "num_vars num_cell
 
 @jaxtyped(typechecker=typechecker)
 @jax.jit
-def _reflective_right_boundary1d(primitive_state: Float[Array, "num_vars num_cells"]) -> Float[Array, "num_vars num_cells"]:
+def _reflective_right_boundary1d(
+    primitive_state: Float[Array, "num_vars num_cells"]
+) -> Float[Array, "num_vars num_cells"]:
     """Apply the reflective boundary condition to the right boundary.
 
     Args:
