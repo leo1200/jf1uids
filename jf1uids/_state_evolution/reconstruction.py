@@ -22,7 +22,7 @@ from jf1uids._state_evolution.limited_gradients import _calculate_limited_gradie
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables', 'axis'])
 def _reconstruct_at_interface(
-    primitive_states: STATE_TYPE,
+    primitive_state: STATE_TYPE,
     dt: Union[float, Float[Array, ""]],
     gamma: Union[float, Float[Array, ""]],
     config: SimulationConfig,
@@ -35,7 +35,7 @@ def _reconstruct_at_interface(
     Limited linear reconstruction of the primitive variables at the interfaces.
 
     Args:
-        primitive_states: The primitive state array.
+        primitive_state: The primitive state array.
         dt: The time step.
         dx: The cell width.
         gamma: The adiabatic index.
@@ -44,15 +44,15 @@ def _reconstruct_at_interface(
         The primitive variables at both sides of the interfaces.
     """
 
-    num_cells = primitive_states.shape[axis]
+    num_cells = primitive_state.shape[axis]
 
     # get fluid variables for convenience
-    rho = primitive_states[registered_variables.density_index]
-    p = primitive_states[registered_variables.pressure_index]
-    u = primitive_states[axis]
+    rho = primitive_state[registered_variables.density_index]
+    p = primitive_state[registered_variables.pressure_index]
+    u = primitive_state[axis]
 
     # get the limited gradients on the cells
-    limited_gradients = _calculate_limited_gradients(primitive_states, config, helper_data, axis = axis)
+    limited_gradients = _calculate_limited_gradients(primitive_state, config, helper_data, axis = axis)
 
     # calculate the sound speed
     c = speed_of_sound(rho, p, gamma)
@@ -61,7 +61,7 @@ def _reconstruct_at_interface(
     # see https://diglib.uibk.ac.at/download/pdf/4422963.pdf, 2.11
 
     # calculate the vectors making up A_W
-    A_W = jnp.zeros((registered_variables.num_vars,) + primitive_states.shape)
+    A_W = jnp.zeros((registered_variables.num_vars,) + primitive_state.shape)
 
     # set u diagonal, this way all quantities are automatically advected
     A_W = A_W.at[jnp.arange(registered_variables.num_vars), jnp.arange(registered_variables.num_vars)].set(u)
@@ -84,7 +84,7 @@ def _reconstruct_at_interface(
         projected_gradients = jnp.einsum('baxyz, axyz -> bxyz', A_W, limited_gradients)
 
     # predictor step
-    predictors = jax.lax.slice_in_dim(primitive_states, 1, num_cells - 1, axis = axis) - dt / 2 * projected_gradients
+    predictors = jax.lax.slice_in_dim(primitive_state, 1, num_cells - 1, axis = axis) - dt / 2 * projected_gradients
 
     # compute primitives at the interfaces
     if config.geometry == CARTESIAN:

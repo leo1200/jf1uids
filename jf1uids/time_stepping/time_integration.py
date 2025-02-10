@@ -1,31 +1,49 @@
+# general
 import jax
 import jax.numpy as jnp
 from functools import partial
 
-from jax.experimental import checkify
-
 from equinox.internal._loop.checkpointed import checkpointed_while_loop
 
-from jf1uids._geometry.boundaries import _boundary_handler
-from jf1uids.data_classes.simulation_helper_data import HelperData
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import BACKWARDS, CARTESIAN, HLL, OPEN_BOUNDARY, REFLECTIVE_BOUNDARY, SPHERICAL, STATE_TYPE, BoundarySettings, BoundarySettings1D, SimulationConfig
-from jf1uids.option_classes.simulation_params import SimulationParams
-from jf1uids.time_stepping._timestep_estimator import _cfl_time_step, _source_term_aware_time_step
-from jf1uids.fluid_equations.fluid import calculate_total_energy, calculate_total_mass
-from jf1uids._state_evolution.evolve_state import _evolve_state
-from jf1uids._physics_modules.run_physics_modules import _run_physics_modules
-from jf1uids.data_classes.simulation_snapshot_data import SnapshotData
-
-from timeit import default_timer as timer
-
-from jaxtyping import Array, Float, jaxtyped
+# type checking
+from jaxtyping import jaxtyped
 from beartype import beartype as typechecker
-
 from typing import Union
 
+# runtime debugging
+from jax.experimental import checkify
+
+# jf1uids constants
+from jf1uids.option_classes.simulation_config import BACKWARDS, FORWARDS, STATE_TYPE
+
+# jf1uids containers
+from jf1uids.option_classes.simulation_config import SimulationConfig
+from jf1uids.data_classes.simulation_helper_data import HelperData
+from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.option_classes.simulation_params import SimulationParams
+from jf1uids.data_classes.simulation_snapshot_data import SnapshotData
+
+# jf1uids functions
+from jf1uids._state_evolution.evolve_state import _evolve_state
+from jf1uids._physics_modules.run_physics_modules import _run_physics_modules
+from jf1uids.time_stepping._timestep_estimator import _cfl_time_step, _source_term_aware_time_step
+from jf1uids.fluid_equations.fluid import calculate_total_energy, calculate_total_mass
+
+# progress bar
+from jf1uids.time_stepping._progress_bar import _show_progress
+
+# timing
+from timeit import default_timer as timer
+
 @jaxtyped(typechecker=typechecker)
-def time_integration(primitive_state: STATE_TYPE, config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> Union[STATE_TYPE, SnapshotData]:
+def time_integration(
+    primitive_state: STATE_TYPE,
+    config: SimulationConfig,
+    params: SimulationParams,
+    helper_data: HelperData,
+    registered_variables: RegisteredVariables
+) -> Union[STATE_TYPE, SnapshotData]:
+    
     """Integrate the fluid equations in time. For the options of
     the time integration see the simulation configuration and
     the simulation parameters.
@@ -37,15 +55,16 @@ def time_integration(primitive_state: STATE_TYPE, config: SimulationConfig, para
         helper_data: The helper data.
 
     Returns:
-        Depending on the configuration (return_snapshots, num_snapshots) either the final state of the fluid
-        after the time integration of snapshots of the time evolution.
+        Depending on the configuration (return_snapshots, num_snapshots) 
+        either the final state of the fluid after the time 
+        integration of snapshots of the time evolution.
 
     """
 
     if config.runtime_debugging:
         
         errors = checkify.user_checks | checkify.index_checks | checkify.float_checks
-        checked_integration = checkify.checkify(time_integration_entry, errors)
+        checked_integration = checkify.checkify(_time_integration, errors)
 
         err, final_state = checked_integration(primitive_state, config, params, helper_data, registered_variables)
         err.throw()
@@ -53,115 +72,20 @@ def time_integration(primitive_state: STATE_TYPE, config: SimulationConfig, para
         return final_state
     
     else:
+        return _time_integration(primitive_state, config, params, helper_data, registered_variables)
 
-        return time_integration_entry(primitive_state, config, params, helper_data, registered_variables)
 
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def _time_integration(
+    primitive_state: STATE_TYPE,
+    config: SimulationConfig,
+    params: SimulationParams,
+    helper_data: HelperData,
+    registered_variables: RegisteredVariables
+) -> Union[STATE_TYPE, SnapshotData]:
     
-
-@jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def time_integration_entry(primitive_state: STATE_TYPE, config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> Union[STATE_TYPE, SnapshotData]:
-    """Integrate the fluid equations in time. For the options of
-    the time integration see the simulation configuration and
-    the simulation parameters.
-
-    Args:
-        primitive_state: The primitive state array.
-        config: The simulation configuration.
-        params: The simulation parameters.
-        helper_data: The helper data.
-
-    Returns:
-        Depending on the configuration (return_snapshots, num_snapshots) either the final state of the fluid
-        after the time integration of snapshots of the time evolution.
-
-    """
-
-    if config.fixed_timestep:
-        if config.dimensionality == 3:
-            return _time_integration_fixed_steps3D(primitive_state, config, params, helper_data, registered_variables)
-        else:
-            return _time_integration_fixed_steps(primitive_state, config, params, helper_data, registered_variables)
-    else:
-        if config.differentiation_mode == BACKWARDS:
-            return _time_integration_adaptive_backwards(primitive_state, config, params, helper_data, registered_variables)
-        else:
-            return _time_integration_adaptive_steps(primitive_state, config, params, helper_data, registered_variables)
-
-@jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _time_integration_fixed_steps(primitive_state: STATE_TYPE, config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> Union[STATE_TYPE, SnapshotData]:
-    """ Fixed time stepping integration of the fluid equations.
-
-    Args:
-        primitive_state: The primitive state array.
-        config: The simulation configuration.
-        params: The simulation parameters.
-        helper_data: The helper data.
-
-    Returns:
-        Depending on the configuration (return_snapshots, num_snapshots) either the final state of the fluid
-        after the time integration of snapshots of the time evolution
-    """
-
-    if config.return_snapshots:
-        raise NotImplementedError("return_snapshots only implemented with adaptive time stepping with forward mode option")
-
-    dt = params.t_end / config.num_timesteps
-
-    def update_step(_, state):
-
-        state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
-        state = _evolve_state(state, config.dx, dt, params.gamma, config, helper_data, registered_variables)
-        state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
-
-        return state
-    
-    # use lax fori_loop to unroll the loop
-    state = jax.lax.fori_loop(0, config.num_timesteps, update_step, primitive_state)
-
-    return state
-
-@jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _time_integration_fixed_steps3D(primitive_state: STATE_TYPE, config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> Union[STATE_TYPE, SnapshotData]:
-    """ Fixed time stepping integration of the fluid equations.
-
-    Args:
-        primitive_state: The primitive state array.
-        config: The simulation configuration.
-        params: The simulation parameters.
-        helper_data: The helper data.
-
-    Returns:
-        Depending on the configuration (return_snapshots, num_snapshots) either the final state of the fluid
-        after the time integration of snapshots of the time evolution
-    """
-
-    config = config._replace(dx = config.box_size / (config.num_cells - 1))
-
-    if config.return_snapshots:
-        raise NotImplementedError("return_snapshots only implemented with adaptive time stepping with forward mode option")
-
-    dt = params.t_end / config.num_timesteps
-
-    def update_step(_, state):
-
-        state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
-        state = _evolve_state(state, config.dx, dt, params.gamma, config, helper_data, registered_variables)
-        state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
-
-        return state
-    
-    # use lax fori_loop to unroll the loop
-    state = jax.lax.fori_loop(0, config.num_timesteps, update_step, primitive_state)
-
-    return state
-
-@jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _time_integration_adaptive_steps(primitive_state: STATE_TYPE, config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> Union[STATE_TYPE, SnapshotData]:
-    """Adaptive time stepping integration of the fluid equations.
+    """Time integration.
 
     Args:
         primitive_state: The primitive state array.
@@ -210,7 +134,16 @@ def _time_integration_adaptive_steps(primitive_state: STATE_TYPE, config: Simula
         # dt = _cfl_time_step(state, config.dx, params.dt_max, params.gamma, params.C_cfl)
 
         # do not differentiate through the choice of the time step
-        dt = jax.lax.stop_gradient(_source_term_aware_time_step(state, config, params, helper_data, registered_variables))
+        if not config.fixed_timestep:
+            if config.source_term_aware_timestep:
+                dt = jax.lax.stop_gradient(_source_term_aware_time_step(state, config, params, helper_data, registered_variables))
+            else:
+                dt = jax.lax.stop_gradient(_cfl_time_step(state, config.dx, params.dt_max, params.gamma, config, registered_variables, params.C_cfl))
+        else:
+            dt = params.t_end / config.num_timesteps
+
+        if config.exact_end_time:
+            dt = jnp.minimum(dt, params.t_end - time)
 
         # for now we mainly consider the stellar wind, a constant source term term, 
         # so the source is handled via a simple Euler step but generally 
@@ -223,8 +156,7 @@ def _time_integration_adaptive_steps(primitive_state: STATE_TYPE, config: Simula
         time += dt
 
         if config.progress_bar:
-            # jax.debug.print("time {time} of {total_time}", time = time, total_time = params.t_end)
-            jax.debug.callback(printProgressBar, time, params.t_end)
+            jax.debug.callback(_show_progress, time, params.t_end)
 
         if config.return_snapshots:
             carry = (time, state, snapshot_data)
@@ -232,6 +164,9 @@ def _time_integration_adaptive_steps(primitive_state: STATE_TYPE, config: Simula
             carry = (time, state)
 
         return carry
+    
+    def update_step_for(_, carry):
+        return update_step(carry)
     
     def condition(carry):
         if config.return_snapshots:
@@ -246,7 +181,17 @@ def _time_integration_adaptive_steps(primitive_state: STATE_TYPE, config: Simula
         carry = (0.0, primitive_state)
     
     start = timer()
-    carry = jax.lax.while_loop(condition, update_step, carry)
+
+    if not config.fixed_timestep:
+        if config.differentiation_mode == BACKWARDS:
+            carry = checkpointed_while_loop(condition, update_step, carry, checkpoints = config.num_checkpoints)
+        elif config.differentiation_mode == FORWARDS:
+            carry = jax.lax.while_loop(condition, update_step, carry)
+        else:
+            raise ValueError("Unknown differentiation mode.")
+    else:
+        carry = jax.lax.fori_loop(0, config.num_timesteps, update_step_for, carry)
+    
     end = timer()
     duration = end - start
 
@@ -257,79 +202,3 @@ def _time_integration_adaptive_steps(primitive_state: STATE_TYPE, config: Simula
     else:
         _, state = carry
         return state
-    
-# Print iterations progress
-def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
-    """
-    Call in a loop to create terminal progress bar
-    @params:
-        iteration   - Required  : current iteration (Int)
-        total       - Required  : total iterations (Int)
-        prefix      - Optional  : prefix string (Str)
-        suffix      - Optional  : suffix string (Str)
-        decimals    - Optional  : positive number of decimals in percent complete (Int)
-        length      - Optional  : character length of bar (Int)
-        fill        - Optional  : bar fill character (Str)
-        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
-    """
-    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
-    filledLength = int(length * iteration // total)
-    bar = fill * filledLength + '-' * (length - filledLength)
-    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
-    # Print New Line on Complete
-    if iteration == total: 
-        print()
-    
-@jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _time_integration_adaptive_backwards(primitive_state: STATE_TYPE, config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> Union[STATE_TYPE, SnapshotData]:
-    """Adaptive time stepping integration of the fluid equations in backwards mode.
-
-    Args:
-        primitive_state: The primitive state array.
-        config: The simulation configuration.
-        params: The simulation parameters.
-        helper_data: The helper data.
-
-    Returns:
-        Depending on the configuration (return_snapshots, num_snapshots) either the final state of the fluid
-        after the time integration of snapshots of the time evolution.
-    """
-
-    if config.return_snapshots:
-        raise NotImplementedError("return_snapshots only implemented with adaptive time stepping with forward mode option")
-
-    def update_step(carry):
-
-        time, state = carry
-
-        # dt = _cfl_time_step(state, config.dx, params.dt_max, params.gamma, params.C_cfl)
-
-        # do not differentiate through the choice of the time step
-        if config.dimensionality == 3:
-            state = _boundary_handler(state, config)
-
-        dt = jax.lax.stop_gradient(_source_term_aware_time_step(state, config, params, helper_data, registered_variables))
-
-        state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
-
-        state = _evolve_state(state, config.dx, dt, params.gamma, config, helper_data, registered_variables)
-        
-        state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
-
-        time += dt
-
-        carry = (time, state)
-
-        return carry
-    
-    def condition(carry):
-        t, _ = carry
-        return t < params.t_end
-    
-    carry = (0.0, primitive_state)
-    
-    carry = checkpointed_while_loop(condition, update_step, carry, checkpoints=config.num_checkpoints)
-
-    _, state = carry
-    return state

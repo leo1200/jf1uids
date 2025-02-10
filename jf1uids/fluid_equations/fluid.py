@@ -216,7 +216,7 @@ def primitive_state_from_conserved(conserved_state: STATE_TYPE, gamma: Union[flo
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def conserved_state_from_primitive(primitive_states: STATE_TYPE, gamma: Union[float, Float[Array, ""]], config: SimulationConfig, registered_variables: RegisteredVariables) -> STATE_TYPE:
+def conserved_state_from_primitive(primitive_state: STATE_TYPE, gamma: Union[float, Float[Array, ""]], config: SimulationConfig, registered_variables: RegisteredVariables) -> STATE_TYPE:
     """Convert the primitive state to the conserved state.
 
     Args:
@@ -227,27 +227,27 @@ def conserved_state_from_primitive(primitive_states: STATE_TYPE, gamma: Union[fl
         The conserved state.
     """
     
-    rho = primitive_states[registered_variables.density_index]
+    rho = primitive_state[registered_variables.density_index]
 
-    u = get_absolute_velocity(primitive_states, config, registered_variables)
-    p = primitive_states[registered_variables.pressure_index]
+    u = get_absolute_velocity(primitive_state, config, registered_variables)
+    p = primitive_state[registered_variables.pressure_index]
 
     if registered_variables.cosmic_ray_n_active:
-        E = total_energy_from_primitives_with_crs(primitive_states, registered_variables)
+        E = total_energy_from_primitives_with_crs(primitive_state, registered_variables)
     else:
         E = total_energy_from_primitives(rho, u, p, gamma)
 
-    conserved_state = primitive_states.at[registered_variables.pressure_index].set(E)
+    conserved_state = primitive_state.at[registered_variables.pressure_index].set(E)
 
     if config.dimensionality == 1:
-        conserved_state = conserved_state.at[registered_variables.velocity_index].set(rho * primitive_states[registered_variables.velocity_index])
+        conserved_state = conserved_state.at[registered_variables.velocity_index].set(rho * primitive_state[registered_variables.velocity_index])
     elif config.dimensionality == 2:
-        conserved_state = conserved_state.at[registered_variables.velocity_index.x].set(rho * primitive_states[registered_variables.velocity_index.x])
-        conserved_state = conserved_state.at[registered_variables.velocity_index.y].set(rho * primitive_states[registered_variables.velocity_index.y])
+        conserved_state = conserved_state.at[registered_variables.velocity_index.x].set(rho * primitive_state[registered_variables.velocity_index.x])
+        conserved_state = conserved_state.at[registered_variables.velocity_index.y].set(rho * primitive_state[registered_variables.velocity_index.y])
     elif config.dimensionality == 3:
-        conserved_state = conserved_state.at[registered_variables.velocity_index.x].set(rho * primitive_states[registered_variables.velocity_index.x])
-        conserved_state = conserved_state.at[registered_variables.velocity_index.y].set(rho * primitive_states[registered_variables.velocity_index.y])
-        conserved_state = conserved_state.at[registered_variables.velocity_index.z].set(rho * primitive_states[registered_variables.velocity_index.z])
+        conserved_state = conserved_state.at[registered_variables.velocity_index.x].set(rho * primitive_state[registered_variables.velocity_index.x])
+        conserved_state = conserved_state.at[registered_variables.velocity_index.y].set(rho * primitive_state[registered_variables.velocity_index.y])
+        conserved_state = conserved_state.at[registered_variables.velocity_index.z].set(rho * primitive_state[registered_variables.velocity_index.z])
     else:
         raise ValueError("Invalid dimension.")
 
@@ -259,11 +259,11 @@ def conserved_state_from_primitive(primitive_states: STATE_TYPE, gamma: Union[fl
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def get_absolute_velocity(primitive_states: STATE_TYPE, config: SimulationConfig, registered_variables: RegisteredVariables) -> Union[Float[Array, "num_cells"], Float[Array, "num_cells_x num_cells_y"], Float[Array, "num_cells_x num_cells_y num_cells_z"]]:
+def get_absolute_velocity(primitive_state: STATE_TYPE, config: SimulationConfig, registered_variables: RegisteredVariables) -> Union[Float[Array, "num_cells"], Float[Array, "num_cells_x num_cells_y"], Float[Array, "num_cells_x num_cells_y num_cells_z"]]:
     """Get the absolute velocity of the fluid.
 
     Args:
-        primitive_states: The primitive state of the fluid.
+        primitive_state: The primitive state of the fluid.
         config: The simulation configuration.
         registered_variables: The registered variables.
 
@@ -271,11 +271,11 @@ def get_absolute_velocity(primitive_states: STATE_TYPE, config: SimulationConfig
         The absolute velocity.
     """
     if config.dimensionality == 1:
-        return jnp.abs(primitive_states[registered_variables.velocity_index])
+        return jnp.abs(primitive_state[registered_variables.velocity_index])
     elif config.dimensionality == 2:
-        return jnp.sqrt(primitive_states[registered_variables.velocity_index.x]**2 + primitive_states[registered_variables.velocity_index.y]**2)
+        return jnp.sqrt(primitive_state[registered_variables.velocity_index.x]**2 + primitive_state[registered_variables.velocity_index.y]**2)
     elif config.dimensionality == 3:
-        return jnp.sqrt(primitive_states[registered_variables.velocity_index.x]**2 + primitive_states[registered_variables.velocity_index.y]**2 + primitive_states[registered_variables.velocity_index.z]**2)
+        return jnp.sqrt(primitive_state[registered_variables.velocity_index.x]**2 + primitive_state[registered_variables.velocity_index.y]**2 + primitive_state[registered_variables.velocity_index.z]**2)
     else:
         raise ValueError("Invalid dimension.")
 
@@ -362,28 +362,28 @@ def speed_of_sound(rho, p, gamma):
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['num_ghost_cells'])
-def calculate_total_mass(primitive_states: Float[Array, "num_vars num_cells"], helper_data: HelperData, num_ghost_cells: int) -> Float[Array, ""]:
+def calculate_total_mass(primitive_state: Float[Array, "num_vars num_cells"], helper_data: HelperData, num_ghost_cells: int) -> Float[Array, ""]:
     """
     Calculate the total mass in the domain.
 
     Args:
-        primitive_states: The primitive state array.
+        primitive_state: The primitive state array.
         helper_data: The helper data.
         num_ghost_cells: The number of ghost cells.
 
     Returns:
         The total mass.
     """
-    return jnp.sum(primitive_states[0, num_ghost_cells:-num_ghost_cells] * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])
+    return jnp.sum(primitive_state[0, num_ghost_cells:-num_ghost_cells] * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['num_ghost_cells'])
-def calculate_total_energy(primitive_states: Float[Array, "num_vars num_cells"], helper_data: HelperData, gamma: Union[float, Float[Array, ""]], num_ghost_cells: int) -> Float[Array, ""]:
+def calculate_total_energy(primitive_state: Float[Array, "num_vars num_cells"], helper_data: HelperData, gamma: Union[float, Float[Array, ""]], num_ghost_cells: int) -> Float[Array, ""]:
     """
     Calculate the total energy in the domain.
 
     Args:
-        primitive_states: The primitive state array.
+        primitive_state: The primitive state array.
         helper_data: The helper data.
         gamma: The adiabatic index.
         num_ghost_cells: The number of ghost cells.
@@ -391,5 +391,5 @@ def calculate_total_energy(primitive_states: Float[Array, "num_vars num_cells"],
     Returns:
         The total energy.
     """
-    energy = total_energy_from_primitives(primitive_states[0, num_ghost_cells:-num_ghost_cells], primitive_states[1, num_ghost_cells:-num_ghost_cells], primitive_states[2, num_ghost_cells:-num_ghost_cells], gamma)
+    energy = total_energy_from_primitives(primitive_state[0, num_ghost_cells:-num_ghost_cells], primitive_state[1, num_ghost_cells:-num_ghost_cells], primitive_state[2, num_ghost_cells:-num_ghost_cells], gamma)
     return jnp.sum(energy * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])

@@ -19,7 +19,7 @@ from jf1uids._state_evolution.limiters import _minmod
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'axis'])
 def _calculate_limited_gradients(
-    primitive_states: STATE_TYPE,
+    primitive_state: STATE_TYPE,
     config: SimulationConfig,
     helper_data: HelperData,
     axis: int
@@ -28,7 +28,7 @@ def _calculate_limited_gradients(
     Calculate the limited gradients of the primitive variables.
 
     Args:
-        primitive_states: The primitive state array.
+        primitive_state: The primitive state array.
         dx_or_rv: Usually the cell width, for spherical geometry the volumetric centers of the cells.
         axis: The array axis along which the gradients are calculated, = 1 for x (0th axis are the variables).
         geometry: The geometry of the domain.
@@ -42,7 +42,7 @@ def _calculate_limited_gradients(
     # or maybe better: equal shapes everywhere
 
     # get array sizee along the axis
-    num_cells = primitive_states.shape[axis]
+    num_cells = primitive_state.shape[axis]
 
     # We first need to calculate the distances between the cells.
     # For 1D simulations in spherical geometry, we have to mind
@@ -63,8 +63,8 @@ def _calculate_limited_gradients(
     # Next we calculate the finite differences of consecutive cells.
     # a is the left difference, b the right difference for cells
     # 1 to num_cells - 1.
-    a = (jax.lax.slice_in_dim(primitive_states, 1, num_cells - 1, axis = axis) - jax.lax.slice_in_dim(primitive_states, 0, num_cells - 2, axis = axis)) / cell_distances_left
-    b = (jax.lax.slice_in_dim(primitive_states, 2, num_cells, axis = axis) - jax.lax.slice_in_dim(primitive_states, 1, num_cells - 1, axis = axis)) / cell_distances_right
+    a = (jax.lax.slice_in_dim(primitive_state, 1, num_cells - 1, axis = axis) - jax.lax.slice_in_dim(primitive_state, 0, num_cells - 2, axis = axis)) / cell_distances_left
+    b = (jax.lax.slice_in_dim(primitive_state, 2, num_cells, axis = axis) - jax.lax.slice_in_dim(primitive_state, 1, num_cells - 1, axis = axis)) / cell_distances_right
     
     # We apply limiting to not create new extrema in regions where consecutive finite
     # differences differ strongly.

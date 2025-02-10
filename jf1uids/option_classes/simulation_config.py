@@ -108,6 +108,16 @@ class SimulationConfig(NamedTuple):
     #: based on the specified number of timesteps.
     fixed_timestep: bool = False
 
+    #: Exactly reach the end time. In adaptive timestepping,
+    #: one might otherwise overshoot.
+    exact_end_time: bool = False
+
+    #: Adds the sources with the current timestep to
+    #: a hypothetical state to estimate the actual timestep.
+    #: Useful for time-dependent sources, but additional
+    #: computational overhead.
+    source_term_aware_timestep: bool = False
+
     #: The number of timesteps for the fixed timestep mode.
     num_timesteps: int = 1000
 

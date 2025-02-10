@@ -144,24 +144,24 @@ def _compute_gravitational_potential(
 @partial(jax.jit, static_argnames=['axis', 'grid_spacing', 'registered_variables'])
 def _conservative_gravitational_source_term_along_axis(
         gravitational_potential: FIELD_TYPE,
-        primitive_states: STATE_TYPE,
+        primitive_state: STATE_TYPE,
         grid_spacing: float,
         registered_variables: RegisteredVariables,
         axis: int,
     ) -> STATE_TYPE:
 
-    num_cells = primitive_states.shape[axis]
+    num_cells = primitive_state.shape[axis]
 
-    rho = primitive_states[registered_variables.density_index]
-    v_axis = primitive_states[axis]
+    rho = primitive_state[registered_variables.density_index]
+    v_axis = primitive_state[axis]
     
     acceleration = jnp.zeros_like(gravitational_potential)
-    selection = (slice(None),) * (axis - 1) + (slice(1,-1),) + (slice(None),)*(primitive_states.ndim - axis - 2)
+    selection = (slice(None),) * (axis - 1) + (slice(1,-1),) + (slice(None),)*(primitive_state.ndim - axis - 2)
     acceleration = -acceleration.at[selection].set((jax.lax.slice_in_dim(gravitational_potential, 2, num_cells, axis = axis - 1) - jax.lax.slice_in_dim(gravitational_potential, 0, num_cells - 2, axis = axis - 1)) / (2 * grid_spacing))
 
-    source_term = jnp.zeros_like(primitive_states)
+    source_term = jnp.zeros_like(primitive_state)
 
-    source_term = source_term.at[axis].set(primitive_states[registered_variables.density_index])
+    source_term = source_term.at[axis].set(primitive_state[registered_variables.density_index])
 
     source_term = source_term.at[registered_variables.pressure_index].set(rho * v_axis)
 
@@ -173,28 +173,28 @@ def _conservative_gravitational_source_term_along_axis(
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
 def _apply_self_gravity(
-    primitive_states: STATE_TYPE,
+    primitive_state: STATE_TYPE,
     config: SimulationConfig,
     registered_variables: RegisteredVariables,
     gamma: Union[float, Float[Array, ""]],
     dt: Union[float, Float[Array, ""]]
     ) -> STATE_TYPE:
 
-    rho = primitive_states[registered_variables.density_index]
+    rho = primitive_state[registered_variables.density_index]
 
     potential = _compute_gravitational_potential(rho, config.dx, config)
 
-    source_term = jnp.zeros_like(primitive_states)
+    source_term = jnp.zeros_like(primitive_state)
 
     for i in range(config.dimensionality):
-        source_term = source_term + _conservative_gravitational_source_term_along_axis(potential, primitive_states, config.dx, registered_variables, i + 1)
+        source_term = source_term + _conservative_gravitational_source_term_along_axis(potential, primitive_state, config.dx, registered_variables, i + 1)
 
-    conserved_states = conserved_state_from_primitive(primitive_states, gamma, config, registered_variables)
+    conserved_state = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
 
-    conserved_states = conserved_states + dt * source_term
+    conserved_state = conserved_state + dt * source_term
 
-    primitive_states = primitive_state_from_conserved(conserved_states, gamma, config, registered_variables)
+    primitive_state = primitive_state_from_conserved(conserved_state, gamma, config, registered_variables)
 
-    primitive_states = _boundary_handler(primitive_states, config)
+    primitive_state = _boundary_handler(primitive_state, config)
 
-    return primitive_states
+    return primitive_state

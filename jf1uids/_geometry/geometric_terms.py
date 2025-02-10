@@ -18,11 +18,11 @@ from jf1uids._state_evolution.limited_gradients import _calculate_limited_gradie
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _pressure_nozzling_source(primitive_states: STATE_TYPE, config: SimulationConfig, helper_data: HelperData, registered_variables: RegisteredVariables) -> STATE_TYPE_ALTERED:
+def _pressure_nozzling_source(primitive_state: STATE_TYPE, config: SimulationConfig, helper_data: HelperData, registered_variables: RegisteredVariables) -> STATE_TYPE_ALTERED:
     """Pressure nozzling source term as of the geometry of the domain.
 
     Args:
-        primitive_states: The primitive state array.
+        primitive_state: The primitive state array.
         config: The simulation configuration.
         helper_data: The helper data.
         registered_variables: The registered variables.
@@ -32,10 +32,10 @@ def _pressure_nozzling_source(primitive_states: STATE_TYPE, config: SimulationCo
     """
     
     # get the pressure
-    p = primitive_states[registered_variables.pressure_index]
+    p = primitive_state[registered_variables.pressure_index]
 
     # calculate the limited pressure gradients
-    dp_dr = _calculate_limited_gradients(primitive_states, config, helper_data, axis = 1)[registered_variables.pressure_index]
+    dp_dr = _calculate_limited_gradients(primitive_state, config, helper_data, axis = 1)[registered_variables.pressure_index]
 
     # calculate the pressure nozzling term, following
     # eq. 14 in Crittendend and Balachandar, 2018

@@ -67,12 +67,12 @@ def _hll_solver(primitives_left: STATE_TYPE, primitives_right: STATE_TYPE, gamma
     # wave_speeds_left_minus = jnp.minimum(u_R + c_R, 0)
 
     # get the left and right conserved variables
-    conservatives_left = conserved_state_from_primitive(primitives_left, gamma, config, registered_variables)
-    conservatives_right = conserved_state_from_primitive(primitives_right, gamma, config, registered_variables)
+    conserved_left = conserved_state_from_primitive(primitives_left, gamma, config, registered_variables)
+    conserved_right = conserved_state_from_primitive(primitives_right, gamma, config, registered_variables)
 
     # calculate the interface HLL fluxes
     # F = (S_R * F_L - S_L * F_R + S_L * S_R * (U_R - U_L)) / (S_R - S_L)
-    fluxes = (wave_speeds_right_plus * fluxes_left - wave_speeds_left_minus * fluxes_right + wave_speeds_left_minus * wave_speeds_right_plus * (conservatives_right - conservatives_left)) / (wave_speeds_right_plus - wave_speeds_left_minus)
+    fluxes = (wave_speeds_right_plus * fluxes_left - wave_speeds_left_minus * fluxes_right + wave_speeds_left_minus * wave_speeds_right_plus * (conserved_right - conserved_left)) / (wave_speeds_right_plus - wave_speeds_left_minus)
 
     return fluxes
 
