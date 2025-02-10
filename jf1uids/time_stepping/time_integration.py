@@ -11,7 +11,7 @@ from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import BACKWARDS, CARTESIAN, HLL, OPEN_BOUNDARY, REFLECTIVE_BOUNDARY, SPHERICAL, STATE_TYPE, BoundarySettings, BoundarySettings1D, SimulationConfig
 from jf1uids.option_classes.simulation_params import SimulationParams
-from jf1uids.time_stepping._CFL import _cfl_time_step, _source_term_aware_time_step
+from jf1uids.time_stepping._timestep_estimator import _cfl_time_step, _source_term_aware_time_step
 from jf1uids.fluid_equations.fluid import calculate_total_energy, calculate_total_mass
 from jf1uids._state_evolution.evolve_state import _evolve_state
 from jf1uids._physics_modules.run_physics_modules import _run_physics_modules
@@ -77,25 +77,6 @@ def time_integration_entry(primitive_state: STATE_TYPE, config: SimulationConfig
 
     """
 
-    # set dx appropriately
-    config = config._replace(dx = config.box_size / (config.num_cells - 1))
-
-    if config.geometry == SPHERICAL:
-        config = config._replace(riemann_solver = HLL)
-
-    # set boundary conditions if not set
-    if config.boundary_settings is None:
-
-        jax.debug.print("Setting boundary conditions")
-
-        if config.geometry == CARTESIAN:
-            if config.dimensionality == 1:
-                config = config._replace(boundary_settings = BoundarySettings1D(left_boundary = OPEN_BOUNDARY, right_boundary = OPEN_BOUNDARY))
-            else:
-                config = config._replace(boundary_settings = BoundarySettings())
-        elif config.geometry == SPHERICAL and config.dimensionality == 1:
-            config = config._replace(boundary_settings = BoundarySettings1D(left_boundary = REFLECTIVE_BOUNDARY, right_boundary = OPEN_BOUNDARY))
-    
     if config.fixed_timestep:
         if config.dimensionality == 3:
             return _time_integration_fixed_steps3D(primitive_state, config, params, helper_data, registered_variables)
@@ -242,7 +223,8 @@ def _time_integration_adaptive_steps(primitive_state: STATE_TYPE, config: Simula
         time += dt
 
         if config.progress_bar:
-            jax.debug.print("time {time} of {total_time}", time = time, total_time = params.t_end)
+            # jax.debug.print("time {time} of {total_time}", time = time, total_time = params.t_end)
+            jax.debug.callback(printProgressBar, time, params.t_end)
 
         if config.return_snapshots:
             carry = (time, state, snapshot_data)
@@ -275,6 +257,28 @@ def _time_integration_adaptive_steps(primitive_state: STATE_TYPE, config: Simula
     else:
         _, state = carry
         return state
+    
+# Print iterations progress
+def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
+    """
+    Call in a loop to create terminal progress bar
+    @params:
+        iteration   - Required  : current iteration (Int)
+        total       - Required  : total iterations (Int)
+        prefix      - Optional  : prefix string (Str)
+        suffix      - Optional  : suffix string (Str)
+        decimals    - Optional  : positive number of decimals in percent complete (Int)
+        length      - Optional  : character length of bar (Int)
+        fill        - Optional  : bar fill character (Str)
+        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
+    """
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filledLength = int(length * iteration // total)
+    bar = fill * filledLength + '-' * (length - filledLength)
+    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+    # Print New Line on Complete
+    if iteration == total: 
+        print()
     
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])

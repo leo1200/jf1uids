@@ -109,10 +109,20 @@ def magnetic_update(magnetic_field, gas_state, dx, dt, registered_variables, con
         electric_field = cross(magnetic_field, velocity)
 
         # calculate the curl of the electric field
-        curl_electric_field = curl2D(electric_field, dx)
+        if config.dimensionality == 2:
+            curl_electric_field = curl2D(electric_field, dx)
+        elif config.dimensionality == 3:
+            curl_electric_field = curl3D(electric_field, dx)
+        else:
+            raise ValueError("No 1D curl.")
 
         # calculate the curl of the magnetic field
-        curl_magnetic_field = curl2D(magnetic_field, dx)
+        if config.dimensionality == 2:
+            curl_magnetic_field = curl2D(magnetic_field, dx)
+        elif config.dimensionality == 3:
+            curl_magnetic_field = curl3D(magnetic_field, dx)
+        else:
+            raise ValueError("No 1D curl.")
 
         phi1 = curl_electric_field
         phi2 = cross(magnetic_field, curl_magnetic_field) / density
@@ -189,30 +199,4 @@ def magnetic_update(magnetic_field, gas_state, dx, dt, registered_variables, con
     gas_state = gas_state.at[registered_variables.velocity_index.x:registered_variables.velocity_index.x + 2, ...].set(v_n[:2, ...])
     gas_state = gas_state.at[registered_variables.pressure_index, ...].set(pressure_updated)
 
-    # gas_state = _boundary_handler(gas_state, config)
-
     return B_n, gas_state
-
-
-    # ==================== loop ======================
-
-    # epsilon = 1e-10
-    # max_iter = 1000
-    # current_iter = 0
-
-    # while jnp.maximum(jnp.max(jnp.linalg.norm(new_velocity - current_velocity, axis = 0)), jnp.max(jnp.linalg.norm(new_magnetic_field - current_magnetic_field, axis = 0))) > epsilon and current_iter < max_iter:
-
-    #     current_velocity = new_velocity
-    #     current_magnetic_field = new_magnetic_field
-
-    #     phi1, phi2 = phi(new_velocity, new_magnetic_field)
-
-    #     # update the magnetic field
-    #     new_magnetic_field = magnetic_field - dt * phi1
-    #     new_magnetic_field = (new_magnetic_field + magnetic_field) / 2
-
-    #     # update the gas velocity
-    #     new_velocity = velocity - dt * phi2
-    #     new_velocity = (new_velocity + velocity) / 2
-
-    #     current_iter += 1

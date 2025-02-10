@@ -13,6 +13,7 @@ from typing import Union
 
 # general jf1uids imports
 from jf1uids._physics_modules._mhd.mhd_maths import magnetic_update
+from jf1uids._physics_modules._self_gravity._self_gravity import _apply_self_gravity
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import CARTESIAN, HLL, HLLC, SPHERICAL, STATE_TYPE, SimulationConfig
@@ -131,11 +132,27 @@ def _evolve_gas_state(
     """
     if config.dimensionality == 1:
         primitive_states = _evolve_state_along_axis(primitive_states, dx, dt, gamma, config, helper_data, registered_variables, 1)
+
+        if config.self_gravity:
+            primitive_states = _apply_self_gravity(primitive_states, config, registered_variables, gamma, dt)
+
     elif config.dimensionality == 2:
+
+        if config.self_gravity:
+            primitive_states = _apply_self_gravity(primitive_states, config, registered_variables, gamma, dt)
+
         primitive_states = _evolve_state_along_axis(primitive_states, dx, dt/2, gamma, config, helper_data, registered_variables, 1)
         primitive_states = _evolve_state_along_axis(primitive_states, dx, dt, gamma, config, helper_data, registered_variables, 2)
+
+
+
         primitive_states = _evolve_state_along_axis(primitive_states, dx, dt/2, gamma, config, helper_data, registered_variables, 1)
     elif config.dimensionality == 3:
+
+        if config.self_gravity:
+            primitive_states = _apply_self_gravity(primitive_states, config, registered_variables, gamma, dt)
+
+
         # advance in x by dt/2 -> y by dt/2 -> z by dt -> y by dt/2 -> x by dt/2
         primitive_states = _evolve_state_along_axis(primitive_states, dx, dt / 2, gamma, config, helper_data, registered_variables, 1)
         primitive_states = _evolve_state_along_axis(primitive_states, dx, dt / 2, gamma, config, helper_data, registered_variables, 2)
@@ -160,7 +177,7 @@ def _evolve_state(
     
     if config.mhd:
 
-        if config.dimensionality == 2:
+        if config.dimensionality > 1:
 
             # THIS IS VERY PRELIMINARY; THIS KIND OF SPLITTING SHOULD NOT HAPPEN
             # IN EVERY EVOLVE_STATE CALL
@@ -181,7 +198,7 @@ def _evolve_state(
             return jnp.concatenate((evolved_gas, magnetic_field), axis = 0)
         else:
             # error
-            raise ValueError("MHD currently not supported in 1D or 3D.")
+            raise ValueError("MHD currently not supported in 1D.")
 
     else:
         return _evolve_gas_state(primitive_states, dx, dt, gamma, config, helper_data, registered_variables)

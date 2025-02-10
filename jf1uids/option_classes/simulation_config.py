@@ -28,6 +28,8 @@ SPHERICAL = 2
 STATE_TYPE = Union[Float[Array, "num_vars num_cells_x"], Float[Array, "num_vars num_cells_x num_cells_y"], Float[Array, "num_vars num_cells_x num_cells_y num_cells_z"]]
 STATE_TYPE_ALTERED = Union[Float[Array, "num_vars num_cells_a"], Float[Array, "num_vars num_cells_a num_cells_b"], Float[Array, "num_vars num_cells_a num_cells_b num_cells_c"]]
 
+FIELD_TYPE = Union[Float[Array, "num_cells_x"], Float[Array, "num_cells_x num_cells_y"], Float[Array, "num_cells_x num_cells_y num_cells_z"]]
+
 class BoundarySettings1D(NamedTuple):
     left_boundary: int = OPEN_BOUNDARY
     right_boundary: int = OPEN_BOUNDARY
@@ -60,6 +62,10 @@ class SimulationConfig(NamedTuple):
 
     #: Magnetohydrodynamics switch.
     mhd: bool = False
+
+    #: Self gravity switch, currently only
+    #: for periodic boundaries.
+    self_gravity: bool = False
 
     #: The size of the simulation box.
     box_size: float = 1.0
@@ -131,3 +137,42 @@ class SimulationConfig(NamedTuple):
 
     #: Cosmic rays
     simplified_cosmic_rays: bool = False
+
+
+def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
+    """Finalizes the simulation configuration."""
+    
+    num_cells = state_shape[-1]
+    config = config._replace(num_cells = num_cells)
+
+    if config.dimensionality == 2:
+        num_cells_x, num_cells_y = state_shape[-2:]
+        if num_cells_x != num_cells_y:
+            raise ValueError("The number of cells in x and y must be equal.")
+    elif config.dimensionality == 3:
+        num_cells_x, num_cells_y, num_cells_z = state_shape[-3:]
+        if num_cells_x != num_cells_y or num_cells_x != num_cells_z:
+            raise ValueError("The number of cells in x, y and z must be equal.")
+
+    config = config._replace(dx = config.box_size / (config.num_cells - 1))
+
+    if config.geometry == SPHERICAL:
+
+        print("For spherical geometry, only HLL is currently supported.")
+
+        config = config._replace(riemann_solver = HLL)
+
+    # set boundary conditions if not set
+    if config.boundary_settings is None:
+
+        if config.geometry == CARTESIAN:
+            print("Automatically setting open boundaries for Cartesian geometry.")
+            if config.dimensionality == 1:
+                config = config._replace(boundary_settings = BoundarySettings1D(left_boundary = OPEN_BOUNDARY, right_boundary = OPEN_BOUNDARY))
+            else:
+                config = config._replace(boundary_settings = BoundarySettings())
+        elif config.geometry == SPHERICAL and config.dimensionality == 1:
+            print("Automatically setting reflective left and open right boundary for spherical geometry.")
+            config = config._replace(boundary_settings = BoundarySettings1D(left_boundary = REFLECTIVE_BOUNDARY, right_boundary = OPEN_BOUNDARY))
+    
+    return config
