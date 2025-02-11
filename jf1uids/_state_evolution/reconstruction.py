@@ -37,7 +37,7 @@ def _reconstruct_at_interface(
     Args:
         primitive_state: The primitive state array.
         dt: The time step.
-        dx: The cell width.
+        grid_spacing: The cell width.
         gamma: The adiabatic index.
 
     Returns:
@@ -88,14 +88,14 @@ def _reconstruct_at_interface(
 
     # compute primitives at the interfaces
     if config.geometry == CARTESIAN:
-        distances_to_left_interfaces = config.dx / 2 # distances r_i - r_{i-1/2}
-        distances_to_right_interfaces = config.dx / 2 # distances r_{i+1/2} - r_i
+        distances_to_left_interfaces = config.grid_spacing / 2 # distances r_i - r_{i-1/2}
+        distances_to_right_interfaces = config.grid_spacing / 2 # distances r_{i+1/2} - r_i
     else:
         r = helper_data.geometric_centers
         rv = helper_data.volumetric_centers
 
-        distances_to_left_interfaces = rv[1:-1] - (r[1:-1] - config.dx / 2)
-        distances_to_right_interfaces = (r[1:-1] + config.dx / 2) - rv[1:-1]
+        distances_to_left_interfaces = rv[1:-1] - (r[1:-1] - config.grid_spacing / 2)
+        distances_to_right_interfaces = (r[1:-1] + config.grid_spacing / 2) - rv[1:-1]
 
     primitives_left = predictors - distances_to_left_interfaces * limited_gradients
     primitives_right = predictors + distances_to_right_interfaces * limited_gradients

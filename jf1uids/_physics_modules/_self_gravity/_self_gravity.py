@@ -184,12 +184,12 @@ def _apply_self_gravity(
 
     rho = primitive_state[registered_variables.density_index]
 
-    potential = _compute_gravitational_potential(rho, config.dx, config, gravitational_constant)
+    potential = _compute_gravitational_potential(rho, config.grid_spacing, config, gravitational_constant)
 
     source_term = jnp.zeros_like(primitive_state)
 
     for i in range(config.dimensionality):
-        source_term = source_term + _conservative_gravitational_source_term_along_axis(potential, primitive_state, config.dx, registered_variables, i + 1)
+        source_term = source_term + _conservative_gravitational_source_term_along_axis(potential, primitive_state, config.grid_spacing, registered_variables, i + 1)
 
     conserved_state = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
 

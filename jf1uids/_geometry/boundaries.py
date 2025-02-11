@@ -35,8 +35,8 @@ def _set_specific_var_along_axis(
     factor: float
 ) -> STATE_TYPE:
 
-    s_set = (var_index,) * axis + (set_index,) + (slice(None),)*(primitive_state.ndim - axis - 1)
-    s_get = (var_index,) * axis + (get_index,) + (slice(None),)*(primitive_state.ndim - axis - 1)
+    s_set = (var_index,) + (slice(None),) * (axis - 1) + (set_index,) + (slice(None),)*(primitive_state.ndim - axis - 1)
+    s_get = (var_index,) + (slice(None),) * (axis - 1) + (get_index,) + (slice(None),)*(primitive_state.ndim - axis - 1)
 
     primitive_state = primitive_state.at[s_set].set(factor * primitive_state[s_get])
 
@@ -251,12 +251,12 @@ def _reflective_left_boundary(
     axis: int
 ) -> STATE_TYPE:
 
-    # apply open boundary conditions as a baseline
-    primitive_state = _open_left_boundary(primitive_state, num_ghost_cells, axis)
-
     # reflect the velocity component along the axis
-    get_index = num_ghost_cells
-    for set_index in range(num_ghost_cells):
+    for i in range(num_ghost_cells):
+        get_index = i + num_ghost_cells
+        set_index = num_ghost_cells - i - 1
+
+        primitive_state = _set_along_axis(primitive_state, axis, set_index, get_index)
         primitive_state = _set_specific_var_along_axis(primitive_state, axis, set_index, get_index, axis, -1.0)
 
     return primitive_state
@@ -269,14 +269,14 @@ def _reflective_right_boundary(
     axis: int
 ) -> STATE_TYPE:
 
-    # apply open boundary conditions as a baseline
-    primitive_state = _open_right_boundary(primitive_state, num_ghost_cells, axis)
-
     # reflect the velocity component along the axis
-    get_index = -num_ghost_cells - 1
-    for set_index in range(-num_ghost_cells, 0):
+    for i in range(num_ghost_cells):
+        get_index = -i - num_ghost_cells - 1
+        set_index = -num_ghost_cells + i
+
+        primitive_state = _set_along_axis(primitive_state, axis, set_index, get_index)
         primitive_state = _set_specific_var_along_axis(primitive_state, axis, set_index, get_index, axis, -1.0)
-        
+      
     return primitive_state
 
 @jaxtyped(typechecker=typechecker)

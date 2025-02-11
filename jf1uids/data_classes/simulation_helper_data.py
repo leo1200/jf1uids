@@ -58,20 +58,20 @@ def get_helper_data(config: SimulationConfig) -> HelperData:
 
         return HelperData(geometric_centers = geometric_centers, volumetric_centers = volumetric_centers, r = r)
 
-    dx = config.box_size / (config.num_cells - 1)
+    grid_spacing = config.box_size / (config.num_cells - 1)
     if config.geometry == CARTESIAN:
         r = jnp.linspace(0, config.box_size, config.num_cells)
-        r_hat = dx * jnp.ones_like(r) # not really
-        cell_volumes = dx * jnp.ones_like(r)
-        inner_cell_boundaries = r - dx / 2
-        outer_cell_boundaries = r + dx / 2
+        r_hat = grid_spacing * jnp.ones_like(r) # not really
+        cell_volumes = grid_spacing * jnp.ones_like(r)
+        inner_cell_boundaries = r - grid_spacing / 2
+        outer_cell_boundaries = r + grid_spacing / 2
         return HelperData(geometric_centers = r, r_hat_alpha = r_hat, cell_volumes = cell_volumes, inner_cell_boundaries = inner_cell_boundaries, outer_cell_boundaries = outer_cell_boundaries, volumetric_centers = r)
     elif config.geometry == SPHERICAL or config.geometry == CYLINDRICAL:
-        # r = jnp.linspace(- 3 * dx/2, config.box_size - 3 * dx / 2, config.num_cells)
-        r = jnp.linspace(dx / 2, config.box_size + dx / 2, config.num_cells)
-        inner_cell_boundaries = r - dx / 2
-        outer_cell_boundaries = r + dx / 2
-        volumetric_centers = _center_of_volume(r, dx, config.geometry)
-        r_hat = _r_hat_alpha(r, dx, config.geometry)
-        cell_volumes = 2 * config.geometry * jnp.pi * dx * r_hat
+        # r = jnp.linspace(- 3 * grid_spacing/2, config.box_size - 3 * grid_spacing / 2, config.num_cells)
+        r = jnp.linspace(grid_spacing / 2, config.box_size + grid_spacing / 2, config.num_cells)
+        inner_cell_boundaries = r - grid_spacing / 2
+        outer_cell_boundaries = r + grid_spacing / 2
+        volumetric_centers = _center_of_volume(r, grid_spacing, config.geometry)
+        r_hat = _r_hat_alpha(r, grid_spacing, config.geometry)
+        cell_volumes = 2 * config.geometry * jnp.pi * grid_spacing * r_hat
         return HelperData(geometric_centers = r, volumetric_centers = volumetric_centers, r_hat_alpha = r_hat, cell_volumes = cell_volumes, inner_cell_boundaries = inner_cell_boundaries, outer_cell_boundaries = outer_cell_boundaries)

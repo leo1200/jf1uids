@@ -8,7 +8,6 @@ from beartype import beartype as typechecker
 from typing import Union
 
 from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import total_energy_from_primitives_with_crs, total_pressure_from_conserved_with_crs
-from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfig
 
@@ -408,48 +407,3 @@ def speed_of_sound(rho, p, gamma):
 
 
 # ===========================================
-
-# ============= Total Quantities =============
-
-@jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['num_ghost_cells'])
-def calculate_total_mass(
-    primitive_state: Float[Array, "num_vars num_cells"],
-    helper_data: HelperData,
-    num_ghost_cells: int
-) -> Float[Array, ""]:
-    """
-    Calculate the total mass in the domain.
-
-    Args:
-        primitive_state: The primitive state array.
-        helper_data: The helper data.
-        num_ghost_cells: The number of ghost cells.
-
-    Returns:
-        The total mass.
-    """
-    return jnp.sum(primitive_state[0, num_ghost_cells:-num_ghost_cells] * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])
-
-@jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['num_ghost_cells'])
-def calculate_total_energy(
-    primitive_state: Float[Array, "num_vars num_cells"],
-    helper_data: HelperData,
-    gamma: Union[float, Float[Array, ""]],
-    num_ghost_cells: int
-) -> Float[Array, ""]:
-    """
-    Calculate the total energy in the domain.
-
-    Args:
-        primitive_state: The primitive state array.
-        helper_data: The helper data.
-        gamma: The adiabatic index.
-        num_ghost_cells: The number of ghost cells.
-
-    Returns:
-        The total energy.
-    """
-    energy = total_energy_from_primitives(primitive_state[0, num_ghost_cells:-num_ghost_cells], primitive_state[1, num_ghost_cells:-num_ghost_cells], primitive_state[2, num_ghost_cells:-num_ghost_cells], gamma)
-    return jnp.sum(energy * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])

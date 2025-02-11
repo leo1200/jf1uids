@@ -29,7 +29,7 @@ from jf1uids._riemann_solver.hll import _hll_solver, _hllc_solver
 @partial(jax.jit, static_argnames=['config', 'registered_variables', 'axis'])
 def _evolve_state_along_axis(
     primitive_state: STATE_TYPE,
-    dx: Union[float, Float[Array, ""]],
+    grid_spacing: Union[float, Float[Array, ""]],
     dt: Float[Array, ""],
     gamma: Union[float, Float[Array, ""]],
     config: SimulationConfig,
@@ -65,7 +65,7 @@ def _evolve_state_along_axis(
 
     # usual cartesian case
     if config.geometry == CARTESIAN:
-        conserved_change = -1 / dx * (jax.lax.slice_in_dim(fluxes, 1, flux_length, axis = axis) - jax.lax.slice_in_dim(fluxes, 0, flux_length - 1, axis = axis)) * dt
+        conserved_change = -1 / grid_spacing * (jax.lax.slice_in_dim(fluxes, 1, flux_length, axis = axis) - jax.lax.slice_in_dim(fluxes, 0, flux_length - 1, axis = axis)) * dt
 
     # in spherical geometry, we have to take special care
     elif config.geometry == SPHERICAL and config.dimensionality == 1 and axis == 1:
@@ -74,15 +74,15 @@ def _evolve_state_along_axis(
 
         alpha = config.geometry
 
-        r_plus_half = r.at[config.num_ghost_cells:-config.num_ghost_cells].add(dx / 2)
-        r_minus_half = r.at[config.num_ghost_cells:-config.num_ghost_cells].add(-dx / 2)
+        r_plus_half = r.at[config.num_ghost_cells:-config.num_ghost_cells].add(grid_spacing / 2)
+        r_minus_half = r.at[config.num_ghost_cells:-config.num_ghost_cells].add(-grid_spacing / 2)
 
         # calculate the source terms
         nozzling_source = _pressure_nozzling_source(primitive_state, config, helper_data, registered_variables)
 
         # update the conserved variables using the fluxes and source terms
         conserved_change = 1 / r_hat_alpha[config.num_ghost_cells:-config.num_ghost_cells] * (
-            - (r_plus_half[config.num_ghost_cells:-config.num_ghost_cells] ** alpha * fluxes[:, 1:] - r_minus_half[config.num_ghost_cells:-config.num_ghost_cells] ** alpha * fluxes[:, :-1]) / dx
+            - (r_plus_half[config.num_ghost_cells:-config.num_ghost_cells] ** alpha * fluxes[:, 1:] - r_minus_half[config.num_ghost_cells:-config.num_ghost_cells] ** alpha * fluxes[:, :-1]) / grid_spacing
             + nozzling_source[:, 1:-1]
         ) * dt
 
@@ -112,7 +112,7 @@ def _evolve_state_along_axis(
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
 def _evolve_gas_state(
     primitive_state: STATE_TYPE,
-    dx: Union[float, Float[Array, ""]],
+    grid_spacing: Union[float, Float[Array, ""]],
     dt: Float[Array, ""],
     gamma: Union[float, Float[Array, ""]],
     gravitational_constant: Union[float, Float[Array, ""]],
@@ -124,7 +124,7 @@ def _evolve_gas_state(
 
     Args:
         primitive_state: The primitive state array.
-        dx: The cell width.
+        grid_spacing: The cell width.
         dt: The time step.
         gamma: The adiabatic index.
         config: The simulation configuration.
@@ -134,7 +134,7 @@ def _evolve_gas_state(
         The evolved primitive state array.
     """
     if config.dimensionality == 1:
-        primitive_state = _evolve_state_along_axis(primitive_state, dx, dt, gamma, config, helper_data, registered_variables, 1)
+        primitive_state = _evolve_state_along_axis(primitive_state, grid_spacing, dt, gamma, config, helper_data, registered_variables, 1)
 
         if config.self_gravity:
             primitive_state = _apply_self_gravity(primitive_state, config, registered_variables, gamma, gravitational_constant, dt)
@@ -144,24 +144,26 @@ def _evolve_gas_state(
         if config.self_gravity:
             primitive_state = _apply_self_gravity(primitive_state, config, registered_variables, gamma, gravitational_constant, dt)
 
-        primitive_state = _evolve_state_along_axis(primitive_state, dx, dt/2, gamma, config, helper_data, registered_variables, 1)
-        primitive_state = _evolve_state_along_axis(primitive_state, dx, dt, gamma, config, helper_data, registered_variables, 2)
+        primitive_state = _evolve_state_along_axis(primitive_state, grid_spacing, dt/2, gamma, config, helper_data, registered_variables, 1)
+        primitive_state = _evolve_state_along_axis(primitive_state, grid_spacing, dt, gamma, config, helper_data, registered_variables, 2)
 
 
 
-        primitive_state = _evolve_state_along_axis(primitive_state, dx, dt/2, gamma, config, helper_data, registered_variables, 1)
+        primitive_state = _evolve_state_along_axis(primitive_state, grid_spacing, dt/2, gamma, config, helper_data, registered_variables, 1)
     elif config.dimensionality == 3:
+
+
+        # advance in x by dt/2 -> y by dt/2 -> z by dt -> y by dt/2 -> x by dt/2
+        primitive_state = _evolve_state_along_axis(primitive_state, grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
+        primitive_state = _evolve_state_along_axis(primitive_state, grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
 
         if config.self_gravity:
             primitive_state = _apply_self_gravity(primitive_state, config, registered_variables, gamma, gravitational_constant, dt)
 
 
-        # advance in x by dt/2 -> y by dt/2 -> z by dt -> y by dt/2 -> x by dt/2
-        primitive_state = _evolve_state_along_axis(primitive_state, dx, dt / 2, gamma, config, helper_data, registered_variables, 1)
-        primitive_state = _evolve_state_along_axis(primitive_state, dx, dt / 2, gamma, config, helper_data, registered_variables, 2)
-        primitive_state = _evolve_state_along_axis(primitive_state, dx, dt, gamma, config, helper_data, registered_variables, 3)
-        primitive_state = _evolve_state_along_axis(primitive_state, dx, dt / 2, gamma, config, helper_data, registered_variables, 2)
-        primitive_state = _evolve_state_along_axis(primitive_state, dx, dt / 2, gamma, config, helper_data, registered_variables, 1)
+        primitive_state = _evolve_state_along_axis(primitive_state, grid_spacing, dt, gamma, config, helper_data, registered_variables, 3)
+        primitive_state = _evolve_state_along_axis(primitive_state, grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
+        primitive_state = _evolve_state_along_axis(primitive_state, grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
     else:
         raise ValueError("Dimensionality not supported.")
 
@@ -172,7 +174,7 @@ def _evolve_gas_state(
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
 def _evolve_state(
     primitive_state: STATE_TYPE,
-    dx: Union[float, Float[Array, ""]],
+    grid_spacing: Union[float, Float[Array, ""]],
     dt: Float[Array, ""],
     gamma: Union[float, Float[Array, ""]],
     gravitational_constant: Union[float, Float[Array, ""]],
@@ -194,12 +196,12 @@ def _evolve_state(
             magnetic_field = primitive_state[-3:, ...]
 
             # evolve gas state by half a time step
-            evolved_gas = _evolve_gas_state(gas_state, dx, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
+            evolved_gas = _evolve_gas_state(gas_state, grid_spacing, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
 
-            magnetic_field, evolved_gas = magnetic_update(magnetic_field, evolved_gas, dx, dt, registered_variables, config)
+            magnetic_field, evolved_gas = magnetic_update(magnetic_field, evolved_gas, grid_spacing, dt, registered_variables, config)
 
             # evolve gas state by half a time step
-            evolved_gas = _evolve_gas_state(evolved_gas, dx, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
+            evolved_gas = _evolve_gas_state(evolved_gas, grid_spacing, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
 
             return jnp.concatenate((evolved_gas, magnetic_field), axis = 0)
         else:
@@ -207,4 +209,4 @@ def _evolve_state(
             raise ValueError("MHD currently not supported in 1D.")
 
     else:
-        return _evolve_gas_state(primitive_state, dx, dt, gamma, gravitational_constant, config, helper_data, registered_variables)
+        return _evolve_gas_state(primitive_state, grid_spacing, dt, gamma, gravitational_constant, config, helper_data, registered_variables)

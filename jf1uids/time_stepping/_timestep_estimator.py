@@ -74,7 +74,7 @@ def get_wave_speeds(
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
 def _cfl_time_step(
     primitive_state: STATE_TYPE,
-    dx: Union[float, Float[Array, ""]],
+    grid_spacing: Union[float, Float[Array, ""]],
     dt_max: Union[float, Float[Array, ""]],
     gamma: Union[float, Float[Array, ""]],
     config: SimulationConfig,
@@ -86,7 +86,7 @@ def _cfl_time_step(
 
     Args:
         primitive_state: The primitive state array.
-        dx: The cell width.
+        grid_spacing: The cell width.
         dt_max: The maximum time step.
         gamma: The adiabatic index.
         C_CFL: The CFL number.
@@ -134,7 +134,7 @@ def _cfl_time_step(
         max_wave_speed = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, registered_variables.velocity_index)
 
     # calculate the time step
-    dt = C_CFL * dx / max_wave_speed
+    dt = C_CFL * grid_spacing / max_wave_speed
 
     return jnp.minimum(dt, dt_max)
 
@@ -164,11 +164,11 @@ def _source_term_aware_time_step(
     # == experimental: correct the CFL time step based on the physical sources ==
     
     # calculate the time step based on the CFL condition
-    dt = _cfl_time_step(primitive_state, config.dx, params.dt_max, params.gamma, config, registered_variables, params.C_cfl)
+    dt = _cfl_time_step(primitive_state, config.grid_spacing, params.dt_max, params.gamma, config, registered_variables, params.C_cfl)
 
     hypothetical_new_state = _run_physics_modules(primitive_state, dt, config, params, helper_data, registered_variables)
 
-    dt = _cfl_time_step(hypothetical_new_state, config.dx, params.dt_max, params.gamma, config, registered_variables, params.C_cfl)
+    dt = _cfl_time_step(hypothetical_new_state, config.grid_spacing, params.dt_max, params.gamma, config, registered_variables, params.C_cfl)
     
     # ===========================================================================
 

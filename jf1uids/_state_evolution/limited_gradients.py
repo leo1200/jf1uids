@@ -29,7 +29,7 @@ def _calculate_limited_gradients(
 
     Args:
         primitive_state: The primitive state array.
-        dx_or_rv: Usually the cell width, for spherical geometry the volumetric centers of the cells.
+        grid_spacing_or_rv: Usually the cell width, for spherical geometry the volumetric centers of the cells.
         axis: The array axis along which the gradients are calculated, = 1 for x (0th axis are the variables).
         geometry: The geometry of the domain.
 
@@ -50,8 +50,8 @@ def _calculate_limited_gradients(
     # interfaces are not equal.
 
     if config.geometry == CARTESIAN:
-        cell_distances_left = config.dx # distances r_i - r_{i-1}
-        cell_distances_right = config.dx # distances r_{i+1} - r_i
+        cell_distances_left = config.grid_spacing # distances r_i - r_{i-1}
+        cell_distances_right = config.grid_spacing # distances r_{i+1} - r_i
     elif config.geometry == SPHERICAL and config.dimensionality == 1:
         # calculate the distances
         cell_distances_left = helper_data.volumetric_centers[1:-1] - helper_data.volumetric_centers[:-2]

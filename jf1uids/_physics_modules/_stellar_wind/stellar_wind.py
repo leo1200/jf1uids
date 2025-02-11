@@ -189,7 +189,7 @@ def _wind_ei3D(wind_params: WindParams, primitive_state: STATE_TYPE, dt: Float[A
 
     source_term = jnp.zeros_like(primitive_state)
     
-    r_inj = num_injection_cells * config.dx
+    r_inj = num_injection_cells * config.grid_spacing
     V = 4/3 * jnp.pi * r_inj**3
 
     # for now only allow injection at the box center

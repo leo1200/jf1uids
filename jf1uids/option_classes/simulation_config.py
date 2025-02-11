@@ -40,10 +40,23 @@ ZAXIS = 3
 
 # ===================== type definitions =====================
 
-STATE_TYPE = Union[Float[Array, "num_vars num_cells_x"], Float[Array, "num_vars num_cells_x num_cells_y"], Float[Array, "num_vars num_cells_x num_cells_y num_cells_z"]]
-STATE_TYPE_ALTERED = Union[Float[Array, "num_vars num_cells_a"], Float[Array, "num_vars num_cells_a num_cells_b"], Float[Array, "num_vars num_cells_a num_cells_b num_cells_c"]]
+STATE_TYPE = Union[
+    Float[Array, "num_vars num_cells_x"],
+    Float[Array, "num_vars num_cells_x num_cells_y"],
+    Float[Array, "num_vars num_cells_x num_cells_y num_cells_z"]
+]
 
-FIELD_TYPE = Union[Float[Array, "num_cells_x"], Float[Array, "num_cells_x num_cells_y"], Float[Array, "num_cells_x num_cells_y num_cells_z"]]
+STATE_TYPE_ALTERED = Union[
+    Float[Array, "num_vars num_cells_a"],
+    Float[Array, "num_vars num_cells_a num_cells_b"],
+    Float[Array, "num_vars num_cells_a num_cells_b num_cells_c"]
+]
+
+FIELD_TYPE = Union[
+    Float[Array, "num_cells_x"],
+    Float[Array, "num_cells_x num_cells_y"],
+    Float[Array, "num_cells_x num_cells_y num_cells_z"]
+]
 
 # =============================================================
 
@@ -115,8 +128,8 @@ class SimulationConfig(NamedTuple):
     #: The number of ghost cells.
     num_ghost_cells: int = reconstruction_order + 1
 
-    #: The width of the cells.
-    dx: float = box_size / (num_cells - 1)
+    #: Grid spacing.
+    grid_spacing: float = box_size / (num_cells - 1)
 
     #: Boundary settings for the simulation.
     boundary_settings: Union[NoneType, BoundarySettings1D, BoundarySettings] = None
@@ -186,7 +199,7 @@ def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
         if num_cells_x != num_cells_y or num_cells_x != num_cells_z:
             raise ValueError("The number of cells in x, y and z must be equal.")
 
-    config = config._replace(dx = config.box_size / (config.num_cells - 1))
+    config = config._replace(grid_spacing = config.box_size / (config.num_cells - 1))
 
     if config.geometry == SPHERICAL:
 

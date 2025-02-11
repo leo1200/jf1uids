@@ -5,7 +5,7 @@ class SnapshotData(NamedTuple):
     """Return format for the time integration, when snapshots are requested."""
 
     #: The times at which the snapshots were taken.
-    times: jnp.ndarray = None
+    time_points: jnp.ndarray = None
 
     #: The primitive states at the times the snapshots were taken.
     states: jnp.ndarray = None
