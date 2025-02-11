@@ -219,5 +219,9 @@ def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
         elif config.geometry == SPHERICAL and config.dimensionality == 1:
             print("Automatically setting reflective left and open right boundary for spherical geometry.")
             config = config._replace(boundary_settings = BoundarySettings1D(left_boundary = REFLECTIVE_BOUNDARY, right_boundary = OPEN_BOUNDARY))
+
+    if config.wind_config.stellar_wind:
+        print("For stellar wind simulations, we need source term aware timesteps, turning on.")
+        config = config._replace(source_term_aware_timestep = True)
     
     return config

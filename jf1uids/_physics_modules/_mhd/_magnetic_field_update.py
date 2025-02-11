@@ -5,6 +5,7 @@ import jax
 from equinox.internal._loop.checkpointed import checkpointed_while_loop
 
 from jf1uids._geometry.boundaries import _boundary_handler
+from jf1uids._physics_modules._mhd._vector_maths import cross, curl2D, curl3D, divergence2D
 from jf1uids.fluid_equations.fluid import pressure_from_energy, total_energy_from_primitives
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 
@@ -13,83 +14,15 @@ from jax.experimental import checkify
 
 from jf1uids.option_classes.simulation_config import BACKWARDS, FORWARDS
 
-@jax.jit
-def curl2D(field, grid_spacing: float):
-    """Calculate the curl of a 3d field on a 2d grid.
-    assumes grid_spacing = dy
-    
-    Args:
-        field: The field to calculate the curl of.
-        grid_spacing: The width of the cells.
-    
-    Returns:
-        The curl of the field.
-    """
-    curl = jnp.zeros_like(field)
-
-    curl = curl.at[0, 1:-1, 1:-1].add(0.5 * (field[2, 1:-1, 2:] - field[2, 1:-1, :-2]) / grid_spacing)
-    curl = curl.at[1, 1:-1, 1:-1].add(-0.5 * (field[2, 2:, 1:-1] - field[2, :-2, 1:-1]) / grid_spacing)
-
-    curl = curl.at[2, 1:-1, 1:-1].add(0.5 * (field[1, 2:, 1:-1] - field[1, :-2, 1:-1]) / grid_spacing)
-    curl = curl.at[2, 1:-1, 1:-1].add(-0.5 * (field[0, 1:-1, 2:] - field[0, 1:-1, :-2]) / grid_spacing)
-
-    return curl
-
-@jax.jit
-def curl3D(field, grid_spacing: float):
-    """Calculate the curl of a 3d field on a 3d grid.
-    
-    Args:
-        field: The field to calculate the curl of.
-        grid_spacing: The width of the cells.
-    
-    Returns:
-        The curl of the field.
-    """
-    curl = jnp.zeros_like(field)
-
-    curl = curl.at[0, :, 1:-1, :].add(0.5 * (field[2, :, 2:, :] - field[2, :, :-2, :]) / grid_spacing)
-    curl = curl.at[0, :, :, 1:-1].add(-0.5 * (field[1, :, :, 2:] - field[1, :, :, :-2]) / grid_spacing)
-
-    curl = curl.at[1, :, :, 1:-1].add(0.5 * (field[0, :, :, 2:] - field[0, :, :, :-2]) / grid_spacing)
-    curl = curl.at[1, 1:-1, :, :].add(-0.5 * (field[2, 2:, :, :] - field[2, :-2, :, :]) / grid_spacing)
-
-    curl = curl.at[2, 1:-1, :, :].add(0.5 * (field[1, 2:, :, :] - field[1, :-2, :, :]) / grid_spacing)
-    curl = curl.at[2, :, 1:-1, :].add(-0.5 * (field[0, :, 2:, :] - field[0, :, :-2, :]) / grid_spacing)
-
-    return curl
-
-@jax.jit
-def divergence2D(field, grid_spacing: float):
-    """Calculate the divergence of a 3d field on a 2d grid.
-    
-    Args:
-        field: The field to calculate the divergence of.
-        grid_spacing: The width of the cells.
-    
-    Returns:
-        The divergence of the field.
-    """
-    divergence = jnp.zeros_like(field)
-
-    divergence = divergence.at[0, 1:-1, 1:-1].add((field[0, 2:, 1:-1] - field[0, :-2, 1:-1]) / (2 * grid_spacing))
-    divergence = divergence.at[1, 1:-1, 1:-1].add((field[1, 1:-1, 2:] - field[1, 1:-1, :-2]) / (2 * grid_spacing))
-
-    divergence = jnp.sum(divergence, axis = 0)
-
-    return divergence
-
-@jax.jit
-def cross(a, b):
-    result = jnp.zeros_like(a)
-    result = result.at[0, ...].set(a[1, ...] * b[2, ...] - a[2, ...] * b[1, ...])
-    result = result.at[1, ...].set(a[2, ...] * b[0, ...] - a[0, ...] * b[2, ...])
-    result = result.at[2, ...].set(a[0, ...] * b[1, ...] - a[1, ...] * b[0, ...])
-    return result
-
 @partial(jax.jit, static_argnames=['registered_variables', 'config'])
 def magnetic_update(magnetic_field, gas_state, grid_spacing, dt, registered_variables, config):
     """Update the magnetic field and gas state.
+
+    Based on a simple fixed point iteration, as done in
+    Pang, Dongwen, and Kailiang Wu. "Provably Positivity-Preserving 
+    Constrained Transport (PPCT) Second-Order Scheme for Ideal 
+    Magnetohydrodynamics." arXiv preprint arXiv:2410.05173 (2024).
+    https://arxiv.org/abs/2410.05173, eq. (3.37).
     
     Args:
         magnetic_field: The magnetic field.

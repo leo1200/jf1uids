@@ -13,6 +13,13 @@ from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, primit
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import FIELD_TYPE, OPEN_BOUNDARY, PERIODIC_BOUNDARY, STATE_TYPE, SimulationConfig
 
+
+# Currently a simple source term handling of self gravity.
+# For future inspiration, see e.g.
+# https://arxiv.org/abs/2012.01340
+# and for a multigrid method see
+# https://arxiv.org/abs/2306.05332
+
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['grid_spacing', 'config'])
 def _compute_gravitational_potential(

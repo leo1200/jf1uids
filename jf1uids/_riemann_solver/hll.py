@@ -82,6 +82,11 @@ def _hllc_solver(primitives_left: STATE_TYPE, primitives_right: STATE_TYPE, gamm
     """
     Returns the conservative fluxes.
 
+    There seem to be problems for 1d radial, maybe because the same stuff that has to be
+    taken into consideration in the general scheme (averaging based on density might be
+    problematic, as the surface increases radially, ...) is not taken into account here.
+    Maybe interesting for future research, for now HLL works fine.
+
     Args:
         primitives_left: States left of the interfaces.
         primitives_right: States right of the interfaces.
@@ -136,6 +141,8 @@ def _hllc_solver(primitives_left: STATE_TYPE, primitives_right: STATE_TYPE, gamm
     U_star_R = U_star_R * (S_R - u_R) / (S_R - S_star)
 
     # HLLC-LM adaptation
+    # following
+    # https://doi.org/10.1016/j.jcp.2020.109762
     if config.riemann_solver == HLLC_LM:
         Ma_limit = 0.1
         Ma_local = jnp.maximum(jnp.abs(u_L / c_L), jnp.abs(u_R / c_R))
