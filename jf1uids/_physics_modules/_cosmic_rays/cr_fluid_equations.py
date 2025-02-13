@@ -9,27 +9,6 @@ from typing import Union
 
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 
-# TODO: also write CR init function
-@jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['registered_variables'])
-def get_primitive_state_with_crs(
-        gas_density: Float[Array, "num_cells"],
-        gas_velocity: Float[Array, "num_cells"],
-        gas_pressure: Float[Array, "num_cells"],
-        cosmic_ray_pressure: Float[Array, "num_cells"],
-        registered_variables: RegisteredVariables
-    ) -> Float[Array, "num_vars num_cells"]:
-
-    # TODO: get from configs
-    gamma_cr = 4/3
-
-    state = jnp.zeros((registered_variables.num_vars, gas_density.shape[0]))
-    state = state.at[registered_variables.density_index].set(gas_density)
-    state = state.at[registered_variables.velocity_index].set(gas_velocity)
-    state = state.at[registered_variables.pressure_index].set(gas_pressure + cosmic_ray_pressure)
-    state = state.at[registered_variables.cosmic_ray_n_index].set(cosmic_ray_pressure ** (1/gamma_cr))
-
-    return state
 
 # TODO: make 2D and 3D ready
 @jaxtyped(typechecker=typechecker)
@@ -39,7 +18,7 @@ def total_energy_from_primitives_with_crs(
         registered_variables: RegisteredVariables
     ) -> Float[Array, "num_cells"]:
 
-    # TODO: get from configs
+    # TODO: get from params
     gamma_cr = 4/3
     gamma_gas = 5/3
 

@@ -20,6 +20,53 @@ from jf1uids.fluid_equations.fluid import get_absolute_velocity, total_energy_fr
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def calculate_internal_energy(state, helper_data, gamma, config, registered_variables):
+    num_ghost_cells = config.num_ghost_cells
+    p = state[registered_variables.pressure_index]
+
+    internal_energy = p / (gamma - 1)
+
+    if config.dimensionality == 1:
+        return jnp.sum(internal_energy * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])
+    else:
+        return jnp.sum(internal_energy * config.grid_spacing**config.dimensionality)
+
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def calculate_kinetic_energy(state, helper_data, config, registered_variables):
+    num_ghost_cells = config.num_ghost_cells
+
+    rho = state[registered_variables.density_index]
+    u = get_absolute_velocity(state, config, registered_variables)
+
+    kinetic_energy = 0.5 * rho * u ** 2
+
+    if config.dimensionality == 1:
+        return jnp.sum(kinetic_energy * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])
+    else:
+        return jnp.sum(kinetic_energy * config.grid_spacing**config.dimensionality)
+
+
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def calculate_gravitational_energy(state, helper_data, gravitational_constant, config, registered_variables):
+    
+    num_ghost_cells = config.num_ghost_cells
+
+    rho = state[registered_variables.density_index]
+    
+    potential = _compute_gravitational_potential(rho, config.grid_spacing, config, gravitational_constant)
+    gravitational_energy = 0.5 * rho * potential
+    if config.dimensionality == 1:
+        return jnp.sum(gravitational_energy * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])
+    else:
+        return jnp.sum(gravitational_energy * config.grid_spacing**config.dimensionality)
+
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
 def calculate_total_energy(
     primitive_state: STATE_TYPE,
     helper_data: HelperData,
@@ -50,8 +97,8 @@ def calculate_total_energy(
     energy = total_energy_from_primitives(rho, u, p, gamma)
 
     if config.self_gravity:
-        potential_energy = _compute_gravitational_potential(rho, config.grid_spacing, config, gravitational_constant)
-        energy += potential_energy
+        potential = _compute_gravitational_potential(rho, config.grid_spacing, config, gravitational_constant)
+        energy += 0.5 * rho * potential
 
     slice_off_ghost_cells = (slice(num_ghost_cells, -num_ghost_cells),) * config.dimensionality
     energy = energy[slice_off_ghost_cells]
@@ -59,7 +106,7 @@ def calculate_total_energy(
     if config.dimensionality == 1:
         return jnp.sum(energy * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])
     else:
-        return jnp.sum(energy) * config.box_size**config.dimensionality
+        return jnp.sum(energy * config.grid_spacing**config.dimensionality)
 
 
 @jaxtyped(typechecker=typechecker)

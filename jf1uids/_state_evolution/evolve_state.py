@@ -13,7 +13,7 @@ from typing import Union
 
 # general jf1uids imports
 from jf1uids._physics_modules._mhd._magnetic_field_update import magnetic_update
-from jf1uids._physics_modules._self_gravity._self_gravity import _apply_self_gravity
+from jf1uids._physics_modules._self_gravity._self_gravity import _apply_self_gravity, _compute_gravitational_potential, _conservative_gravitational_source_term_along_axis # , _mullen_source_along_axis, _mullen_source_along_axis2
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import CARTESIAN, HLL, HLLC, SPHERICAL, STATE_TYPE, SimulationConfig
@@ -45,7 +45,6 @@ def _evolve_state_along_axis(
 
     num_cells = primitive_state.shape[axis]
 
-    # flux in x-direction
     if config.first_order_fallback:
         primitive_state_left = jax.lax.slice_in_dim(primitive_state, 1, num_cells - 2, axis = axis)
         primitive_state_right = jax.lax.slice_in_dim(primitive_state, 2, num_cells - 1, axis = axis)
@@ -112,7 +111,6 @@ def _evolve_state_along_axis(
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
 def _evolve_gas_state(
     primitive_state: STATE_TYPE,
-    grid_spacing: Union[float, Float[Array, ""]],
     dt: Float[Array, ""],
     gamma: Union[float, Float[Array, ""]],
     gravitational_constant: Union[float, Float[Array, ""]],
@@ -134,7 +132,7 @@ def _evolve_gas_state(
         The evolved primitive state array.
     """
     if config.dimensionality == 1:
-        primitive_state = _evolve_state_along_axis(primitive_state, grid_spacing, dt, gamma, config, helper_data, registered_variables, 1)
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 1)
 
         if config.self_gravity:
             primitive_state = _apply_self_gravity(primitive_state, config, registered_variables, gamma, gravitational_constant, dt)
@@ -144,26 +142,102 @@ def _evolve_gas_state(
         if config.self_gravity:
             primitive_state = _apply_self_gravity(primitive_state, config, registered_variables, gamma, gravitational_constant, dt)
 
-        primitive_state = _evolve_state_along_axis(primitive_state, grid_spacing, dt/2, gamma, config, helper_data, registered_variables, 1)
-        primitive_state = _evolve_state_along_axis(primitive_state, grid_spacing, dt, gamma, config, helper_data, registered_variables, 2)
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt/2, gamma, config, helper_data, registered_variables, 1)
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 2)
 
 
 
-        primitive_state = _evolve_state_along_axis(primitive_state, grid_spacing, dt/2, gamma, config, helper_data, registered_variables, 1)
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt/2, gamma, config, helper_data, registered_variables, 1)
     elif config.dimensionality == 3:
 
+        # def get_flux(primitive_state, dt):
+        #     conserved_state = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
+        #     # advance in x by dt/2 -> y by dt/2 -> z by dt -> y by dt/2 -> x by dt/2
+        #     primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
+        #     primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
+        #     primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 3)
+        #     primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
+        #     primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
+        #     flux = (conserved_state_from_primitive(primitive_state, gamma, config, registered_variables) - conserved_state) / dt
+        #     return flux
+        
+        # def get_gravitational_source1(primitive_state_zero, primitive_state_one, dt):
+        #     gravitational_source = jnp.zeros_like(primitive_state)
 
-        # advance in x by dt/2 -> y by dt/2 -> z by dt -> y by dt/2 -> x by dt/2
-        primitive_state = _evolve_state_along_axis(primitive_state, grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
-        primitive_state = _evolve_state_along_axis(primitive_state, grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
+        #     potential_zero = _compute_gravitational_potential(primitive_state_zero[registered_variables.density_index], config.grid_spacing, config, gravitational_constant)
+        #     potential_one = _compute_gravitational_potential(primitive_state_one[registered_variables.density_index], config.grid_spacing, config, gravitational_constant)
+
+        #     for i in range(3):
+                
+        #         gravitational_source = gravitational_source + _mullen_source_along_axis(
+        #                 potential_zero,
+        #                 potential_one,
+        #                 primitive_state_zero,
+        #                 config.grid_spacing,
+        #                 dt,
+        #                 gamma,
+        #                 helper_data,
+        #                 config,
+        #                 registered_variables,
+        #                 i + 1,
+        #         )
+            
+        #     return gravitational_source
+        
+        # def get_gravitational_source2(primitive_state_zero, primitive_state_one, primitive_state_two, dt):
+        #     gravitational_source = jnp.zeros_like(primitive_state)
+
+        #     potential_zero = _compute_gravitational_potential(primitive_state_zero[registered_variables.density_index], config.grid_spacing, config, gravitational_constant)
+        #     potential_one = _compute_gravitational_potential(primitive_state_one[registered_variables.density_index], config.grid_spacing, config, gravitational_constant)
+        #     potential_two = _compute_gravitational_potential(primitive_state_two[registered_variables.density_index], config.grid_spacing, config, gravitational_constant)
+
+        #     for i in range(3):
+                
+        #         gravitational_source = gravitational_source + _mullen_source_along_axis2(
+        #                 potential_zero,
+        #                 potential_one,
+        #                 potential_two,
+        #                 primitive_state_one,
+        #                 config.grid_spacing,
+        #                 dt,
+        #                 gamma,
+        #                 helper_data,
+        #                 config,
+        #                 registered_variables,
+        #                 i + 1,
+        #         )
+            
+        #     return gravitational_source
+        
+        # conserved_state = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
+
+        # flux_zero = get_flux(primitive_state, dt / 2)
+
+        # conserved_state_one_cross = conserved_state + flux_zero * dt / 2
+        # primitive_state_one_cross = primitive_state_from_conserved(conserved_state_one_cross, gamma, config, registered_variables)
+
+        # conserved_state_one = conserved_state_one_cross + dt / 2 * get_gravitational_source1(primitive_state, primitive_state_one_cross, dt / 2)
+        # primitive_state_one = primitive_state_from_conserved(conserved_state_one, gamma, config, registered_variables)
+
+        # flux_one = get_flux(primitive_state_one, dt)
+        # conserved_state_two_cross = conserved_state + flux_one * dt
+        # primitive_state_two_cross = primitive_state_from_conserved(conserved_state_two_cross, gamma, config, registered_variables)
+
+        # conserved_state_two = conserved_state_two_cross + dt * get_gravitational_source2(primitive_state, primitive_state_one, primitive_state_two_cross, dt)
+
+        # primitive_state = primitive_state_from_conserved(conserved_state_two, gamma, config, registered_variables)
+
+
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 3)
 
         if config.self_gravity:
-            primitive_state = _apply_self_gravity(primitive_state, config, registered_variables, gamma, gravitational_constant, dt)
+            primitive_state = _apply_self_gravity(primitive_state, config, registered_variables, helper_data, gamma, gravitational_constant, dt)
 
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
 
-        primitive_state = _evolve_state_along_axis(primitive_state, grid_spacing, dt, gamma, config, helper_data, registered_variables, 3)
-        primitive_state = _evolve_state_along_axis(primitive_state, grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
-        primitive_state = _evolve_state_along_axis(primitive_state, grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
     else:
         raise ValueError("Dimensionality not supported.")
 
@@ -174,7 +248,6 @@ def _evolve_gas_state(
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
 def _evolve_state(
     primitive_state: STATE_TYPE,
-    grid_spacing: Union[float, Float[Array, ""]],
     dt: Float[Array, ""],
     gamma: Union[float, Float[Array, ""]],
     gravitational_constant: Union[float, Float[Array, ""]],
@@ -196,12 +269,12 @@ def _evolve_state(
             magnetic_field = primitive_state[-3:, ...]
 
             # evolve gas state by half a time step
-            evolved_gas = _evolve_gas_state(gas_state, grid_spacing, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
+            evolved_gas = _evolve_gas_state(gas_state, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
 
-            magnetic_field, evolved_gas = magnetic_update(magnetic_field, evolved_gas, grid_spacing, dt, registered_variables, config)
+            magnetic_field, evolved_gas = magnetic_update(magnetic_field, evolved_gas, config.grid_spacing, dt, registered_variables, config)
 
             # evolve gas state by half a time step
-            evolved_gas = _evolve_gas_state(evolved_gas, grid_spacing, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
+            evolved_gas = _evolve_gas_state(evolved_gas, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
 
             return jnp.concatenate((evolved_gas, magnetic_field), axis = 0)
         else:
@@ -209,4 +282,4 @@ def _evolve_state(
             raise ValueError("MHD currently not supported in 1D.")
 
     else:
-        return _evolve_gas_state(primitive_state, grid_spacing, dt, gamma, gravitational_constant, config, helper_data, registered_variables)
+        return _evolve_gas_state(primitive_state, dt, gamma, gravitational_constant, config, helper_data, registered_variables)

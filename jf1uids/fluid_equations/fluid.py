@@ -1,3 +1,4 @@
+from types import NoneType
 import jax.numpy as jnp
 import jax
 from functools import partial
@@ -9,7 +10,8 @@ from typing import Union
 
 from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import total_energy_from_primitives_with_crs, total_pressure_from_conserved_with_crs
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfig
+from jf1uids.option_classes.simulation_config import FIELD_TYPE, STATE_TYPE, SimulationConfig
+from jf1uids.option_classes.simulation_params import SimulationParams
 
 # The default state jf1uids operates on 
 # are the primitive variables rho, u, p.
@@ -22,40 +24,27 @@ from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfi
 # ======= Create the primitive state ========
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['registered_variables'])
-def construct_primitive_state1D(
-    rho: Float[Array, "num_cells"],
-    u: Float[Array, "num_cells"],
-    p: Float[Array, "num_cells"],
-    registered_variables: RegisteredVariables
-) -> Float[Array, "num_vars num_cells"]:
-    """Stack the primitive variables into the state array.
-    
-    Args:
-        rho: The density of the fluid.
-        u: The velocity of the fluid.
-        p: The pressure of the fluid.
-        registered_variables: The indices of the variables in the state array.
-        
-    Returns:
-        The state array.
-    """
-    state = jnp.zeros((registered_variables.num_vars, rho.shape[0]))
-    state = state.at[registered_variables.density_index].set(rho)
-    state = state.at[registered_variables.velocity_index].set(u)
-    state = state.at[registered_variables.pressure_index].set(p)
-    return state
+def construct_primitive_state(
 
-@jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['registered_variables'])
-def construct_primitive_state2D(
-    rho: Float[Array, "num_cells num_cells"],
-    u_x: Float[Array, "num_cells num_cells"],
-    u_y: Float[Array, "num_cells num_cells"],
-    p: Float[Array, "num_cells num_cells"],
-    registered_variables: RegisteredVariables
-) -> Float[Array, "num_vars num_cells num_cells"]:
+    config: SimulationConfig,
+    registered_variables: RegisteredVariables,
+
+    density: FIELD_TYPE,
+    velocity_x: Union[FIELD_TYPE, NoneType] = None,
+    velocity_y: Union[FIELD_TYPE, NoneType] = None,
+    velocity_z: Union[FIELD_TYPE, NoneType] = None,
+    magnetic_field_x: Union[FIELD_TYPE, NoneType] = None,
+    magnetic_field_y: Union[FIELD_TYPE, NoneType] = None,
+    magnetic_field_z: Union[FIELD_TYPE, NoneType] = None,
+    gas_pressure: Union[FIELD_TYPE, NoneType] = None,
+    cosmic_ray_pressure: Union[FIELD_TYPE, NoneType] = None,
+
+) -> STATE_TYPE:
+
     """Stack the primitive variables into the state array.
+
+    IN 1D SET ONLY THE XCOMPONENTS, in 2D SET X AND Y COMPONENTS,
+    in 3D SET X, Y AND Z COMPONENTS
     
     Args:
         rho: The density of the fluid.
@@ -67,91 +56,36 @@ def construct_primitive_state2D(
         The state array.
     """
 
-    state = jnp.zeros((registered_variables.num_vars, rho.shape[0], rho.shape[1]))
-    state = state.at[registered_variables.density_index].set(rho)
+    state = jnp.zeros((registered_variables.num_vars, *density.shape))
+    state = state.at[registered_variables.density_index].set(density)
 
-    state = state.at[registered_variables.velocity_index.x].set(u_x)
-    state = state.at[registered_variables.velocity_index.y].set(u_y)
+    if config.dimensionality == 1:
+        state = state.at[registered_variables.velocity_index].set(velocity_x)
+    elif config.dimensionality == 2:
+        state = state.at[registered_variables.velocity_index.x].set(velocity_x)
+        state = state.at[registered_variables.velocity_index.y].set(velocity_y)
+    elif config.dimensionality == 3:
+        state = state.at[registered_variables.velocity_index.x].set(velocity_x)
+        state = state.at[registered_variables.velocity_index.y].set(velocity_y)
+        state = state.at[registered_variables.velocity_index.z].set(velocity_z)
 
-    state = state.at[registered_variables.pressure_index].set(p)
+    if config.mhd:
+        if config.dimensionality == 1:
+            state = state.at[registered_variables.magnetic_index].set(magnetic_field_x)
+        elif config.dimensionality >= 2:
+            state = state.at[registered_variables.magnetic_index.x].set(magnetic_field_x)
+            state = state.at[registered_variables.magnetic_index.y].set(magnetic_field_y)
+            state = state.at[registered_variables.magnetic_index.z].set(magnetic_field_z)
 
-    return state
+    state = state.at[registered_variables.pressure_index].set(gas_pressure)
 
-@jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['registered_variables'])
-def construct_primitive_state2D_mhd(
-    rho: Float[Array, "num_cells num_cells"],
-    u_x: Float[Array, "num_cells num_cells"],
-    u_y: Float[Array, "num_cells num_cells"],
-    B_x: Float[Array, "num_cells num_cells"],
-    B_y: Float[Array, "num_cells num_cells"],
-    B_z: Float[Array, "num_cells num_cells"],
-    p: Float[Array, "num_cells num_cells"],
-    registered_variables: RegisteredVariables
-) -> Float[Array, "num_vars num_cells num_cells"]:
-    """Stack the primitive variables into the state array.
-    
-    Args:
-        rho: The density of the fluid.
-        u: The velocity of the fluid.
-        p: The pressure of the fluid.
-        registered_variables: The indices of the variables in the state array.
-        
-    Returns:
-        The state array.
-    """
+    if registered_variables.cosmic_ray_n_active:
 
-    state = jnp.zeros((registered_variables.num_vars, rho.shape[0], rho.shape[1]))
-    state = state.at[registered_variables.density_index].set(rho)
+        # TODO: get from params
+        gamma_cr = 4/3
 
-    state = state.at[registered_variables.velocity_index.x].set(u_x)
-    state = state.at[registered_variables.velocity_index.y].set(u_y)
-
-    state = state.at[registered_variables.magnetic_index.x].set(B_x)
-    state = state.at[registered_variables.magnetic_index.y].set(B_y)
-    state = state.at[registered_variables.magnetic_index.z].set(B_z)
-
-    state = state.at[registered_variables.pressure_index].set(p)
-
-    return state
-
-@jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['registered_variables'])
-def construct_primitive_state3D_mhd(
-    rho: Float[Array, "num_cells num_cells"],
-    u_x: Float[Array, "num_cells num_cells"],
-    u_y: Float[Array, "num_cells num_cells"],
-    u_z: Float[Array, "num_cells num_cells"],
-    B_x: Float[Array, "num_cells num_cells"],
-    B_y: Float[Array, "num_cells num_cells"],
-    B_z: Float[Array, "num_cells num_cells"],
-    p: Float[Array, "num_cells num_cells"],
-    registered_variables: RegisteredVariables
-) -> Float[Array, "num_vars num_cells num_cells"]:
-    """Stack the primitive variables into the state array.
-    
-    Args:
-        rho: The density of the fluid.
-        u: The velocity of the fluid.
-        p: The pressure of the fluid.
-        registered_variables: The indices of the variables in the state array.
-        
-    Returns:
-        The state array.
-    """
-
-    state = jnp.zeros((registered_variables.num_vars, rho.shape[0], rho.shape[1]))
-    state = state.at[registered_variables.density_index].set(rho)
-
-    state = state.at[registered_variables.velocity_index.x].set(u_x)
-    state = state.at[registered_variables.velocity_index.y].set(u_y)
-    state = state.at[registered_variables.velocity_index.z].set(u_z)
-
-    state = state.at[registered_variables.magnetic_index.x].set(B_x)
-    state = state.at[registered_variables.magnetic_index.y].set(B_y)
-    state = state.at[registered_variables.magnetic_index.z].set(B_z)
-
-    state = state.at[registered_variables.pressure_index].set(p)
+        state = state.at[registered_variables.pressure_index].set(gas_pressure + cosmic_ray_pressure)
+        state = state.at[registered_variables.cosmic_ray_n_index].set(cosmic_ray_pressure ** (1/gamma_cr))
 
     return state
 

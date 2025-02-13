@@ -27,8 +27,8 @@ from jf1uids.data_classes.simulation_snapshot_data import SnapshotData
 from jf1uids._state_evolution.evolve_state import _evolve_state
 from jf1uids._physics_modules.run_physics_modules import _run_physics_modules
 from jf1uids.time_stepping._timestep_estimator import _cfl_time_step, _source_term_aware_time_step
-from jf1uids.fluid_equations.total_quantities import calculate_total_mass
-from jf1uids.fluid_equations.total_quantities import calculate_total_energy
+from jf1uids.fluid_equations.total_quantities import calculate_internal_energy, calculate_total_mass
+from jf1uids.fluid_equations.total_quantities import calculate_total_energy, calculate_kinetic_energy, calculate_gravitational_energy
 
 # progress bar
 from jf1uids.time_stepping._progress_bar import _show_progress
@@ -106,8 +106,18 @@ def _time_integration(
         states = jnp.zeros((config.num_snapshots, *primitive_state.shape))
         total_mass = jnp.zeros(config.num_snapshots)
         total_energy = jnp.zeros(config.num_snapshots)
+        internal_energy = jnp.zeros(config.num_snapshots)
+        kinetic_energy = jnp.zeros(config.num_snapshots)
+
+        if config.self_gravity:
+            gravitational_energy = jnp.zeros(config.num_snapshots)
+        else:
+            gravitational_energy = None
+
         current_checkpoint = 0
-        snapshot_data = SnapshotData(time_points = time_points, states = states, total_mass = total_mass, total_energy = total_energy, current_checkpoint = current_checkpoint)
+
+        snapshot_data = SnapshotData(time_points = time_points, states = states, total_mass = total_mass, total_energy = total_energy, internal_energy = internal_energy, kinetic_energy = kinetic_energy, gravitational_energy = gravitational_energy, current_checkpoint = current_checkpoint)
+
     elif config.activate_snapshot_callback:
         current_checkpoint = 0
         snapshot_data = SnapshotData(time_points = None, states = None, total_mass = None, total_energy = None, current_checkpoint = current_checkpoint)
@@ -122,8 +132,17 @@ def _time_integration(
                 states = snapshot_data.states.at[snapshot_data.current_checkpoint].set(state)
                 total_mass = snapshot_data.total_mass.at[snapshot_data.current_checkpoint].set(calculate_total_mass(state, helper_data, config))
                 total_energy = snapshot_data.total_energy.at[snapshot_data.current_checkpoint].set(calculate_total_energy(state, helper_data, params.gamma, params.gravitational_constant, config, registered_variables))
+
+                internal_energy = snapshot_data.internal_energy.at[snapshot_data.current_checkpoint].set(calculate_internal_energy(state, helper_data, params.gamma, config, registered_variables))
+                kinetic_energy = snapshot_data.kinetic_energy.at[snapshot_data.current_checkpoint].set(calculate_kinetic_energy(state, helper_data, config, registered_variables))
+
+                if config.self_gravity:
+                    gravitational_energy = snapshot_data.gravitational_energy.at[snapshot_data.current_checkpoint].set(calculate_gravitational_energy(state, helper_data, params.gravitational_constant, config, registered_variables))
+                else:
+                    gravitational_energy = None
+
                 current_checkpoint = snapshot_data.current_checkpoint + 1
-                snapshot_data = snapshot_data._replace(time_points = time_points, states = states, current_checkpoint = current_checkpoint, total_mass = total_mass, total_energy = total_energy)
+                snapshot_data = snapshot_data._replace(time_points = time_points, states = states, current_checkpoint = current_checkpoint, total_mass = total_mass, total_energy = total_energy, internal_energy = internal_energy, kinetic_energy = kinetic_energy, gravitational_energy = gravitational_energy)
                 return snapshot_data
             
             def dont_update_snapshot_data(snapshot_data):
@@ -174,7 +193,7 @@ def _time_integration(
         # a higher order method (in a split fashion) may be used
 
         state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
-        state = _evolve_state(state, config.grid_spacing, dt, params.gamma, params.gravitational_constant, config, helper_data, registered_variables)
+        state = _evolve_state(state, dt, params.gamma, params.gravitational_constant, config, helper_data, registered_variables)
         state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
 
         time += dt

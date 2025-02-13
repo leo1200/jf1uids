@@ -16,6 +16,15 @@ class SnapshotData(NamedTuple):
     #: The total energy at the times the snapshots were taken.
     total_energy: jnp.ndarray = None
 
+    #: internal energy
+    internal_energy: jnp.ndarray = None
+
+    #: kinetic energy
+    kinetic_energy: jnp.ndarray = None
+
+    #: gravitational energy
+    gravitational_energy: jnp.ndarray = None
+
     # The runtime of the simulation-loop.
     runtime: float = 0.0
 
