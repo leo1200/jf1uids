@@ -11,13 +11,13 @@
 
 ## Installation
 
-NOTE: The current PyPi version is non up-to-date. For now clone the repository and install via
+NOTE: The current PyPi version is not up-to-date. For now, please clone (download) the repository and install via
 
 ```bash
 pip install .
 ```
 
-An up-to-date PyPi installation will be available soon via
+An up-to-date PyPi installation will soon be available via
 
 ```bash
 pip install jf1uids
