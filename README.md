@@ -2,12 +2,12 @@
 
 ## Features
 
-✔ 1D, 2D and 3D hydrodynamics and magnetohydrodynamics simulations
-✔ provably divergence free magnetic fields based on the approach of [Pang and Wu (2024)](https://arxiv.org/abs/2410.05173) (different from their approach not yet provably positivity preserving)
-✔ a first implementation of self-gravity based on a simple source term approach
-✔ spherically symmetric simulations such that mass and energy are conserved based on the scheme of [Crittenden and Balachandar (2018)](https://doi.org/10.1007/s00193-017-0784-y)
-✔ backwards and forwards differentiable with adaptive timestepping
-✔ easily extensible, all code is open source
+- [x] 1D, 2D and 3D hydrodynamics and magnetohydrodynamics simulations
+- [x] provably divergence free magnetic fields based on the approach of [Pang and Wu (2024)](https://arxiv.org/abs/2410.05173) (different from their approach not yet provably positivity preserving)
+- [x] a first implementation of self-gravity based on a simple source term approach
+- [x] spherically symmetric simulations such that mass and energy are conserved based on the scheme of [Crittenden and Balachandar (2018)](https://doi.org/10.1007/s00193-017-0784-y)
+- [x] backwards and forwards differentiable with adaptive timestepping
+- [x] easily extensible, all code is open source
 
 ## Installation
 
