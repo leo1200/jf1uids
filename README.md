@@ -11,6 +11,14 @@
 
 ## Installation
 
+NOTE: The current PyPi version is non up-to-date. For now clone the repository and install via
+
+```bash
+pip install .
+```
+
+An up-to-date PyPi installation will be available soon via
+
 ```bash
 pip install jf1uids
 ```
