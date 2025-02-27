@@ -32,9 +32,9 @@ pip install jf1uids
 
 ## Showcase
 
-| ![Orszag-Tang Vortex](figures/orszag_tang_animation.gif) | ![3D Collapse](figures/3d_collapse.gif) |
-|:-------------------------------------------------------:|:---------------------------------------:|
-| Orszag-Tang Vortex                                      | 3D Collapse                             |
+| ![Orszag-Tang Vortex](notebooks/figures/orszag_tang_animation.gif) | ![3D Collapse](notebooks/figures/3d_collapse.gif) |
+|:------------------------------------------------------------------:|:-------------------------------------------------:|
+| Orszag-Tang Vortex                                                 | 3D Collapse                                       |
 
 
 ## Citable References
