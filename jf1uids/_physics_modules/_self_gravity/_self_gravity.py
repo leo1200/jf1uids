@@ -1,28 +1,37 @@
+"""
+Fourier-based Poisson solver and simple source term handling
+of self gravity. To be improved to an energy-conserving scheme.
+"""
+
+# general
 from functools import partial
 import jax.numpy as jnp
 import jax
 
+# typing
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
 from typing import Union
 
+# fft, in the future use
+# https://github.com/DifferentiableUniverseInitiative/JaxPM
 from jax.numpy.fft import fftn, ifftn
 
+# jf1uids data classes
+from jf1uids.data_classes.simulation_helper_data import HelperData
+from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.option_classes.simulation_config import SimulationConfig
+
+# jf1uids constants
+from jf1uids.option_classes.simulation_config import FIELD_TYPE, HLL, HLLC, OPEN_BOUNDARY, PERIODIC_BOUNDARY, STATE_TYPE
+
+# jf1uids functions
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids._riemann_solver.hll import _hll_solver, _hllc_solver
 from jf1uids._state_evolution.reconstruction import _reconstruct_at_interface
-from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.euler import _euler_flux
 from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, primitive_state_from_conserved
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import FIELD_TYPE, HLL, HLLC, OPEN_BOUNDARY, PERIODIC_BOUNDARY, STATE_TYPE, SimulationConfig
 
-
-# Currently a simple source term handling of self gravity.
-# For future inspiration, see e.g.
-# https://arxiv.org/abs/2012.01340
-# and for a multigrid method see
-# https://arxiv.org/abs/2306.05332
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['grid_spacing', 'config'])
@@ -50,13 +59,28 @@ def _compute_gravitational_potential(
     non_periodic_boundaries = False
 
     if dimensionality == 1:
-        if not (config.boundary_settings.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.right_boundary == PERIODIC_BOUNDARY):
+        if not (
+            config.boundary_settings.left_boundary == PERIODIC_BOUNDARY and
+            config.boundary_settings.right_boundary == PERIODIC_BOUNDARY
+        ):
             non_periodic_boundaries = True
     elif dimensionality == 2:
-        if not (config.boundary_settings.x.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.x.right_boundary == PERIODIC_BOUNDARY and config.boundary_settings.y.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.y.right_boundary == PERIODIC_BOUNDARY):
+        if not (
+            config.boundary_settings.x.left_boundary == PERIODIC_BOUNDARY and
+            config.boundary_settings.x.right_boundary == PERIODIC_BOUNDARY and
+            config.boundary_settings.y.left_boundary == PERIODIC_BOUNDARY and
+            config.boundary_settings.y.right_boundary == PERIODIC_BOUNDARY
+        ):
             non_periodic_boundaries = True
     elif dimensionality == 3:
-        if not (config.boundary_settings.x.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.x.right_boundary == PERIODIC_BOUNDARY and config.boundary_settings.y.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.y.right_boundary == PERIODIC_BOUNDARY and config.boundary_settings.z.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.z.right_boundary == PERIODIC_BOUNDARY):
+        if not (
+            config.boundary_settings.x.left_boundary == PERIODIC_BOUNDARY and
+            config.boundary_settings.x.right_boundary == PERIODIC_BOUNDARY and
+            config.boundary_settings.y.left_boundary == PERIODIC_BOUNDARY and
+            config.boundary_settings.y.right_boundary == PERIODIC_BOUNDARY and
+            config.boundary_settings.z.left_boundary == PERIODIC_BOUNDARY and
+            config.boundary_settings.z.right_boundary == PERIODIC_BOUNDARY
+        ):
             non_periodic_boundaries = True
 
     if not non_periodic_boundaries:
@@ -176,108 +200,99 @@ def _conservative_gravitational_source_term_along_axis(
     acceleration = jnp.zeros_like(gravitational_potential)
     selection = (slice(None),) * (axis - 1) + (slice(1,-1),) + (slice(None),)*(primitive_state.ndim - axis - 2)
 
-    acceleration_left = jnp.zeros_like(gravitational_potential)
-    acceleration_left = -acceleration_left.at[selection].set((jax.lax.slice_in_dim(gravitational_potential, 1, num_cells - 1, axis = axis - 1) - jax.lax.slice_in_dim(gravitational_potential, 0, num_cells - 2, axis = axis - 1)) / (grid_spacing))
-
-    acceleration_right = jnp.zeros_like(gravitational_potential)
-    acceleration_right = -acceleration_right.at[selection].set((jax.lax.slice_in_dim(gravitational_potential, 2, num_cells, axis = axis - 1) - jax.lax.slice_in_dim(gravitational_potential, 1, num_cells - 1, axis = axis - 1)) / (grid_spacing))
-
-    acceleration = (acceleration_left + acceleration_right) / 2
+    # central difference acceleration
+    acceleration = acceleration.at[selection].set(
+        -1 * (
+            jax.lax.slice_in_dim(gravitational_potential, 2, num_cells, axis = axis - 1) - 
+            jax.lax.slice_in_dim(gravitational_potential, 0, num_cells - 2, axis = axis - 1)
+        ) / (2 * grid_spacing)
+    )
 
     source_term = jnp.zeros_like(primitive_state)
 
+    # set momentum source
     source_term = source_term.at[axis].set(primitive_state[registered_variables.density_index] * acceleration)
 
-    # ===============================================
-
-    num_cells = primitive_state.shape[axis]
-
-    primitive_state_left, primitive_state_right = _reconstruct_at_interface(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
-
-    # the first entry in primitive_state_left is the left state at the interface between cell 1 and 2
-    # and the first entry in primitive_state_right is the right state at the interface between cell 1 and 2
-    fluxes_left = _euler_flux(primitive_state_left, gamma, config, registered_variables, axis)
-    fluxes_right = _euler_flux(primitive_state_right, gamma, config, registered_variables, axis)
-    
-    # these are now approximate fluxes, starting at the flux between cell 1 and 2
-    # fluxesX = ((fluxes_left + fluxes_right) / 2)[0]
-    fluxes = _hllc_solver(primitive_state_left, primitive_state_right, gamma, config, registered_variables, axis)[0]
-
-    # these are the accelerations at the cell interfaces, starting at the interface between cell 1 and 2
-    acc = -(jax.lax.slice_in_dim(gravitational_potential, 2, num_cells - 1, axis = axis - 1) - jax.lax.slice_in_dim(gravitational_potential, 1, num_cells - 2, axis = axis - 1)) / (grid_spacing)
-
-    sources = 0.5 * (jax.lax.slice_in_dim(fluxes, 0, -1, axis = axis - 1) * jax.lax.slice_in_dim(acc, 0, -1, axis = axis - 1) + jax.lax.slice_in_dim(fluxes, 1, None, axis = axis - 1) * jax.lax.slice_in_dim(acc, 1, None, axis = axis - 1))
-    # sourcesX = 0.5 * (jax.lax.slice_in_dim(fluxesX, 0, -1, axis = axis - 1) * jax.lax.slice_in_dim(acc, 0, -1, axis = axis - 1) + jax.lax.slice_in_dim(fluxesX, 1, None, axis = axis - 1) * jax.lax.slice_in_dim(acc, 1, None, axis = axis - 1))
-
-    selection2 = (slice(None),) * (axis - 1) + (slice(2,-2),) + (slice(None),)*(primitive_state.ndim - axis - 2)
-
-    # note that the Riemann mass flux and v might point in different directions (and assume a points in the 
-    # same direction as v), in this case we would have a negative source term but would actually increase
-    # the velocity magnitude which would mean decreasing the pressure which can eventually lead to negative
-    # pressures which is unphysical and in handling the gravity we would only want a conversion between
-    # potential and kinetic energy
-
-    # sources = jnp.where(jnp.abs(sourcesX - sources) > 1e-5, sourcesX, sources)
-
-    source_term = source_term.at[(registered_variables.pressure_index,) + selection2].set(sources)
-    
-    # source_term = source_term.at[registered_variables.pressure_index].set((fluxes_left * acceleration_left + fluxes_right * acceleration_right) / 2)
-
-    # jax.debug.print("flux shape: {fs}, min flux right: {mifs}, max_flux_right: {mafa}, min_acc_left: {mial}, max_acc_left: {maal}, min source term: {mist}, max source term: {mast}", fs = fluxes.shape, mifs = jnp.min(fluxes_right), mafa = jnp.max(fluxes_right), mial = jnp.min(acceleration_left), maal = jnp.max(acceleration_left), mist = jnp.min(source_term), mast = jnp.max(source_term))
-
-    # print the deviation between the two source term calculations
-    source1 = source_term[registered_variables.pressure_index]
-    # source1 = source1[2:-2, 2:-2, 2:-2]
-    source2 = rho * v_axis * acceleration
-    # source2 = source2[2:-2, 2:-2, 2:-2]
-    # deviation = jnp.sum(jnp.abs(source1 - source2))
-    # max_deviation_index = jnp.argmax(jnp.abs(source1 - source2))
-    # max_deviation_index = jnp.unravel_index(max_deviation_index, source1.shape)
-    # jax.debug.print("summed deviation: {d}, index: {i}, source1: {s1}, source2: {s2}", d = deviation, i = max_deviation_index, s1 = source1[max_deviation_index], s2 = source2[max_deviation_index])
-    # def plot_source_terms(source_term1, source_term2, pressure):
-    #     import matplotlib.pyplot as plt
-    #     from mpl_toolkits.axes_grid1 import make_axes_locatable
-    #     from matplotlib.colors import LogNorm
-
-    #     min_val = jnp.minimum(jnp.min(source_term1), jnp.min(source_term2))
-    #     max_val = jnp.maximum(jnp.max(source_term1), jnp.max(source_term2))
-
-    #     fig, axs = plt.subplots(1, 3, figsize=(15, 5))
-
-    #     im1 = axs[0].imshow(source_term1[:, :, 32], origin='lower') # , vmin=min_val, vmax=max_val)
-    #     axs[0].set_title("riemann flux based source term (problem)")
-    #     divider1 = make_axes_locatable(axs[0])
-    #     cax1 = divider1.append_axes('right', size='5%', pad=0.05)
-    #     fig.colorbar(im1, cax=cax1, orientation='vertical')
-
-    #     im2 = axs[1].imshow(source_term2[:, :, 32], origin='lower') # , vmin=min_val, vmax=max_val)
-    #     axs[1].set_title("rho * v * acceleration based source term (works)")
-    #     divider2 = make_axes_locatable(axs[1])
-    #     cax2 = divider2.append_axes('right', size='5%', pad=0.05)
-    #     fig.colorbar(im2, cax=cax2, orientation='vertical')
-
-    #     # plot the pressure field with log color scale
-    #     im3 = axs[2].imshow(pressure, origin='lower', norm=LogNorm())
-    #     axs[2].set_title("pressure field")
-    #     divider3 = make_axes_locatable(axs[2])
-    #     cax3 = divider3.append_axes('right', size='5%', pad=0.05)
-    #     fig.colorbar(im3, cax=cax3, orientation='vertical')
-
-
-    #     plt.tight_layout()
-    #     plt.savefig("source_term_comparison{axis}.png".format(axis = axis))
-
-    #     plt.close()
-
-
-    # jax.debug.callback(plot_source_terms, source1, source2, primitive_state[registered_variables.pressure_index][:, :, 32])
-
+    # set energy source
+    source_term = source_term.at[registered_variables.pressure_index].set(rho * v_axis * acceleration)
 
     # ===============================================
 
-    # source_term = source_term.at[registered_variables.pressure_index].set(rho * v_axis * acceleration)
+    # attempt at implementing the ATHENA source term
+    # https://github.com/PrincetonUniversity/athena/blob/master/src/hydro/srcterms/self_gravity.cpp
+
+    # num_cells = primitive_state.shape[axis]
+
+    # primitive_state_left, primitive_state_right = _reconstruct_at_interface(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
+
+    # # these are now approximate fluxes, starting at the flux between cell 1 and 2
+    # # fluxesX = ((fluxes_left + fluxes_right) / 2)[0]
+    # fluxes = _hllc_solver(primitive_state_left, primitive_state_right, gamma, config, registered_variables, axis)[0]
+
+    # # these are the accelerations at the cell interfaces, starting at the interface between cell 1 and 2
+    # acc = -(jax.lax.slice_in_dim(gravitational_potential, 2, num_cells - 1, axis = axis - 1) - jax.lax.slice_in_dim(gravitational_potential, 1, num_cells - 2, axis = axis - 1)) / (grid_spacing)
+
+    # sources = 0.5 * (jax.lax.slice_in_dim(fluxes, 0, -1, axis = axis - 1) * jax.lax.slice_in_dim(acc, 0, -1, axis = axis - 1) + jax.lax.slice_in_dim(fluxes, 1, None, axis = axis - 1) * jax.lax.slice_in_dim(acc, 1, None, axis = axis - 1))
+
+    # selection2 = (slice(None),) * (axis - 1) + (slice(2,-2),) + (slice(None),)*(primitive_state.ndim - axis - 2)
+
+    # source_term = source_term.at[(registered_variables.pressure_index,) + selection2].set(sources)
+
+    # ===============================================
 
     return source_term
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def _apply_self_gravity(
+    primitive_state: STATE_TYPE,
+    old_primitive_state: STATE_TYPE,
+    config: SimulationConfig,
+    registered_variables: RegisteredVariables,
+    helper_data: HelperData,
+    gamma: Union[float, Float[Array, ""]],
+    gravitational_constant: Union[float, Float[Array, ""]],
+    dt: Union[float, Float[Array, ""]]
+) -> STATE_TYPE:
+
+    rho = primitive_state[registered_variables.density_index]
+
+    potential = _compute_gravitational_potential(rho, config.grid_spacing, config, gravitational_constant)
+
+    source_term = jnp.zeros_like(primitive_state)
+
+    for i in range(config.dimensionality):
+        source_term = source_term + _conservative_gravitational_source_term_along_axis(
+                                        potential,
+                                        old_primitive_state,
+                                        config.grid_spacing,
+                                        registered_variables,
+                                        dt,
+                                        gamma,
+                                        config,
+                                        helper_data,
+                                        i + 1
+                                    )
+
+    conserved_state = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
+
+    conserved_state = conserved_state + dt * source_term
+
+    primitive_state = primitive_state_from_conserved(conserved_state, gamma, config, registered_variables)
+
+    primitive_state = _boundary_handler(primitive_state, config)
+
+    return primitive_state
+
+
+# -------------------------------------------------------------
+# ================= ↓ not yet finished stuff ↓ ================
+# -------------------------------------------------------------
+
+
+# attempt at a first proof of concept implementation of
+# https://arxiv.org/abs/2012.01340
+# currently not working
 
 # @jaxtyped(typechecker=typechecker)
 # @partial(jax.jit, static_argnames=['axis', 'grid_spacing', 'registered_variables', 'config'])
@@ -430,34 +445,58 @@ def _conservative_gravitational_source_term_along_axis(
 #     return source_term
 
 
-@jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _apply_self_gravity(
-    primitive_state: STATE_TYPE,
-    old_primitive_state: STATE_TYPE,
-    config: SimulationConfig,
-    registered_variables: RegisteredVariables,
-    helper_data: HelperData,
-    gamma: Union[float, Float[Array, ""]],
-    gravitational_constant: Union[float, Float[Array, ""]],
-    dt: Union[float, Float[Array, ""]]
-) -> STATE_TYPE:
+# further debugging code
 
-    rho = primitive_state[registered_variables.density_index]
+    # jax.debug.print("flux shape: {fs}, min flux right: {mifs}, max_flux_right: {mafa}, min_acc_left: {mial}, max_acc_left: {maal}, min source term: {mist}, max source term: {mast}", fs = fluxes.shape, mifs = jnp.min(fluxes_right), mafa = jnp.max(fluxes_right), mial = jnp.min(acceleration_left), maal = jnp.max(acceleration_left), mist = jnp.min(source_term), mast = jnp.max(source_term))
 
-    potential = _compute_gravitational_potential(rho, config.grid_spacing, config, gravitational_constant)
+    # print the deviation between the two source term calculations
+    source1 = source_term[registered_variables.pressure_index]
+    # source1 = source1[2:-2, 2:-2, 2:-2]
+    source2 = rho * v_axis * acceleration
+    # source2 = source2[2:-2, 2:-2, 2:-2]
+    # deviation = jnp.sum(jnp.abs(source1 - source2))
+    # max_deviation_index = jnp.argmax(jnp.abs(source1 - source2))
+    # max_deviation_index = jnp.unravel_index(max_deviation_index, source1.shape)
+    # jax.debug.print("summed deviation: {d}, index: {i}, source1: {s1}, source2: {s2}", d = deviation, i = max_deviation_index, s1 = source1[max_deviation_index], s2 = source2[max_deviation_index])
+    # def plot_source_terms(source_term1, source_term2, pressure):
+    #     import matplotlib.pyplot as plt
+    #     from mpl_toolkits.axes_grid1 import make_axes_locatable
+    #     from matplotlib.colors import LogNorm
 
-    source_term = jnp.zeros_like(primitive_state)
+    #     min_val = jnp.minimum(jnp.min(source_term1), jnp.min(source_term2))
+    #     max_val = jnp.maximum(jnp.max(source_term1), jnp.max(source_term2))
 
-    for i in range(config.dimensionality):
-        source_term = source_term + _conservative_gravitational_source_term_along_axis(potential, old_primitive_state, config.grid_spacing, registered_variables, dt, gamma, config, helper_data, i + 1)
+    #     fig, axs = plt.subplots(1, 3, figsize=(15, 5))
 
-    conserved_state = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
+    #     im1 = axs[0].imshow(source_term1[:, :, 32], origin='lower') # , vmin=min_val, vmax=max_val)
+    #     axs[0].set_title("riemann flux based source term (problem)")
+    #     divider1 = make_axes_locatable(axs[0])
+    #     cax1 = divider1.append_axes('right', size='5%', pad=0.05)
+    #     fig.colorbar(im1, cax=cax1, orientation='vertical')
 
-    conserved_state = conserved_state + dt * source_term
+    #     im2 = axs[1].imshow(source_term2[:, :, 32], origin='lower') # , vmin=min_val, vmax=max_val)
+    #     axs[1].set_title("rho * v * acceleration based source term (works)")
+    #     divider2 = make_axes_locatable(axs[1])
+    #     cax2 = divider2.append_axes('right', size='5%', pad=0.05)
+    #     fig.colorbar(im2, cax=cax2, orientation='vertical')
 
-    primitive_state = primitive_state_from_conserved(conserved_state, gamma, config, registered_variables)
+    #     # plot the pressure field with log color scale
+    #     im3 = axs[2].imshow(pressure, origin='lower', norm=LogNorm())
+    #     axs[2].set_title("pressure field")
+    #     divider3 = make_axes_locatable(axs[2])
+    #     cax3 = divider3.append_axes('right', size='5%', pad=0.05)
+    #     fig.colorbar(im3, cax=cax3, orientation='vertical')
 
-    primitive_state = _boundary_handler(primitive_state, config)
 
-    return primitive_state
+    #     plt.tight_layout()
+    #     plt.savefig("source_term_comparison{axis}.png".format(axis = axis))
+
+    #     plt.close()
+
+
+    # jax.debug.callback(plot_source_terms, source1, source2, primitive_state[registered_variables.pressure_index][:, :, 32])
+
+
+# -------------------------------------------------------------
+# ================= ↑ not yet finished stuff ↑ ================
+# -------------------------------------------------------------

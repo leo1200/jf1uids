@@ -144,13 +144,28 @@ def _evolve_gas_state(
 
         primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt/2, gamma, config, helper_data, registered_variables, 1)
         primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 2)
-
-
-
         primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt/2, gamma, config, helper_data, registered_variables, 1)
+
     elif config.dimensionality == 3:
 
-        # def get_flux(primitive_state, dt):
+        old_primitive_state = primitive_state
+
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 3)
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
+
+        if config.self_gravity:
+            primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, registered_variables, helper_data, gamma, gravitational_constant, dt)
+
+        # ======================================================================
+
+        # not working attempt at implementing
+        # the Mullen source term
+        # https://arxiv.org/abs/2012.01340
+
+                # def get_flux(primitive_state, dt):
         #     conserved_state = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
         #     # advance in x by dt/2 -> y by dt/2 -> z by dt -> y by dt/2 -> x by dt/2
         #     primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
@@ -227,17 +242,7 @@ def _evolve_gas_state(
 
         # primitive_state = primitive_state_from_conserved(conserved_state_two, gamma, config, registered_variables)
 
-        old_primitive_state = primitive_state
-
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 3)
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
-
-        if config.self_gravity:
-            primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, registered_variables, helper_data, gamma, gravitational_constant, dt)
-
+        # ======================================================================
 
     else:
         raise ValueError("Dimensionality not supported.")
