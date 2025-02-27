@@ -36,6 +36,14 @@ pip install jf1uids
 |:------------------------------------------------------------------:|:-------------------------------------------------:|
 | Orszag-Tang Vortex                                                 | 3D Collapse                                       |
 
+| ![Gradients Through Stellar Wind](notebooks/figures/gradients_through_stellar_wind.svg) |
+|:---------------------------------------------------------------------------------------:|
+| Gradients Through Stellar Wind                                                          |
+
+| ![Wind Parameter Optimization](notebooks/figures/wind_parameter_optimization.png) |
+|:---------------------------------------------------------------------------------:|
+| Wind Parameter Optimization                                                       |
+
 
 ## Citable References
 
