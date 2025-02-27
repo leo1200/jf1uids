@@ -29,8 +29,10 @@ def _calculate_limited_gradients(
 
     Args:
         primitive_state: The primitive state array.
-        grid_spacing_or_rv: Usually the cell width, for spherical geometry the volumetric centers of the cells.
-        axis: The array axis along which the gradients are calculated, = 1 for x (0th axis are the variables).
+        grid_spacing_or_rv: Usually the cell width, for spherical 
+        geometry the volumetric centers of the cells.
+        axis: The array axis along which the gradients are calculated,
+        = 1 for x (0th axis are the variables).
         geometry: The geometry of the domain.
 
     Returns:
@@ -38,7 +40,8 @@ def _calculate_limited_gradients(
 
     """
 
-    # TODO: improve shape annotations, two smaller in the flux_direction_index dimension
+    # TODO: improve shape annotations, two smaller 
+    # in the flux_direction_index dimension
     # or maybe better: equal shapes everywhere
 
     # get array sizee along the axis

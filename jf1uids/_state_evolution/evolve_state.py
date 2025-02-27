@@ -227,16 +227,17 @@ def _evolve_gas_state(
 
         # primitive_state = primitive_state_from_conserved(conserved_state_two, gamma, config, registered_variables)
 
+        old_primitive_state = primitive_state
 
         primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
         primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
         primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 3)
-
-        if config.self_gravity:
-            primitive_state = _apply_self_gravity(primitive_state, config, registered_variables, helper_data, gamma, gravitational_constant, dt)
-
         primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
         primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
+
+        if config.self_gravity:
+            primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, registered_variables, helper_data, gamma, gravitational_constant, dt)
+
 
     else:
         raise ValueError("Dimensionality not supported.")
