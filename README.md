@@ -11,17 +11,15 @@
 
 ## Installation
 
-NOTE: The current PyPi version is not up-to-date. For now, please clone (download) the repository and install via
-
-```bash
-pip install .
-```
-
-An up-to-date PyPi installation will soon be available via
+`jf1uids` can be installed via `pip`
 
 ```bash
 pip install jf1uids
 ```
+
+Note that if `JAX` is not yet installed, only the CPU version of `JAX` will be installed
+as a dependency. For a GPU-compatible installation of `JAX`, please refer to the
+[JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html).
 
 ## Notebooks for Getting Started
 

@@ -5,6 +5,3 @@
 
 .. autodoc2-docstring:: jf1uids._geometry.boundaries
    :allowtitles:
-
-Module Contents
----------------

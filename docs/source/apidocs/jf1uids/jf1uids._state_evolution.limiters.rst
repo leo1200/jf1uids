@@ -1,5 +1,5 @@
 :py:mod:`jf1uids._state_evolution.limiters`
-==================================================
+===========================================
 
 .. py:module:: jf1uids._state_evolution.limiters
 

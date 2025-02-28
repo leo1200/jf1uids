@@ -18,9 +18,10 @@ from typing import Union
 from jax.numpy.fft import fftn, ifftn
 
 # jf1uids data classes
+from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import SimulationConfig
+from jf1uids.option_classes.simulation_config import STATE_TYPE_ALTERED, SimulationConfig
 
 # jf1uids constants
 from jf1uids.option_classes.simulation_config import FIELD_TYPE, HLL, HLLC, OPEN_BOUNDARY, PERIODIC_BOUNDARY, STATE_TYPE
@@ -39,11 +40,21 @@ def _compute_gravitational_potential(
     gas_density: FIELD_TYPE,
     grid_spacing: float,
     config: SimulationConfig,
-    G: Union[float, Float[Array, ""]] = 1.0,
-    background_density: float = 0.0
+    G: Union[float, Float[Array, ""]] = 1.0
 ) -> FIELD_TYPE:
     """
-    Compute the gravitational potential using FFT to solve Poisson's equation.
+    Compute the gravitational potential using FFT to solve Poisson's equation for
+    periodic and open boundaries (via the Hockney & Eastwood method).
+
+    Args:
+        gas_density: The gas density field.
+        grid_spacing: The grid spacing.
+        config: The simulation configuration.
+        G: The gravitational constant.
+
+    Returns:
+        The gravitational potential.
+
     """
 
     # TODO: remove ghost cells in this computations (?)
@@ -123,7 +134,7 @@ def _compute_gravitational_potential(
         extended_shape = tuple(2 * s for s in original_shape)
 
         # Embed the original density in the (0,...,0) corner of the extended grid.
-        extended_density = jnp.zeros(extended_shape, dtype=gas_density.dtype) + background_density
+        extended_density = jnp.zeros(extended_shape, dtype=gas_density.dtype)
         slices = tuple(slice(0, s) for s in original_shape)
         extended_density = extended_density.at[slices].set(gas_density)
 
@@ -180,7 +191,7 @@ def _compute_gravitational_potential(
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['axis', 'grid_spacing', 'registered_variables', 'config'])
-def _conservative_gravitational_source_term_along_axis(
+def _gravitational_source_term_along_axis(
         gravitational_potential: FIELD_TYPE,
         primitive_state: STATE_TYPE,
         grid_spacing: float,
@@ -191,22 +202,35 @@ def _conservative_gravitational_source_term_along_axis(
         helper_data: HelperData,
         axis: int,
 ) -> STATE_TYPE:
+    
+    """
+    Compute the source term for the self-gravity solver along a single axis.
+    Currently, simply density * gravitational_acceleration for the momentum 
+    and density * velocity * gravitational_acceleration for the energy.
 
-    num_cells = primitive_state.shape[axis]
+    Args:
+        gravitational_potential: The gravitational potential.
+        primitive_state: The primitive state.
+        grid_spacing: The grid spacing.
+        registered_variables: The registered variables.
+        dt: The time step.
+        gamma: The adiabatic index.
+        config: The simulation configuration.
+        helper_data: The helper data.
+        axis: The axis along which to compute the source term.
+
+    Returns:
+        The source term.
+    
+    """
 
     rho = primitive_state[registered_variables.density_index]
     v_axis = primitive_state[axis]
 
-    acceleration = jnp.zeros_like(gravitational_potential)
-    selection = (slice(None),) * (axis - 1) + (slice(1,-1),) + (slice(None),)*(primitive_state.ndim - axis - 2)
-
-    # central difference acceleration
-    acceleration = acceleration.at[selection].set(
-        -1 * (
-            jax.lax.slice_in_dim(gravitational_potential, 2, num_cells, axis = axis - 1) - 
-            jax.lax.slice_in_dim(gravitational_potential, 0, num_cells - 2, axis = axis - 1)
-        ) / (2 * grid_spacing)
-    )
+    # a_i = - (phi_{i+1} - phi_{i-1}) / (2 * dx)
+    acceleration = -_stencil_add(gravitational_potential, 1, -1, axis - 1, factorB = -1.0) / (2 * grid_spacing)
+    # it is axis - 1 because the axis is 1-indexed as usually the zeroth axis are the different
+    # fields in the state vector not the spatial dimensions, but here we only have the spatial dimensions
 
     source_term = jnp.zeros_like(primitive_state)
 
@@ -255,14 +279,14 @@ def _apply_self_gravity(
     dt: Union[float, Float[Array, ""]]
 ) -> STATE_TYPE:
 
-    rho = primitive_state[registered_variables.density_index]
+    rho = old_primitive_state[registered_variables.density_index]
 
     potential = _compute_gravitational_potential(rho, config.grid_spacing, config, gravitational_constant)
 
     source_term = jnp.zeros_like(primitive_state)
 
     for i in range(config.dimensionality):
-        source_term = source_term + _conservative_gravitational_source_term_along_axis(
+        source_term = source_term + _gravitational_source_term_along_axis(
                                         potential,
                                         old_primitive_state,
                                         config.grid_spacing,
@@ -450,9 +474,9 @@ def _apply_self_gravity(
     # jax.debug.print("flux shape: {fs}, min flux right: {mifs}, max_flux_right: {mafa}, min_acc_left: {mial}, max_acc_left: {maal}, min source term: {mist}, max source term: {mast}", fs = fluxes.shape, mifs = jnp.min(fluxes_right), mafa = jnp.max(fluxes_right), mial = jnp.min(acceleration_left), maal = jnp.max(acceleration_left), mist = jnp.min(source_term), mast = jnp.max(source_term))
 
     # print the deviation between the two source term calculations
-    source1 = source_term[registered_variables.pressure_index]
+    # source1 = source_term[registered_variables.pressure_index]
     # source1 = source1[2:-2, 2:-2, 2:-2]
-    source2 = rho * v_axis * acceleration
+    # source2 = rho * v_axis * acceleration
     # source2 = source2[2:-2, 2:-2, 2:-2]
     # deviation = jnp.sum(jnp.abs(source1 - source2))
     # max_deviation_index = jnp.argmax(jnp.abs(source1 - source2))

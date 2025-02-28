@@ -5,13 +5,15 @@
 
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../jf1uids'))  # Source code dir relative to this file
+# sys.path.insert(0, os.path.abspath('../../jf1uids'))  # Source code dir relative to this file
+
+# import jf1uids
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'jf1uids'
-copyright = '2024'
+copyright = '2025'
 author = 'Leonard Storcks at <a href="https://astroai-lab.de/index.html">AstroAi Lab</a>.'
 
 # -- General configuration ---------------------------------------------------
@@ -52,7 +54,7 @@ autodoc2_packages = [
 ]
 
 autodoc2_hidden_objects = ["inherited", "private"]
-autodoc2_module_summary = False
+autodoc2_module_summary = True
 
 myst_amsmath_enable = True
 myst_enable_extensions = [
@@ -77,7 +79,7 @@ autosummary_generate = True
 
 napolean_use_rtype = False
 
-templates_path = ['_templates']
+# templates_path = ['_templates']
 exclude_patterns = []
 
 # notebook compilation
@@ -88,7 +90,7 @@ nb_execution_mode = "off"
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = 'sphinx_book_theme'
-html_static_path = ['_static']
+# html_static_path = ['_static']
 
 html_logo = "jf1uids_logo.svg"
 

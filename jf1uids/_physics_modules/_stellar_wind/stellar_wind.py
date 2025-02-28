@@ -193,23 +193,20 @@ def _wind_ei3D(wind_params: WindParams, primitive_state: STATE_TYPE, dt: Float[A
     V = 4/3 * jnp.pi * r_inj**3
 
     # for now only allow injection at the box center
-    injection_mask = helper_data.r <= r_inj
-
-    # create a gaussian weighting mask for the injection with sigma = 1/3 of the injection radius
-    # sigma = r_inj
-    # gaussian_mask = jnp.exp(-0.5 * helper_data.r**2 / sigma**2)
-    # gaussian_mask = jnp.where(injection_mask, gaussian_mask, 0)
-    # # normalize the mask
-    # gaussian_mask = gaussian_mask / jnp.sum(gaussian_mask) * jnp.sum(injection_mask)
-    gaussian_mask = injection_mask
+    injection_mask = helper_data.r <= r_inj - config.grid_spacing / 2
+    # overlap_weights = (r_inj + config.grid_spacing / 2 - helper_data.r) / config.grid_spacing
+    # overlap_mask = (helper_data.r > r_inj - config.grid_spacing / 2) & (helper_data.r < r_inj + config.grid_spacing / 2)
+    # overlap_weights = overlap_weights * overlap_mask
+    # injection_mask = injection_mask | overlap_mask
+    # injection_mask = injection_mask / jnp.sum(injection_mask * config.grid_spacing**3) * V
 
     # mass injection
     drho_dt = wind_params.wind_mass_loss_rate / V
     # source_term = source_term.at[registered_variables.density_index].set(jnp.where(injection_mask, drho_dt, source_term[registered_variables.density_index]))
-    source_term = source_term.at[registered_variables.density_index].set(drho_dt * gaussian_mask)
+    source_term = source_term.at[registered_variables.density_index].set(drho_dt * injection_mask)
 
     updated_density = primitive_state[registered_variables.density_index]
-    updated_density = jnp.where(injection_mask, updated_density + drho_dt * dt * gaussian_mask, updated_density)
+    updated_density = jnp.where(injection_mask > 0, updated_density + drho_dt * dt * injection_mask, updated_density)
 
     # scale down the velocity in the primitive state to conserve momentum
     # density_ratio = updated_density / primitive_state[registered_variables.density_index]
@@ -219,11 +216,10 @@ def _wind_ei3D(wind_params: WindParams, primitive_state: STATE_TYPE, dt: Float[A
 
     # energy injection
     dE_dt = 0.5 * wind_params.wind_final_velocity**2 * wind_params.wind_mass_loss_rate / V
-
     u = jnp.sqrt(primitive_state[registered_variables.velocity_index.x]**2 + primitive_state[registered_variables.velocity_index.y]**2 + primitive_state[registered_variables.velocity_index.z]**2)
     dp_dt = pressure_from_energy(dE_dt, updated_density, u, gamma)
     
-    source_term = source_term.at[registered_variables.pressure_index].set(dp_dt * gaussian_mask)
+    source_term = source_term.at[registered_variables.pressure_index].set(dp_dt * injection_mask)
 
     primitive_state = primitive_state + source_term * dt
 
