@@ -228,7 +228,7 @@ def _gravitational_source_term_along_axis(
     v_axis = primitive_state[axis]
 
     # a_i = - (phi_{i+1} - phi_{i-1}) / (2 * dx)
-    acceleration = -_stencil_add(gravitational_potential, 1, -1, axis - 1, factorB = -1.0) / (2 * grid_spacing)
+    acceleration = -_stencil_add(gravitational_potential, indices = (1, -1), factors = (1.0, -1.0), axis = axis - 1) / (2 * grid_spacing)
     # it is axis - 1 because the axis is 1-indexed as usually the zeroth axis are the different
     # fields in the state vector not the spatial dimensions, but here we only have the spatial dimensions
 
