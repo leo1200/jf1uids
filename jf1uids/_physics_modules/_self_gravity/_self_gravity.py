@@ -242,21 +242,25 @@ def _gravitational_source_term_along_axis(
 
     # ===============================================
 
-    # attempt at implementing the ATHENA source term
-    # https://github.com/PrincetonUniversity/athena/blob/master/src/hydro/srcterms/self_gravity.cpp
+    # # attempt at implementing the ATHENA source term
+    # # https://github.com/PrincetonUniversity/athena/blob/master/src/hydro/srcterms/self_gravity.cpp
 
     # num_cells = primitive_state.shape[axis]
 
     # primitive_state_left, primitive_state_right = _reconstruct_at_interface(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
 
     # # these are now approximate fluxes, starting at the flux between cell 1 and 2
-    # # fluxesX = ((fluxes_left + fluxes_right) / 2)[0]
     # fluxes = _hllc_solver(primitive_state_left, primitive_state_right, gamma, config, registered_variables, axis)[0]
 
     # # these are the accelerations at the cell interfaces, starting at the interface between cell 1 and 2
     # acc = -(jax.lax.slice_in_dim(gravitational_potential, 2, num_cells - 1, axis = axis - 1) - jax.lax.slice_in_dim(gravitational_potential, 1, num_cells - 2, axis = axis - 1)) / (grid_spacing)
 
-    # sources = 0.5 * (jax.lax.slice_in_dim(fluxes, 0, -1, axis = axis - 1) * jax.lax.slice_in_dim(acc, 0, -1, axis = axis - 1) + jax.lax.slice_in_dim(fluxes, 1, None, axis = axis - 1) * jax.lax.slice_in_dim(acc, 1, None, axis = axis - 1))
+
+    # weighting_measure = primitive_state[registered_variables.pressure_index] + 0.01 * jnp.abs(primitive_state[axis])
+    # weights_left = (jax.lax.slice_in_dim(weighting_measure, 2, -2, axis = axis - 1) / (jax.lax.slice_in_dim(weighting_measure, 1, -3, axis = axis - 1) + jax.lax.slice_in_dim(weighting_measure, 2, -2, axis = axis - 1)))
+    # weights_right = (jax.lax.slice_in_dim(weighting_measure, 2, -2, axis = axis - 1) / (jax.lax.slice_in_dim(weighting_measure, 2, -2, axis = axis - 1) + jax.lax.slice_in_dim(weighting_measure, 3, -1, axis = axis - 1)))
+
+    # sources = weights_left * jax.lax.slice_in_dim(fluxes, 0, -1, axis = axis - 1) * jax.lax.slice_in_dim(acc, 0, -1, axis = axis - 1) + weights_right * jax.lax.slice_in_dim(fluxes, 1, None, axis = axis - 1) * jax.lax.slice_in_dim(acc, 1, None, axis = axis - 1)
 
     # selection2 = (slice(None),) * (axis - 1) + (slice(2,-2),) + (slice(None),)*(primitive_state.ndim - axis - 2)
 

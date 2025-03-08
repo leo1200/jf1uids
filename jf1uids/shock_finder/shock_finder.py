@@ -1,44 +1,53 @@
 import jax.numpy as jnp
+import jax
 
-def shock_sensor(primitive_state):
+
+@jax.jit
+def shock_sensor(pressure):
     """
     WENO-JS smoothness indicator for shock detection.
     """
-    _, _, p = primitive_state
-    return (1/4 * (p[2:] - p[:-2])**2 + 13 / 12 * (p[2:] - 2 * p[1:-1] + p[:-2]))
+    shock_sensors = jnp.zeros_like(pressure)
+    shock_sensors = shock_sensors.at[1:-1].set((1/4 * (pressure[2:] - pressure[:-2])**2 + 13 / 12 * (pressure[2:] - 2 * pressure[1:-1] + pressure[:-2])))
+    return shock_sensors
 
-def strongest_shock_radius(primitive_state, helper_data, padL, padR):
-    """
-    Compute the radius of the strongest shock in the domain.
-    """
-    r = helper_data.geometric_centers[padL + 1: -padR - 1]
-    shock_sensors = shock_sensor(primitive_state)[padL: -padR]
-    max_shock_idx = jnp.argmax(shock_sensors)
-    return (r[max_shock_idx - 1] * shock_sensors[max_shock_idx - 1] + r[max_shock_idx] * shock_sensors[max_shock_idx] + r[max_shock_idx + 1] * shock_sensors[max_shock_idx + 1]) / (shock_sensors[max_shock_idx - 1] + shock_sensors[max_shock_idx] + shock_sensors[max_shock_idx + 1])
+@jax.jit
+def find_shock_zone(pressure):
 
-def strongest_shock_dissipated_energy_flux(primitive_state, gamma, padL, padR, statePad):
-    """
-    Compute the dissipated energy flux due to the strongest shock in the domain.
-    """
-    shock_sensors = shock_sensor(primitive_state)[padL: -padR]
-    primitive_state = primitive_state[:, padL + 1: -padR - 1]
-    max_shock_idx = jnp.argmax(shock_sensors)
-    
-    # get the pre and post shock states
-    rho1, v1, P1 = primitive_state[:, max_shock_idx + statePad]
-    rho2, v2, P2 = primitive_state[:, max_shock_idx - statePad]
+    num_cells = pressure.shape[0]
 
-    c1 = jnp.sqrt(gamma * P1 / rho1)
+    sensors = shock_sensor(pressure)
 
-    e_th1 = P1 / ((gamma - 1))
-    e_th2 = P2 / ((gamma - 1))
+    max_shock_idx = jnp.argmax(sensors)
 
-    x_s = rho2 / rho1
+    bound_val = 0.05 * jnp.max(sensors)
 
-    e_diss = e_th2 - e_th1 * x_s ** gamma
+    to_next_pressure_differences = jnp.zeros_like(pressure)
+    to_next_pressure_differences = jnp.abs(to_next_pressure_differences.at[:-1].set(pressure[1:] - pressure[:-1]))
 
-    M_1_sq = (P2 / P1 - 1) * x_s / (gamma * (x_s - 1))
+    bound_diff = 0.1 * to_next_pressure_differences[max_shock_idx]
 
-    f_diss = e_diss * jnp.sqrt(M_1_sq) * c1 / x_s
+    # find the first index left and right
+    # of the max_shock_idx where the sensor is
+    # smaller than bound
 
-    return f_diss
+    indices = jnp.arange(num_cells)
+    left_indices = jnp.where((indices < max_shock_idx) & ((to_next_pressure_differences < bound_diff)), indices, -1)
+    right_indices = jnp.where((indices > max_shock_idx) & ((sensors < bound_val) | (to_next_pressure_differences < bound_diff)), indices, num_cells)
+
+    left_idx = jnp.max(left_indices)
+    right_idx = jnp.min(right_indices)
+
+    return left_idx, right_idx
+
+
+# @partial(jax.jit, static_argnames=['registered_variables'])
+# def strongest_shock_radius(primitive_state, helper_data, registered_variables):
+#     """
+#     Compute the radius of the strongest shock in the domain.
+#     """
+#     r = helper_data.geometric_centers
+#     shock_sensors = shock_sensor(primitive_state[registered_variables.pressure_index])
+#     max_shock_idx = jnp.argmax(shock_sensors)
+#     return (r[max_shock_idx - 1] * shock_sensors[max_shock_idx - 1] + r[max_shock_idx] * shock_sensors[max_shock_idx] + r[max_shock_idx + 1] * shock_sensors[max_shock_idx + 1]) / (shock_sensors[max_shock_idx - 1] + shock_sensors[max_shock_idx] + shock_sensors[max_shock_idx + 1])
+

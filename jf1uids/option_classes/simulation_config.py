@@ -1,6 +1,7 @@
 from types import NoneType
 from typing import NamedTuple, Union
 
+from jf1uids._physics_modules._cosmic_rays.cosmic_ray_options import CosmicRayConfig
 from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindConfig
 
 from jaxtyping import Array, Float
@@ -181,7 +182,7 @@ class SimulationConfig(NamedTuple):
     wind_config: WindConfig = WindConfig()
 
     #: Cosmic rays
-    simplified_cosmic_rays: bool = False
+    cosmic_ray_config: CosmicRayConfig = CosmicRayConfig()
 
 
 def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:

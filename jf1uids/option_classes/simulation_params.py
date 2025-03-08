@@ -1,5 +1,6 @@
 from typing import NamedTuple
 
+from jf1uids._physics_modules._cosmic_rays.cosmic_ray_options import CosmicRayParams
 from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindParams
 
 class SimulationParams(NamedTuple):
@@ -28,3 +29,6 @@ class SimulationParams(NamedTuple):
 
     #: The parameters of the stellar wind module.
     wind_params: WindParams = WindParams()
+
+    #: Cosmic ray parameters
+    cosmic_ray_params: CosmicRayParams = CosmicRayParams()

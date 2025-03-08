@@ -1,19 +1,21 @@
+from typing import Union
 import jax
 from functools import partial
 
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
 
+from jf1uids._physics_modules._cosmic_rays.cr_injection import inject_crs_at_strongest_shock_radial1D
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfig
+from jf1uids.option_classes.simulation_config import SPHERICAL, STATE_TYPE, SimulationConfig
 from jf1uids.option_classes.simulation_params import SimulationParams
 from jf1uids._physics_modules._stellar_wind.stellar_wind import _wind_injection
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _run_physics_modules(primitive_state: STATE_TYPE, dt: Float[Array, ""], config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables) -> STATE_TYPE:
+def _run_physics_modules(primitive_state: STATE_TYPE, dt: Float[Array, ""], config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables, current_time: Union[float, Float[Array, ""]]) -> STATE_TYPE:
     """Run all the physics modules. The physics modules are switched on/off and
     configured in the simulation configuration. Parameters for the physics modules
     (with respect to which the simulation can be differentiated) are stored in the
@@ -36,5 +38,16 @@ def _run_physics_modules(primitive_state: STATE_TYPE, dt: Float[Array, ""], conf
 
         # we might want to run the boundary handler after all physics modules have completed
         # primitive_state = _boundary_handler(primitive_state, config.left_boundary, config.right_boundary)
+
+    if config.cosmic_ray_config.diffusive_shock_acceleration:
+        if config.dimensionality != 1 or config.geometry != SPHERICAL:
+            raise ValueError("Cosmic ray diffusive shock acceleration is only implemented for 1D spherical geometry.")
+        
+        primitive_state = jax.lax.cond(
+            current_time > params.cosmic_ray_params.diffusive_shock_acceleration_start_time,
+            lambda primitive_state: inject_crs_at_strongest_shock_radial1D(primitive_state, params.gamma, helper_data, params.cosmic_ray_params, registered_variables, dt),
+            lambda primitive_state: primitive_state,
+            primitive_state
+        )
 
     return primitive_state

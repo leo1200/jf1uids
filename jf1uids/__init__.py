@@ -10,7 +10,5 @@ from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindPara
 # run
 from jf1uids.time_stepping.time_integration import time_integration
 
-# postprocessing
-from jf1uids.shock_finder.shock_finder import strongest_shock_radius
 # units
 from jf1uids.units import CodeUnits

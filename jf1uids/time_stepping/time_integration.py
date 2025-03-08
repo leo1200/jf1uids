@@ -65,7 +65,7 @@ def time_integration(
 
     if config.runtime_debugging:
         
-        errors = checkify.user_checks | checkify.index_checks | checkify.float_checks
+        errors = checkify.user_checks | checkify.index_checks | checkify.float_checks | checkify.nan_checks | checkify.div_checks
         checked_integration = checkify.checkify(_time_integration, errors)
 
         err, final_state = checked_integration(primitive_state, config, params, helper_data, registered_variables, snapshot_callable)
@@ -192,9 +192,9 @@ def _time_integration(
         # so the source is handled via a simple Euler step but generally 
         # a higher order method (in a split fashion) may be used
 
-        state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
+        state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables, time)
         state = _evolve_state(state, dt, params.gamma, params.gravitational_constant, config, helper_data, registered_variables)
-        state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables)
+        state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables, time + dt)
 
         time += dt
 

@@ -9,6 +9,7 @@ from jaxtyping import Array, Float, jaxtyped
 from typing import Union
 
 # jf1uids containers
+from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import total_energy_from_primitives_with_crs
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfig
 from jf1uids.data_classes.simulation_helper_data import HelperData
@@ -24,10 +25,14 @@ def calculate_internal_energy(state, helper_data, gamma, config, registered_vari
     num_ghost_cells = config.num_ghost_cells
     p = state[registered_variables.pressure_index]
 
+    if config.cosmic_ray_config.cosmic_rays:
+        gamma_cr = 4/3
+        p = p - state[registered_variables.cosmic_ray_n_index]  ** gamma_cr
+
     internal_energy = p / (gamma - 1)
 
     if config.dimensionality == 1:
-        return jnp.sum(internal_energy * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])
+        return jnp.sum(internal_energy[num_ghost_cells:-num_ghost_cells] * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])
     else:
         return jnp.sum(internal_energy * config.grid_spacing**config.dimensionality)
 
@@ -43,7 +48,7 @@ def calculate_kinetic_energy(state, helper_data, config, registered_variables):
     kinetic_energy = 0.5 * rho * u ** 2
 
     if config.dimensionality == 1:
-        return jnp.sum(kinetic_energy * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])
+        return jnp.sum(kinetic_energy[num_ghost_cells:-num_ghost_cells] * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])
     else:
         return jnp.sum(kinetic_energy * config.grid_spacing**config.dimensionality)
 
@@ -94,7 +99,10 @@ def calculate_total_energy(
     u = get_absolute_velocity(primitive_state, config, registered_variables)
     p = primitive_state[registered_variables.pressure_index]
 
-    energy = total_energy_from_primitives(rho, u, p, gamma)
+    if config.cosmic_ray_config.cosmic_rays:
+        energy = total_energy_from_primitives_with_crs(primitive_state, registered_variables)
+    else:
+        energy = total_energy_from_primitives(rho, u, p, gamma)
 
     if config.self_gravity:
         potential = _compute_gravitational_potential(rho, config.grid_spacing, config, gravitational_constant)

@@ -103,7 +103,7 @@ def get_registered_variables(config: SimulationConfig) -> RegisteredVariables:
         registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 1)
         registered_variables = registered_variables._replace(wind_density_active = True)
 
-    if config.simplified_cosmic_rays:
+    if config.cosmic_ray_config.cosmic_rays:
         registered_variables = registered_variables._replace(cosmic_ray_n_index = registered_variables.num_vars)
         registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 1)
         registered_variables = registered_variables._replace(cosmic_ray_n_active = True)

@@ -14,6 +14,7 @@ from typing import Union
 # general jf1uids imports
 from jf1uids._physics_modules._mhd._magnetic_field_update import magnetic_update
 from jf1uids._physics_modules._self_gravity._self_gravity import _apply_self_gravity, _compute_gravitational_potential, _gravitational_source_term_along_axis # , _mullen_source_along_axis, _mullen_source_along_axis2
+from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import CARTESIAN, HLL, HLLC, SPHERICAL, STATE_TYPE, SimulationConfig
@@ -64,7 +65,7 @@ def _evolve_state_along_axis(
 
     # usual cartesian case
     if config.geometry == CARTESIAN:
-        conserved_change = -1 / grid_spacing * (jax.lax.slice_in_dim(fluxes, 1, flux_length, axis = axis) - jax.lax.slice_in_dim(fluxes, 0, flux_length - 1, axis = axis)) * dt
+        conserved_change = -1 / grid_spacing * _stencil_add(fluxes, indices = (0, -1), factors = (1.0, -1.0), axis = axis, zero_pad = False) * dt
 
     # in spherical geometry, we have to take special care
     elif config.geometry == SPHERICAL and config.dimensionality == 1 and axis == 1:

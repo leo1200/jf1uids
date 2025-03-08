@@ -64,7 +64,7 @@ def _stencil_add(
                 input_array,
                 first_handled_index,
                 last_handled_index,
-                axis=axis
+                axis = axis
             )
             for factor, first_handled_index, last_handled_index in zip(
                 factors, first_handled_indices, last_handled_indices
