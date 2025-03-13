@@ -192,9 +192,9 @@ def _time_integration(
         # so the source is handled via a simple Euler step but generally 
         # a higher order method (in a split fashion) may be used
 
-        state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables, time)
+        # state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables, time)
+        state = _run_physics_modules(state, dt, config, params, helper_data, registered_variables, time + dt)
         state = _evolve_state(state, dt, params.gamma, params.gravitational_constant, config, helper_data, registered_variables)
-        state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables, time + dt)
 
         time += dt
 

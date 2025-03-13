@@ -1,6 +1,23 @@
+from functools import partial
 import jax.numpy as jnp
 import jax
 
+# @partial(jax.jit, static_argnames=['registered_variables'])
+# def shock_criteria1D(primitive_state, registered_variables):
+#     """
+#     Compute the shock criteria for each cell in the domain.
+#     """
+
+#     # Extract the pressure
+#     velocity = primitive_state[registered_variables.velocity_index]
+#     pressure = primitive_state[registered_variables.pressure_index]
+#     density = primitive_state[registered_variables.density_index]
+
+#     # central difference 1d divergence
+#     div_v = jnp.zeros_like(velocity)
+#     div_v = div_v.at[1:-1].set((velocity[2:] - velocity[:-2]) / 2)
+
+#     return div_v < 0
 
 @jax.jit
 def shock_sensor(pressure):
@@ -12,11 +29,16 @@ def shock_sensor(pressure):
     return shock_sensors
 
 @jax.jit
-def find_shock_zone(pressure):
+def find_shock_zone(pressure, velocity):
 
     num_cells = pressure.shape[0]
 
     sensors = shock_sensor(pressure)
+
+    div_v = jnp.zeros_like(velocity)
+    div_v = div_v.at[1:-1].set((velocity[2:] - velocity[:-2]) / 2)
+
+    sensors = jnp.where(div_v < 0, sensors, 0)
 
     max_shock_idx = jnp.argmax(sensors)
 

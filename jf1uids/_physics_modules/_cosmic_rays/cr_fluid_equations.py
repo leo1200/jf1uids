@@ -88,3 +88,22 @@ def total_pressure_from_conserved_with_crs(
     total_pressure = cosmic_ray_pressure + gas_pressure
 
     return total_pressure
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['registered_variables'])
+def speed_of_sound_crs(
+        primitive_state: Float[Array, "num_vars num_cells"],
+        registered_variables: RegisteredVariables
+    ) -> Float[Array, "num_cells"]:
+
+    # TODO: get from params
+    gamma_cr = 4/3
+    gamma_gas = 5/3
+
+    # get the cosmic ray pressure
+    cosmic_ray_pressure = primitive_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
+
+    # get the gas pressure
+    gas_pressure = primitive_state[registered_variables.pressure_index] - cosmic_ray_pressure
+
+    return jnp.sqrt((gamma_gas * gas_pressure + gamma_cr * cosmic_ray_pressure) / primitive_state[registered_variables.density_index])
