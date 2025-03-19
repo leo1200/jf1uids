@@ -11,13 +11,14 @@ import jax
 # typing
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
-from typing import Union
+from typing import Tuple, Union
 
 # fft, in the future use
 # https://github.com/DifferentiableUniverseInitiative/JaxPM
 from jax.numpy.fft import fftn, ifftn
 
 # jf1uids data classes
+from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import speed_of_sound_crs
 from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
@@ -31,7 +32,7 @@ from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids._riemann_solver.hll import _hll_solver, _hllc_solver
 from jf1uids._state_evolution.reconstruction import _reconstruct_at_interface
 from jf1uids.fluid_equations.euler import _euler_flux
-from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, primitive_state_from_conserved
+from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, primitive_state_from_conserved, speed_of_sound
 
 
 @jaxtyped(typechecker=typechecker)
@@ -268,6 +269,28 @@ def _gravitational_source_term_along_axis(
 
     # ===============================================
 
+    # ===============================================
+
+    # another attempt at a different source term idea
+
+    num_cells = primitive_state.shape[axis]
+
+    primitive_state_left, primitive_state_right = _reconstruct_at_interface(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
+    
+    # first is 1 -> 2 and 2 -> 1
+    fluxes_i_to_ip1, fluxes_ip1_to_i = _hll_dummy(primitive_state_left, primitive_state_right, gamma, config, registered_variables, axis)
+
+    # these are the accelerations at the cell interfaces, starting at the interface between cell 1 and 2
+    acc = -(jax.lax.slice_in_dim(gravitational_potential, 2, num_cells - 1, axis = axis - 1) - jax.lax.slice_in_dim(gravitational_potential, 1, num_cells - 2, axis = axis - 1)) / (grid_spacing)
+
+    fluxes_acc = jnp.zeros_like(primitive_state)
+    selection = (slice(None),) * (axis) + (slice(2,-2),) + (slice(None),)*(primitive_state.ndim - axis - 1)
+    fluxes_acc = fluxes_acc.at[selection].set(jax.lax.slice_in_dim(fluxes_i_to_ip1, 1, None, axis = axis) * jax.lax.slice_in_dim(acc, 1, None, axis = axis - 1) + jax.lax.slice_in_dim(fluxes_ip1_to_i, 0, -1, axis = axis) * jax.lax.slice_in_dim(acc, 0, -1, axis = axis - 1))
+
+    source_term = source_term.at[registered_variables.pressure_index].set(fluxes_acc[0])
+
+    # ===============================================
+
     return source_term
 
 @jaxtyped(typechecker=typechecker)
@@ -316,6 +339,55 @@ def _apply_self_gravity(
 # -------------------------------------------------------------
 # ================= ↓ not yet finished stuff ↓ ================
 # -------------------------------------------------------------
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'registered_variables', 'flux_direction_index'])
+def _hll_dummy(primitives_left: STATE_TYPE, primitives_right: STATE_TYPE, gamma: Union[float, Float[Array, ""]], config: SimulationConfig, registered_variables: RegisteredVariables, flux_direction_index: int) -> Tuple[STATE_TYPE, STATE_TYPE]:
+    
+    rho_L = primitives_left[registered_variables.density_index]
+
+    u_L = primitives_left[flux_direction_index]
+
+    rho_R = primitives_right[registered_variables.density_index]
+
+    u_R = primitives_right[flux_direction_index]
+
+    p_L = primitives_left[registered_variables.pressure_index]
+    p_R = primitives_right[registered_variables.pressure_index]
+
+    # calculate the sound speeds
+    if not config.cosmic_ray_config.cosmic_rays:
+        c_L = speed_of_sound(rho_L, p_L, gamma)
+        c_R = speed_of_sound(rho_R, p_R, gamma)
+    else:
+        c_L = speed_of_sound_crs(primitives_left, registered_variables)
+        c_R = speed_of_sound_crs(primitives_right, registered_variables)
+
+    # get the left and right states and fluxes
+    fluxes_left = _euler_flux(primitives_left, gamma, config, registered_variables, flux_direction_index)
+    fluxes_right = _euler_flux(primitives_right, gamma, config, registered_variables, flux_direction_index)
+    
+    # very simple approach for the wave velocities
+    wave_speeds_right_plus = jnp.maximum(jnp.maximum(u_L + c_L, u_R + c_R), 0)
+    wave_speeds_left_minus = jnp.minimum(jnp.minimum(u_L - c_L, u_R - c_R), 0)
+
+    # get the left and right conserved variables
+    conserved_left = conserved_state_from_primitive(primitives_left, gamma, config, registered_variables)
+    conserved_right = conserved_state_from_primitive(primitives_right, gamma, config, registered_variables)
+
+    # calculate the interface HLL fluxes
+    # F = (S_R * F_L - S_L * F_R + S_L * S_R * (U_R - U_L)) / (S_R - S_L)
+    
+    # fluxes_i_to_ip1 = (jnp.maximum(wave_speeds_right_plus * fluxes_left, 0) + jnp.maximum(- wave_speeds_left_minus * fluxes_right, 0) + jnp.maximum(wave_speeds_left_minus * wave_speeds_right_plus * (conserved_right - conserved_left), 0)) / (wave_speeds_right_plus - wave_speeds_left_minus)
+
+    # fluxes_ip1_to_i = (jnp.minimum(wave_speeds_right_plus * fluxes_left, 0) + jnp.minimum(- wave_speeds_left_minus * fluxes_right, 0) + jnp.minimum(wave_speeds_left_minus * wave_speeds_right_plus * (conserved_right - conserved_left), 0)) / (wave_speeds_right_plus - wave_speeds_left_minus)
+
+    fluxes_i_to_ip1 = (jnp.maximum(wave_speeds_right_plus * fluxes_left - wave_speeds_left_minus * fluxes_right, 0) + jnp.maximum(wave_speeds_left_minus * wave_speeds_right_plus * (conserved_right - conserved_left), 0)) / (wave_speeds_right_plus - wave_speeds_left_minus)
+
+    fluxes_ip1_to_i = (jnp.minimum(wave_speeds_right_plus * fluxes_left - wave_speeds_left_minus * fluxes_right, 0) + jnp.minimum(wave_speeds_left_minus * wave_speeds_right_plus * (conserved_right - conserved_left), 0)) / (wave_speeds_right_plus - wave_speeds_left_minus)
+
+
+    return fluxes_i_to_ip1, fluxes_ip1_to_i
 
 
 # attempt at a first proof of concept implementation of
