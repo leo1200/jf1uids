@@ -1,5 +1,7 @@
 # jf1uids - differentiable (magneto)hydrodynamics for astrophysics in JAX
 
+[![DOI](https://zenodo.org/badge/848159116.svg)](https://doi.org/10.5281/zenodo.15052815)
+
 ## Features
 
 - [x] 1D, 2D and 3D hydrodynamics and magnetohydrodynamics simulations
