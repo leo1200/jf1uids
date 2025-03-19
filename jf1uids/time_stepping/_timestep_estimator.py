@@ -18,18 +18,19 @@ from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 # jf1uids functions
 from jf1uids.fluid_equations.euler import _euler_flux
 from jf1uids.fluid_equations.fluid import speed_of_sound
-from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import gas_pressure_from_primitives_with_crs
+from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import gas_pressure_from_primitives_with_crs, speed_of_sound_crs
 from jf1uids._physics_modules.run_physics_modules import _run_physics_modules
 
 
 # TODO: merge duplicate code in this and hll.py
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['registered_variables', 'flux_direction_index'])
+@partial(jax.jit, static_argnames=['registered_variables', 'config', 'flux_direction_index'])
 def get_wave_speeds(
     primitives_left: STATE_TYPE,
     primitives_right: STATE_TYPE,
     gamma: Union[float, Float[Array, ""]],
     registered_variables: RegisteredVariables,
+    config: SimulationConfig,
     flux_direction_index: int
 ) -> Union[float, Float[Array, ""]]:
     """
@@ -55,8 +56,13 @@ def get_wave_speeds(
     p_R = primitives_right[registered_variables.pressure_index]
 
     # calculate the sound speeds
-    c_L = speed_of_sound(rho_L, p_L, gamma)
-    c_R = speed_of_sound(rho_R, p_R, gamma)
+    if not config.cosmic_ray_config.cosmic_rays:
+        c_L = speed_of_sound(rho_L, p_L, gamma)
+        c_R = speed_of_sound(rho_R, p_R, gamma)
+    else:
+        c_L = speed_of_sound_crs(primitives_left, registered_variables)
+        c_R = speed_of_sound_crs(primitives_right, registered_variables)
+
 
     # very simple approach for the wave velocities
     # wave_speeds_right_plus = jnp.maximum(jnp.maximum(u_L + c_L, u_R + c_R), 0)
@@ -100,17 +106,17 @@ def _cfl_time_step(
         # wave speeds in x direction
         primitive_state_left = primitive_state[:, :-1, :, :]
         primitive_state_right = primitive_state[:, 1:, :, :]
-        max_wave_speed_x = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, registered_variables.velocity_index.x)
+        max_wave_speed_x = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, config, registered_variables.velocity_index.x)
 
         # wave speeds in y direction
         primitive_state_left = primitive_state[:, :, :-1, :]
         primitive_state_right = primitive_state[:, :, 1:, :]
-        max_wave_speed_y = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, registered_variables.velocity_index.y)
+        max_wave_speed_y = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, config, registered_variables.velocity_index.y)
 
         # wave speeds in z direction
         primitive_state_left = primitive_state[:, :, :, :-1]
         primitive_state_right = primitive_state[:, :, :, 1:]
-        max_wave_speed_z = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, registered_variables.velocity_index.z)
+        max_wave_speed_z = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, config, registered_variables.velocity_index.z)
 
         # get the maximum wave speed
         max_wave_speed = jnp.maximum(jnp.maximum(max_wave_speed_x, max_wave_speed_y), max_wave_speed_z)
@@ -118,12 +124,12 @@ def _cfl_time_step(
         # wave speeds in x direction
         primitive_state_left = primitive_state[:, :-1, :]
         primitive_state_right = primitive_state[:, 1:, :]
-        max_wave_speed_x = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, registered_variables.velocity_index.x)
+        max_wave_speed_x = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, config, registered_variables.velocity_index.x)
 
         # wave speeds in y direction
         primitive_state_left = primitive_state[:, :, :-1]
         primitive_state_right = primitive_state[:, :, 1:]
-        max_wave_speed_y = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, registered_variables.velocity_index.y)
+        max_wave_speed_y = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, config, registered_variables.velocity_index.y)
 
         # get the maximum wave speed
         max_wave_speed = jnp.maximum(max_wave_speed_x, max_wave_speed_y)
@@ -131,7 +137,7 @@ def _cfl_time_step(
         # wave speeds in x direction
         primitive_state_left = primitive_state[:, :-1]
         primitive_state_right = primitive_state[:, 1:]
-        max_wave_speed = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, registered_variables.velocity_index)
+        max_wave_speed = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, config, registered_variables.velocity_index)
 
     # calculate the time step
     dt = C_CFL * grid_spacing / max_wave_speed

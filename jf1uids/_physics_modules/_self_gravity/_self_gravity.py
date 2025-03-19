@@ -235,7 +235,7 @@ def _gravitational_source_term_along_axis(
     source_term = jnp.zeros_like(primitive_state)
 
     # set momentum source
-    source_term = source_term.at[axis].set(primitive_state[registered_variables.density_index] * acceleration)
+    source_term = source_term.at[axis].set(rho * acceleration)
 
     # set energy source
     source_term = source_term.at[registered_variables.pressure_index].set(rho * v_axis * acceleration)

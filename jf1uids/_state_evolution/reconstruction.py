@@ -9,6 +9,7 @@ from beartype import beartype as typechecker
 from jaxtyping import Array, Float, jaxtyped
 
 # general jf1uids imports
+from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import speed_of_sound_crs
 from jf1uids.option_classes.simulation_config import CARTESIAN, STATE_TYPE, STATE_TYPE_ALTERED, SimulationConfig
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
@@ -55,7 +56,10 @@ def _reconstruct_at_interface(
     limited_gradients = _calculate_limited_gradients(primitive_state, config, helper_data, axis = axis)
 
     # calculate the sound speed
-    c = speed_of_sound(rho, p, gamma)
+    if not config.cosmic_ray_config.cosmic_rays:
+        c = speed_of_sound(rho, p, gamma)
+    else:
+        c = speed_of_sound_crs(primitive_state, registered_variables)
 
     # ================ construct A_W, the "primitive Jacabian" (not an actual Jacabian) ================
     # see https://diglib.uibk.ac.at/download/pdf/4422963.pdf, 2.11

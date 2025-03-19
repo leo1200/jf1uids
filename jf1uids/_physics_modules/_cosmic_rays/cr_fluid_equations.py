@@ -1,24 +1,36 @@
+# general
 import jax.numpy as jnp
 import jax
 from functools import partial
 
+# typing
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
-
 from typing import Union
 
+# jf1uids classes
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 
+# NOTE: currently only supports 1d setups, TODO: generalize
 
-# TODO: make 2D and 3D ready
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['registered_variables'])
 def total_energy_from_primitives_with_crs(
         primitive_state: Float[Array, "num_vars num_cells"],
         registered_variables: RegisteredVariables
     ) -> Float[Array, "num_cells"]:
+    """
+    Calculates the total energy density from primitive variables in a system with cosmic rays.
 
-    # TODO: get from params
+    Args:
+        primitive_state: Array of primitive variables
+        registered_variables: Object containing indices for accessing different physical quantities
+
+    Returns:
+        Total energy density array
+    """
+
+
     gamma_cr = 4/3
     gamma_gas = 5/3
 
@@ -47,8 +59,18 @@ def gas_pressure_from_primitives_with_crs(
         primitive_state: Float[Array, "num_vars num_cells"],
         registered_variables: RegisteredVariables
     ) -> Float[Array, "num_cells"]:
+    """
+    Calculates the gas pressure from the primitive state when cosmic rays
+    are considered in the simulation.
 
-    # TODO: get from configs
+    Args:
+        primitive_state: Array of primitive variables
+        registered_variables: Object containing indices for accessing different physical quantities
+
+    Returns:
+        gas pressure
+    """
+
     gamma_cr = 4/3
     gamma_gas = 5/3
 
@@ -66,7 +88,18 @@ def total_pressure_from_conserved_with_crs(
         registered_variables: RegisteredVariables
     ) -> Float[Array, "num_cells"]:
 
-    # TODO: get from configs
+    """
+    Calculates the total pressure from the conserved state when cosmic rays
+    are considered in the simulation.
+
+    Args:
+        primitive_state: Array of primitive variables
+        registered_variables: Object containing indices for accessing different physical quantities
+
+    Returns:
+        total pressure
+    """
+
     gamma_cr = 4/3
     gamma_gas = 5/3
 
@@ -88,3 +121,34 @@ def total_pressure_from_conserved_with_crs(
     total_pressure = cosmic_ray_pressure + gas_pressure
 
     return total_pressure
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['registered_variables'])
+def speed_of_sound_crs(
+        primitive_state: Float[Array, "num_vars num_cells"],
+        registered_variables: RegisteredVariables
+    ) -> Float[Array, "num_cells"]:
+
+    """
+    Calculates the speed of sound from the primitive state 
+    when cosmic rays are considered in the simulation, where
+    c_s = sqrt((gamma_gas * P_gas + gamma_cr * P_CR) / rho)
+
+    Args:
+        primitive_state: Array of primitive variables
+        registered_variables: Object containing indices for accessing different physical quantities
+
+    Returns:
+        Total energy density array
+    """
+
+    gamma_cr = 4/3
+    gamma_gas = 5/3
+
+    # get the cosmic ray pressure
+    cosmic_ray_pressure = primitive_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
+
+    # get the gas pressure
+    gas_pressure = primitive_state[registered_variables.pressure_index] - cosmic_ray_pressure
+
+    return jnp.sqrt((gamma_gas * gas_pressure + gamma_cr * cosmic_ray_pressure) / primitive_state[registered_variables.density_index])
