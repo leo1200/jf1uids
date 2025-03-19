@@ -226,7 +226,7 @@ def _gravitational_source_term_along_axis(
     """
 
     rho = primitive_state[registered_variables.density_index]
-    v_axis = primitive_state[axis]
+    # v_axis = primitive_state[axis]
 
     # a_i = - (phi_{i+1} - phi_{i-1}) / (2 * dx)
     acceleration = -_stencil_add(gravitational_potential, indices = (1, -1), factors = (1.0, -1.0), axis = axis - 1) / (2 * grid_spacing)
@@ -239,39 +239,11 @@ def _gravitational_source_term_along_axis(
     source_term = source_term.at[axis].set(rho * acceleration)
 
     # set energy source
-    source_term = source_term.at[registered_variables.pressure_index].set(rho * v_axis * acceleration)
+    # source_term = source_term.at[registered_variables.pressure_index].set(rho * v_axis * acceleration)
 
     # ===============================================
 
-    # # attempt at implementing the ATHENA source term
-    # # https://github.com/PrincetonUniversity/athena/blob/master/src/hydro/srcterms/self_gravity.cpp
-
-    # num_cells = primitive_state.shape[axis]
-
-    # primitive_state_left, primitive_state_right = _reconstruct_at_interface(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
-
-    # # these are now approximate fluxes, starting at the flux between cell 1 and 2
-    # fluxes = _hllc_solver(primitive_state_left, primitive_state_right, gamma, config, registered_variables, axis)[0]
-
-    # # these are the accelerations at the cell interfaces, starting at the interface between cell 1 and 2
-    # acc = -(jax.lax.slice_in_dim(gravitational_potential, 2, num_cells - 1, axis = axis - 1) - jax.lax.slice_in_dim(gravitational_potential, 1, num_cells - 2, axis = axis - 1)) / (grid_spacing)
-
-
-    # weighting_measure = primitive_state[registered_variables.pressure_index] + 0.01 * jnp.abs(primitive_state[axis])
-    # weights_left = (jax.lax.slice_in_dim(weighting_measure, 2, -2, axis = axis - 1) / (jax.lax.slice_in_dim(weighting_measure, 1, -3, axis = axis - 1) + jax.lax.slice_in_dim(weighting_measure, 2, -2, axis = axis - 1)))
-    # weights_right = (jax.lax.slice_in_dim(weighting_measure, 2, -2, axis = axis - 1) / (jax.lax.slice_in_dim(weighting_measure, 2, -2, axis = axis - 1) + jax.lax.slice_in_dim(weighting_measure, 3, -1, axis = axis - 1)))
-
-    # sources = weights_left * jax.lax.slice_in_dim(fluxes, 0, -1, axis = axis - 1) * jax.lax.slice_in_dim(acc, 0, -1, axis = axis - 1) + weights_right * jax.lax.slice_in_dim(fluxes, 1, None, axis = axis - 1) * jax.lax.slice_in_dim(acc, 1, None, axis = axis - 1)
-
-    # selection2 = (slice(None),) * (axis - 1) + (slice(2,-2),) + (slice(None),)*(primitive_state.ndim - axis - 2)
-
-    # source_term = source_term.at[(registered_variables.pressure_index,) + selection2].set(sources)
-
-    # ===============================================
-
-    # ===============================================
-
-    # another attempt at a different source term idea
+    # better energy source
 
     num_cells = primitive_state.shape[axis]
 
@@ -376,12 +348,6 @@ def _hll_dummy(primitives_left: STATE_TYPE, primitives_right: STATE_TYPE, gamma:
     conserved_right = conserved_state_from_primitive(primitives_right, gamma, config, registered_variables)
 
     # calculate the interface HLL fluxes
-    # F = (S_R * F_L - S_L * F_R + S_L * S_R * (U_R - U_L)) / (S_R - S_L)
-    
-    # fluxes_i_to_ip1 = (jnp.maximum(wave_speeds_right_plus * fluxes_left, 0) + jnp.maximum(- wave_speeds_left_minus * fluxes_right, 0) + jnp.maximum(wave_speeds_left_minus * wave_speeds_right_plus * (conserved_right - conserved_left), 0)) / (wave_speeds_right_plus - wave_speeds_left_minus)
-
-    # fluxes_ip1_to_i = (jnp.minimum(wave_speeds_right_plus * fluxes_left, 0) + jnp.minimum(- wave_speeds_left_minus * fluxes_right, 0) + jnp.minimum(wave_speeds_left_minus * wave_speeds_right_plus * (conserved_right - conserved_left), 0)) / (wave_speeds_right_plus - wave_speeds_left_minus)
-
     fluxes_i_to_ip1 = (jnp.maximum(wave_speeds_right_plus * fluxes_left - wave_speeds_left_minus * fluxes_right, 0) + jnp.maximum(wave_speeds_left_minus * wave_speeds_right_plus * (conserved_right - conserved_left), 0)) / (wave_speeds_right_plus - wave_speeds_left_minus)
 
     fluxes_ip1_to_i = (jnp.minimum(wave_speeds_right_plus * fluxes_left - wave_speeds_left_minus * fluxes_right, 0) + jnp.minimum(wave_speeds_left_minus * wave_speeds_right_plus * (conserved_right - conserved_left), 0)) / (wave_speeds_right_plus - wave_speeds_left_minus)
