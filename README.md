@@ -46,6 +46,10 @@ as a dependency. For a GPU-compatible installation of `JAX`, please refer to the
 |:---------------------------------------------------------------------------------------:|
 | Gradients Through Stellar Wind                                                          |
 
+| ![Novel (Possibly) Conservative Self Gravity Scheme, Stable at Strong Discontinuities](notebooks/figures/collapse_conservation.svg) |
+|:-----------------------------------------------------------------------------------------------------------------------------------:|
+| Novel (Possibly) Conservative Self Gravity Scheme, Stable at Strong Discontinuities                                                 |
+
 | ![Wind Parameter Optimization](notebooks/figures/wind_parameter_optimization.png) |
 |:---------------------------------------------------------------------------------:|
 | Wind Parameter Optimization                                                       |
