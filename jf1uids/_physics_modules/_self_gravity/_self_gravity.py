@@ -63,7 +63,8 @@ def _compute_gravitational_potential(
 
     dimensionality = config.dimensionality
 
-    gas_density = gas_density - jnp.mean(gas_density)
+    #                            TODO: check on this / Jeans swindle
+    gas_density = gas_density # - jnp.mean(gas_density)
 
     # we only use outflow if not all boundaries are periodic
     # SO THERES EITHER ALL PERIODIC OR NONE
