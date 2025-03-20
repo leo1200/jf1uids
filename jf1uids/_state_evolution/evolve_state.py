@@ -12,6 +12,7 @@ from beartype import beartype as typechecker
 from typing import Union
 
 # general jf1uids imports
+from jf1uids._riemann_solver._riemann_solver import _riemann_solver
 from jf1uids._physics_modules._mhd._magnetic_field_update import magnetic_update
 from jf1uids._physics_modules._self_gravity._self_gravity import _apply_self_gravity, _compute_gravitational_potential, _gravitational_source_term_along_axis # , _mullen_source_along_axis, _mullen_source_along_axis2
 from jf1uids._stencil_operations._stencil_operations import _stencil_add
@@ -52,14 +53,7 @@ def _evolve_state_along_axis(
     else:
         primitive_state_left, primitive_state_right = _reconstruct_at_interface(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
     
-    if config.riemann_solver == HLL:
-        fluxes = _hll_solver(primitive_state_left, primitive_state_right, gamma, config, registered_variables, axis)
-    elif config.riemann_solver == HLLC:
-        fluxes = _hllc_solver(primitive_state_left, primitive_state_right, gamma, config, registered_variables, axis)
-    else:
-        raise ValueError("Riemann solver not supported.")
-
-    flux_length = fluxes.shape[axis]
+    fluxes = _riemann_solver(primitive_state_left, primitive_state_right, gamma, config, registered_variables, axis)
 
     # ================ update the conserved variables =================
 
