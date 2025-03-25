@@ -179,7 +179,7 @@ def _time_integration(
         # do not differentiate through the choice of the time step
         if not config.fixed_timestep:
             if config.source_term_aware_timestep:
-                dt = jax.lax.stop_gradient(_source_term_aware_time_step(state, config, params, helper_data, registered_variables))
+                dt = jax.lax.stop_gradient(_source_term_aware_time_step(state, config, params, helper_data, registered_variables, time))
             else:
                 dt = jax.lax.stop_gradient(_cfl_time_step(state, config.grid_spacing, params.dt_max, params.gamma, config, registered_variables, params.C_cfl))
         else:
@@ -223,8 +223,6 @@ def _time_integration(
     else:
         carry = (0.0, primitive_state)
     
-    start = timer()
-
     if not config.fixed_timestep:
         if config.differentiation_mode == BACKWARDS:
             carry = checkpointed_while_loop(condition, update_step, carry, checkpoints = config.num_checkpoints)
@@ -234,13 +232,10 @@ def _time_integration(
             raise ValueError("Unknown differentiation mode.")
     else:
         carry = jax.lax.fori_loop(0, config.num_timesteps, update_step_for, carry)
-    
-    end = timer()
-    duration = end - start
+
 
     if config.return_snapshots or config.activate_snapshot_callback:
         _, state, snapshot_data = carry
-        snapshot_data = snapshot_data._replace(runtime = duration)
 
         if config.return_snapshots:
             return snapshot_data

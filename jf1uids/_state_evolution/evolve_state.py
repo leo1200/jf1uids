@@ -12,9 +12,10 @@ from beartype import beartype as typechecker
 from typing import Union
 
 # general jf1uids imports
+from jf1uids._physics_modules._self_gravity._poisson_solver import _compute_gravitational_potential
 from jf1uids._riemann_solver._riemann_solver import _riemann_solver
 from jf1uids._physics_modules._mhd._magnetic_field_update import magnetic_update
-from jf1uids._physics_modules._self_gravity._self_gravity import _apply_self_gravity, _compute_gravitational_potential, _gravitational_source_term_along_axis # , _mullen_source_along_axis, _mullen_source_along_axis2
+from jf1uids._physics_modules._self_gravity._self_gravity import _apply_self_gravity, _gravitational_source_term_along_axis # , _mullen_source_along_axis, _mullen_source_along_axis2
 from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables

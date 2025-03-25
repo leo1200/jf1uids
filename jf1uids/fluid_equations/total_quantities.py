@@ -15,7 +15,7 @@ from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfi
 from jf1uids.data_classes.simulation_helper_data import HelperData
 
 # jf1uids functions
-from jf1uids._physics_modules._self_gravity._self_gravity import _compute_gravitational_potential
+from jf1uids._physics_modules._self_gravity._poisson_solver import _compute_gravitational_potential
 from jf1uids.fluid_equations.fluid import get_absolute_velocity, total_energy_from_primitives
 
 

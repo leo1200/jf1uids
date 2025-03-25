@@ -15,7 +15,15 @@ from jf1uids._physics_modules._stellar_wind.stellar_wind import _wind_injection
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _run_physics_modules(primitive_state: STATE_TYPE, dt: Float[Array, ""], config: SimulationConfig, params: SimulationParams, helper_data: HelperData, registered_variables: RegisteredVariables, current_time: Union[float, Float[Array, ""]]) -> STATE_TYPE:
+def _run_physics_modules(
+    primitive_state: STATE_TYPE,
+    dt: Float[Array, ""],
+    config: SimulationConfig,
+    params: SimulationParams,
+    helper_data: HelperData,
+    registered_variables: RegisteredVariables,
+    current_time: Union[float, Float[Array, ""]]
+) -> STATE_TYPE:
     """Run all the physics modules. The physics modules are switched on/off and
     configured in the simulation configuration. Parameters for the physics modules
     (with respect to which the simulation can be differentiated) are stored in the

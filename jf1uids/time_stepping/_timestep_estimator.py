@@ -151,7 +151,8 @@ def _source_term_aware_time_step(
     config: SimulationConfig,
     params: SimulationParams,
     helper_data: HelperData,
-    registered_variables: RegisteredVariables
+    registered_variables: RegisteredVariables,
+    current_time: Union[float, Float[Array, ""]]
 ) -> Float[Array, ""]:
     """
     Calculate the time step based on the CFL condition and the source terms. What timestep
@@ -172,7 +173,7 @@ def _source_term_aware_time_step(
     # calculate the time step based on the CFL condition
     dt = _cfl_time_step(primitive_state, config.grid_spacing, params.dt_max, params.gamma, config, registered_variables, params.C_cfl)
 
-    hypothetical_new_state = _run_physics_modules(primitive_state, dt, config, params, helper_data, registered_variables)
+    hypothetical_new_state = _run_physics_modules(primitive_state, dt, config, params, helper_data, registered_variables, current_time)
 
     dt = _cfl_time_step(hypothetical_new_state, config.grid_spacing, params.dt_max, params.gamma, config, registered_variables, params.C_cfl)
     

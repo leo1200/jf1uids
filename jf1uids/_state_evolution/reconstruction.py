@@ -10,6 +10,8 @@ from jaxtyping import Array, Float, jaxtyped
 
 # general jf1uids imports
 from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import speed_of_sound_crs
+from jf1uids._physics_modules._self_gravity._poisson_solver import _compute_gravitational_potential
+from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.option_classes.simulation_config import CARTESIAN, STATE_TYPE, STATE_TYPE_ALTERED, SimulationConfig
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
@@ -89,6 +91,21 @@ def _reconstruct_at_interface(
 
     # predictor step
     predictors = jax.lax.slice_in_dim(primitive_state, 1, num_cells - 1, axis = axis) - dt / 2 * projected_gradients
+
+    # did not seem to help
+    # in the case of self-gravity, include the gravitational acceleration
+    # in the half-step predictor
+    # if config.self_gravity:
+
+    #     # TODO: THIS SHOULD NOT BE CALUCLATED HERE BUT PASSED, NOW FOR TESTING
+    #     G = 1.0
+    #     gravitational_potential = _compute_gravitational_potential(rho, config.grid_spacing, config, G)
+
+    #     # a_i = - (phi_{i+1} - phi_{i-1}) / (2 * dx)
+    #     acceleration = -_stencil_add(gravitational_potential, indices = (1, -1), factors = (1.0, -1.0), axis = axis - 1, zero_pad = False) / (2 * config.grid_spacing)
+
+    #     # add the gravitational acceleration to the predictor
+    #     predictors = predictors.at[axis].add(dt / 2 * acceleration)
 
     # compute primitives at the interfaces
     if config.geometry == CARTESIAN:
