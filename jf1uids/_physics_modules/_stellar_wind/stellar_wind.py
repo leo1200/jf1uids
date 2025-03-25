@@ -225,4 +225,61 @@ def _wind_ei3D(wind_params: WindParams, primitive_state: STATE_TYPE, dt: Float[A
 
     return primitive_state
 
+# @jaxtyped(typechecker=typechecker)
+# @partial(jax.jit, static_argnames=['num_ghost_cells', 'num_injection_cells', 'registered_variables'])
+# def _wind_ei3D_superres(wind_params: WindParams, primitive_state: STATE_TYPE, dt: Float[Array, ""], config: SimulationConfig, helper_data: HelperData, num_ghost_cells: int, num_injection_cells: int, gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables) -> STATE_TYPE:
+#     """Inject stellar wind into the simulation by an thermal-energy-injection scheme (EI).
+
+#     Args:
+#         wind_params: The wind parameters.
+#         primitive_state: The primitive state array.
+#         dt: The time step.
+#         helper_data: The helper data.
+#         num_ghost_cells: The number of ghost cells.
+#         num_injection_cells: The number of injection cells.
+#         gamma: The adiabatic index.
+
+#     Returns:
+#         The primitive state array with the stellar wind injected.
+#     """
+
+#     source_term = jnp.zeros_like(primitive_state)
+#     r_inj = num_injection_cells * config.grid_spacing
+
+#     total_mass_change = wind_params.wind_mass_loss_rate * dt
+#     total_energy_change = 0.5 * wind_params.wind_final_velocity**2 * total_mass_change
+
+#     superres_factor = 8
+#     superres_grid_size = superres_factor * num_injection_cells * 2
+#     superres_grid_spacing = config.grid_spacing / superres_factor
+    
+#     half_width = superres_grid_size * superres_grid_spacing / 2
+
+#     x = jnp.linspace(-half_width, half_width, superres_grid_size)
+#     y = jnp.linspace(-half_width, half_width, superres_grid_size)
+#     z = jnp.linspace(-half_width, half_width, superres_grid_size)
+#     X, Y, Z = jnp.meshgrid(x, y, z, indexing='ij')
+#     R = jnp.sqrt(X**2 + Y**2 + Z**2)
+#     superres_injection_weights = R <= r_inj
+#     superres_injection_weights = superres_injection_weights / jnp.sum(superres_injection_weights)
+
+
+#     # sum pool down the mask to get to a mask of size (num_injection_cells * 2)^3
+#     superres_injection_weights = superres_injection_weights.reshape((num_injection_cells * 2, superres_factor,
+#                                    num_injection_cells * 2, superres_factor,
+#                                    num_injection_cells * 2, superres_factor)).sum(axis=(1, 3, 5))
+    
+
+#     injection_weights = jnp.zeros_like(primitive_state[0])
+#     half_index = primitive_state[0].shape[0] // 2
+#     injection_weights = injection_weights.at[half_index - num_injection_cells:half_index + num_injection_cells, half_index - num_injection_cells:half_index + num_injection_cells, half_index - num_injection_cells:half_index + num_injection_cells].set(superres_injection_weights)
+
+#     source_term = source_term.at[registered_variables.density_index].set(total_mass_change * injection_weights / (config.grid_spacing**3))
+#     gamma = 4/3
+#     source_term = source_term.at[registered_variables.pressure_index].set(total_energy_change * (gamma - 1) * injection_weights / (config.grid_spacing**3))
+
+#     primitive_state = primitive_state + source_term
+
+#     return primitive_state
+
 # ======================================================
