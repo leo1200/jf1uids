@@ -1,7 +1,10 @@
-from typing import NamedTuple
+from types import NoneType
+from typing import NamedTuple, Union
+from jax import NamedSharding
 import jax.numpy as jnp
 from jf1uids._geometry.geometry import _center_of_volume, _r_hat_alpha
 from jf1uids.option_classes.simulation_config import CARTESIAN, CYLINDRICAL, SPHERICAL, SimulationConfig
+import jax
 
 # Helper data like the radii and cell volumes 
 # in the simulation or cooling tables etc.
@@ -35,7 +38,7 @@ class HelperData(NamedTuple):
     #: Coordinates of the outer cell boundaries.
     outer_cell_boundaries: jnp.ndarray = None
 
-def get_helper_data(config: SimulationConfig) -> HelperData:
+def get_helper_data(config: SimulationConfig, sharding: Union[NoneType, NamedSharding] = None) -> HelperData:
     """Generate the helper data for the simulation from the configuration."""
 
     if config.dimensionality > 1:
@@ -50,8 +53,14 @@ def get_helper_data(config: SimulationConfig) -> HelperData:
 
         # calculate the distances from the cell centers to the box center
         box_center = jnp.zeros(config.dimensionality) + config.box_size / 2
+
         geometric_centers = jnp.array(geometric_centers)
+
+        if sharding is not None:
+            geometric_centers = jax.device_put(geometric_centers, sharding)
+
         geometric_centers = jnp.moveaxis(geometric_centers, 0, -1)
+
         volumetric_centers = geometric_centers
 
         r = jnp.linalg.norm(geometric_centers - box_center, axis = -1)

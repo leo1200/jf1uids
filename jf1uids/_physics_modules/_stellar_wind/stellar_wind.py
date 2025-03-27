@@ -171,6 +171,45 @@ def _wind_ei(wind_params: WindParams, primitive_state: Float[Array, "num_vars nu
 # not really ei
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['num_ghost_cells', 'num_injection_cells', 'registered_variables'])
+def dummy_multi_star_wind(wind_params: WindParams, primitive_state: STATE_TYPE, dt: Float[Array, ""], config: SimulationConfig, helper_data: HelperData, num_ghost_cells: int, num_injection_cells: int, gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables) -> STATE_TYPE:
+    
+    star_positions = [jnp.array([0.2, 0.3, 0.5]), jnp.array([0.5, 0.7, 0.5]), jnp.array([0.7, 0.4, 0.5]), jnp.array([0.3, 0.6, 0.5])]
+
+    for star_position in star_positions:
+
+        r = jnp.linalg.norm(helper_data.geometric_centers - star_position, axis = -1)
+
+        source_term = jnp.zeros_like(primitive_state)
+        
+        r_inj = num_injection_cells * config.grid_spacing
+        V = 4/3 * jnp.pi * r_inj**3
+
+        # for now only allow injection at the box center
+        injection_mask = r <= r_inj - config.grid_spacing / 2
+
+        # mass injection
+        drho_dt = wind_params.wind_mass_loss_rate / V
+        # source_term = source_term.at[registered_variables.density_index].set(jnp.where(injection_mask, drho_dt, source_term[registered_variables.density_index]))
+        source_term = source_term.at[registered_variables.density_index].set(drho_dt * injection_mask)
+
+        updated_density = primitive_state[registered_variables.density_index]
+        updated_density = jnp.where(injection_mask > 0, updated_density + drho_dt * dt * injection_mask, updated_density)
+
+        # energy injection
+        dE_dt = 0.5 * wind_params.wind_final_velocity**2 * wind_params.wind_mass_loss_rate / V
+        u = jnp.sqrt(primitive_state[registered_variables.velocity_index.x]**2 + primitive_state[registered_variables.velocity_index.y]**2 + primitive_state[registered_variables.velocity_index.z]**2)
+        dp_dt = pressure_from_energy(dE_dt, updated_density, u, gamma)
+        
+        source_term = source_term.at[registered_variables.pressure_index].set(dp_dt * injection_mask)
+
+        primitive_state = primitive_state + source_term * dt
+
+    return primitive_state
+
+
+# not really ei
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['num_ghost_cells', 'num_injection_cells', 'registered_variables'])
 def _wind_ei3D(wind_params: WindParams, primitive_state: STATE_TYPE, dt: Float[Array, ""], config: SimulationConfig, helper_data: HelperData, num_ghost_cells: int, num_injection_cells: int, gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables) -> STATE_TYPE:
     """Inject stellar wind into the simulation by an thermal-energy-injection scheme (EI).
 

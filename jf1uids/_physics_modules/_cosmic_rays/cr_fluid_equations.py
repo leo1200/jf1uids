@@ -139,7 +139,7 @@ def speed_of_sound_crs(
         registered_variables: Object containing indices for accessing different physical quantities
 
     Returns:
-        Total energy density array
+        sound speed
     """
 
     gamma_cr = 4/3
