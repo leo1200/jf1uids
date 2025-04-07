@@ -49,8 +49,11 @@ def _evolve_state_along_axis(
     num_cells = primitive_state.shape[axis]
 
     if config.first_order_fallback:
-        primitive_state_left = jax.lax.slice_in_dim(primitive_state, 1, num_cells - 2, axis = axis)
-        primitive_state_right = jax.lax.slice_in_dim(primitive_state, 2, num_cells - 1, axis = axis)
+        # primitive_state_left = jax.lax.slice_in_dim(primitive_state, 1, num_cells - 2, axis = axis)
+        # primitive_state_right = jax.lax.slice_in_dim(primitive_state, 2, num_cells - 1, axis = axis)
+
+        primitive_state_left = jnp.roll(primitive_state, shift = 1, axis = axis)
+        primitive_state_right = primitive_state
     else:
         primitive_state_left, primitive_state_right = _reconstruct_at_interface(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
     
@@ -60,7 +63,8 @@ def _evolve_state_along_axis(
 
     # usual cartesian case
     if config.geometry == CARTESIAN:
-        conserved_change = -1 / grid_spacing * _stencil_add(fluxes, indices = (0, -1), factors = (1.0, -1.0), axis = axis, zero_pad = False) * dt
+        conserved_change = 1 / grid_spacing * _stencil_add(fluxes, indices = (0, 1), factors = (1.0, -1.0), axis = axis) * dt
+        conservative_states = conservative_states + conserved_change
 
     # in spherical geometry, we have to take special care
     elif config.geometry == SPHERICAL and config.dimensionality == 1 and axis == 1:
@@ -81,13 +85,14 @@ def _evolve_state_along_axis(
             + nozzling_source[:, 1:-1]
         ) * dt
 
+        conservative_states = conservative_states.at[tuple(slice(config.num_ghost_cells, -config.num_ghost_cells) if i == axis else slice(None) for i in range(conservative_states.ndim))].add(conserved_change)
+
     # misconfiguration
     else:
         raise ValueError("Geometry and dimensionality combination not supported.")
     
     # =================================================================
 
-    conservative_states = conservative_states.at[tuple(slice(config.num_ghost_cells, -config.num_ghost_cells) if i == axis else slice(None) for i in range(conservative_states.ndim))].add(conserved_change)
 
     primitive_state = primitive_state_from_conserved(conservative_states, gamma, config, registered_variables)
     primitive_state = _boundary_handler(primitive_state, config)
