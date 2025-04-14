@@ -184,6 +184,8 @@ def inject_crs_at_strongest_shock(
     C = ((gamma2 + 1) * gammat + gamma2 - 1) * (gamma1 - 1)
     M_1_sq = 1/gamma_eff2 * (gammat) * C / (C - ((gamma1 + 1) - (gamma1 - 1) * gammat) * (gamma2 - 1))
 
+    # M_1_sq = 1 / (2 * gamma_eff1) * (gammat * (gamma_eff1 + 1) + gamma_eff1 - 1)
+
     # jax.debug.print("M1sq: {M1sq}, gamma_eff1: {gamma_eff1}, gammat: {gammat}, C: {C}",
     #                  M1sq=M_1_sq,
     #                  gamma_eff1=gamma_eff1,
