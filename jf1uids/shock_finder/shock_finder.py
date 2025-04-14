@@ -5,10 +5,13 @@ import jax
 
 # typing
 from typing import Tuple, Union
-from jf1uids.option_classes.simulation_config import FIELD_TYPE
+from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.option_classes.simulation_config import FIELD_TYPE, STATE_TYPE, SimulationConfig
 from jaxtyping import Array, Int, jaxtyped
 from beartype import beartype as typechecker
 from typing import Union
+
+from jf1uids.option_classes.simulation_params import SimulationParams
 
 # NOTE: currently only works for 1d setups, TODO: generalize
 
@@ -33,10 +36,94 @@ def shock_sensor(pressure: FIELD_TYPE) -> FIELD_TYPE:
 
     return shock_sensors
 
-@jax.jit
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['registered_variables'])
+def shock_criteria(
+    primitive_state: STATE_TYPE,
+    registered_variables: RegisteredVariables,
+) -> jnp.ndarray:
+    """
+    Implement the shock criteria from Pfrommer et al, 2017.
+    https://arxiv.org/abs/1604.07399
+
+    # NOTE: for now only 1D
+
+    """
+
+    gamma_gas = 5/3
+    gamma_cr = 4/3
+
+    # get the velocity
+    velocity = primitive_state[registered_variables.velocity_index]
+
+    # get the cosmic ray pressure
+    P_CRs = primitive_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
+
+
+    # i) \nabla \cdot \vec{v} < 0
+    div_v = jnp.zeros_like(velocity)
+    div_v = div_v.at[1:-1].set((velocity[2:] - velocity[:-2]) / 2)
+    converging_flow_criterion = div_v < 0
+
+    # ii) \nabla T \cdot \nabla \rho > 0
+    pseudo_temperature = primitive_state[registered_variables.pressure_index] / primitive_state[registered_variables.density_index]
+    div_T = jnp.zeros_like(pseudo_temperature)
+    div_T = div_T.at[1:-1].set((pseudo_temperature[2:] - pseudo_temperature[:-2]) / 2)
+    div_rho = jnp.zeros_like(primitive_state[registered_variables.density_index])
+    div_rho = div_rho.at[1:-1].set((primitive_state[registered_variables.density_index][2:] - primitive_state[registered_variables.density_index][:-2]) / 2)
+    no_spurious_shocks = div_T * div_rho > 0
+
+    # iii) M1 > Mmin
+    Mmin = 1.3
+    # NOTE: currently we only consider shocks moving left to right
+    P2 = primitive_state[registered_variables.pressure_index, :-2]
+    P2_CRs = P_CRs[:-2]
+    e2_gas = P2 - P2_CRs # gas energy / volume
+    e2_crs = P2_CRs / (gamma_cr - 1) # cosmic ray energy / volume
+    e2 = e2_gas + e2_crs # total energy / volume
+    rho2 = primitive_state[registered_variables.density_index, :-2]
+
+    P1 = primitive_state[registered_variables.pressure_index, 2:]
+    P1_CRs = P_CRs[2:]
+    P1_gas = P1 - P1_CRs # gas pressure
+    e1_gas = P1_gas / (gamma_gas - 1) # gas energy / volume
+    e1_crs = P1_CRs / (gamma_cr - 1) # cosmic ray energy / volume
+    e1 = e1_gas + e1_crs # total energy / volume
+    rho1 = primitive_state[registered_variables.density_index, 2:]
+
+    gamma_eff1 = (gamma_cr * P1_CRs + gamma_gas * P1_gas) / P1
+    gamma_eff2 = (gamma_cr * P2_CRs + gamma_gas * P2) / P2
+
+    gamma1 = P1 / e1 + 1
+    gamma2 = P2 / e2 + 1
+
+    gammat = P2/P1
+
+    C = ((gamma2 + 1) * gammat + gamma2 - 1) * (gamma1 - 1)
+
+    M1sq = 1/gamma_eff2 * gammat * C / (C - ((gamma1 + 1) - (gamma1 - 1) * gammat) * (gamma2 - 1))
+
+    # # calculate the pre-shock sound speed
+    # c1 = jnp.sqrt(gamma_eff1 * P1 / rho1)
+
+    # # density ratio
+    # x_s = rho2 / rho1
+
+    # # pre-shock mach number
+    # M1sq = (P2 / P1 - 1) * x_s / (gamma_eff1 * (x_s - 1))
+
+    mach_number_criterion = jnp.zeros_like(converging_flow_criterion, dtype=jnp.bool_)
+
+    mach_number_criterion = mach_number_criterion.at[1:-1].set(
+        M1sq > Mmin**2
+    )
+
+    return converging_flow_criterion & no_spurious_shocks & mach_number_criterion
+
+@partial(jax.jit, static_argnames=['registered_variables'])
 def find_shock_zone(
-    pressure: FIELD_TYPE,
-    velocity: FIELD_TYPE
+    primitive_state: STATE_TYPE,
+    registered_variables: RegisteredVariables,
 ) -> Tuple[Union[int, Int[Array, ""]], Union[int, Int[Array, ""]], Union[int, Int[Array, ""]]]:
     """
     Find a numerically broadened shock region based of the strongest shock based
@@ -54,33 +141,38 @@ def find_shock_zone(
     
     """
 
+    pressure = primitive_state[registered_variables.pressure_index]
     num_cells = pressure.shape[0]
 
     sensors = shock_sensor(pressure)
 
-    # rule out regions with div v >= 0, see criterion 1 in Pfrommer et al, 2017
-    div_v = jnp.zeros_like(velocity)
-    div_v = div_v.at[1:-1].set((velocity[2:] - velocity[:-2]) / 2)
-    sensors = jnp.where(div_v < 0, sensors, 0)
+    shock_crit = shock_criteria(primitive_state, registered_variables)
 
-    max_shock_idx = jnp.argmax(sensors)
+    max_shock_idx = jnp.argmax(jnp.where(shock_crit, sensors, -1))
+
+    # cell_idx = jnp.arange(num_cells)
+    # left_idx = jnp.min(jnp.where(shock_crit, cell_idx, num_cells))
+    # right_idx = jnp.max(jnp.where(shock_crit, cell_idx, -1))
 
     # bound on the shock sensor
     bound_val = 0.05 * jnp.max(sensors)
 
     # calculate differences in pressure
-    to_next_pressure_differences = jnp.zeros_like(pressure)
-    to_next_pressure_differences = jnp.abs(to_next_pressure_differences.at[:-1].set(pressure[1:] - pressure[:-1]))
+    pressure_differences = jnp.zeros_like(pressure)
+    # 0 <- 1 - 0
+    pressure_differences = pressure_differences.at[1:].set(pressure[1:] - pressure[:-1])
 
     # bound on the change in pressure between adjacent cells compared
     # to the pressure jump at the max_shock_index
-    bound_diff = 0.1 * to_next_pressure_differences[max_shock_idx]
+    bound_diff = 0.1 * jnp.abs(pressure_differences[max_shock_idx])
 
     # left index: closest left index where pressure_difference < bound_diff
     # right index: closest right index where sensor < bound_val or pressure_difference < bound_diff
+
+    # left first cell from the interface where the pressure either goes down or increases by less than bound_diff
     indices = jnp.arange(num_cells)
-    left_indices = jnp.where((indices < max_shock_idx) & ((to_next_pressure_differences < bound_diff)), indices, -1)
-    right_indices = jnp.where((indices > max_shock_idx) & ((sensors < bound_val) | (to_next_pressure_differences < bound_diff)), indices, num_cells)
+    left_indices = jnp.where((indices < max_shock_idx) & ((jnp.abs(pressure_differences) < bound_diff) | (pressure_differences > 0)), indices, -1)
+    right_indices = jnp.where((indices > max_shock_idx) & ((sensors < bound_val) | (jnp.abs(pressure_differences) < bound_diff)), indices, num_cells)
     left_idx = jnp.max(left_indices)
     right_idx = jnp.min(right_indices)
 

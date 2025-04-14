@@ -1,6 +1,7 @@
 from typing import Union
 import jax
 from functools import partial
+import jax.numpy as jnp
 
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
@@ -12,6 +13,7 @@ from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import SPHERICAL, STATE_TYPE, SimulationConfig
 from jf1uids.option_classes.simulation_params import SimulationParams
 from jf1uids._physics_modules._stellar_wind.stellar_wind import _wind_injection
+from jf1uids.shock_finder.shock_finder import shock_criteria
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
@@ -49,11 +51,16 @@ def _run_physics_modules(
 
     if config.cosmic_ray_config.diffusive_shock_acceleration:
 
+        shock_crit = shock_criteria(
+            primitive_state,
+            registered_variables
+        )
+
         # injecting cosmic rays only after a certain amount of time
         # is an ad-hoc fix to problems that come about when a shock
         # has not yet properly formed
         primitive_state = jax.lax.cond(
-            current_time > params.cosmic_ray_params.diffusive_shock_acceleration_start_time,
+            jnp.logical_and(current_time >= params.cosmic_ray_params.diffusive_shock_acceleration_start_time, jnp.any(shock_crit)),
             lambda primitive_state: inject_crs_at_strongest_shock(primitive_state, params.gamma, helper_data, params.cosmic_ray_params, config, registered_variables, dt),
             lambda primitive_state: primitive_state,
             primitive_state
