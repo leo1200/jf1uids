@@ -9,7 +9,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
 
 import jax
 
-from jf1uids.option_classes.simulation_config import FORWARDS, VARAXIS, XAXIS, YAXIS, ZAXIS
+from jf1uids.option_classes.simulation_config import FORWARDS, HLL, VARAXIS, XAXIS, YAXIS, ZAXIS
 
 from jf1uids import SimulationConfig
 from jf1uids import get_helper_data
@@ -36,12 +36,14 @@ def setup_ics(num_cells, num_injection_cells=2):
         dimensionality = 3,
         box_size = 1.0, 
         num_cells = num_cells,
-        differentiation_mode = FORWARDS
+        differentiation_mode = FORWARDS,
+        riemann_solver = HLL
     )
 
     params = SimulationParams(
-        t_end = 0.2,
-        C_cfl = 5/3
+        t_end = 0.3,
+        C_cfl = 0.4,
+        dt_max = 0.2
     )
 
     registered_variables = get_registered_variables(config)

@@ -1,0 +1,110 @@
+jpbot-001-10.jupiter.internal  Mon Apr  7 16:31:32 2025  570.86.15
+[0] NVIDIA GH200 120GB | 47°C,   0 % |     0 / 97871 MB |
+[1] NVIDIA GH200 120GB | 46°C,   0 % |     0 / 97871 MB |
+[2] NVIDIA GH200 120GB | 47°C,   0 % |     0 / 97871 MB |
+[3] NVIDIA GH200 120GB | 47°C,   0 % |     0 / 97871 MB |
+Automatically setting open boundaries for Cartesian geometry.
+Execution time: min=0.002132s, mean=0.002261s
+Automatically setting open boundaries for Cartesian geometry.
+Execution time: min=0.006968s, mean=0.007043s
+Automatically setting open boundaries for Cartesian geometry.
+Execution time: min=0.024647s, mean=0.025969s
+Automatically setting open boundaries for Cartesian geometry.
+Execution time: min=0.084881s, mean=0.085021s
+Automatically setting open boundaries for Cartesian geometry.
+Execution time: min=0.555289s, mean=0.558360s
+Automatically setting open boundaries for Cartesian geometry.
+Execution time: min=1.457456s, mean=1.458069s
+Automatically setting open boundaries for Cartesian geometry.
+Execution time: min=7.507023s, mean=7.507891s
+Automatically setting open boundaries for Cartesian geometry.
+┌──────────┬──────────┐
+│          │          │
+│  GPU 0   │  GPU 1   │
+│          │          │
+│          │          │
+├──────────┼──────────┤
+│          │          │
+│  GPU 2   │  GPU 3   │
+│          │          │
+│          │          │
+└──────────┴──────────┘
+Execution time: min=0.004886s, mean=0.005160s
+Automatically setting open boundaries for Cartesian geometry.
+┌──────────┬──────────┐
+│          │          │
+│  GPU 0   │  GPU 1   │
+│          │          │
+│          │          │
+├──────────┼──────────┤
+│          │          │
+│  GPU 2   │  GPU 3   │
+│          │          │
+│          │          │
+└──────────┴──────────┘
+Execution time: min=0.009913s, mean=0.010170s
+Automatically setting open boundaries for Cartesian geometry.
+┌──────────┬──────────┐
+│          │          │
+│  GPU 0   │  GPU 1   │
+│          │          │
+│          │          │
+├──────────┼──────────┤
+│          │          │
+│  GPU 2   │  GPU 3   │
+│          │          │
+│          │          │
+└──────────┴──────────┘
+Execution time: min=0.018026s, mean=0.018263s
+Automatically setting open boundaries for Cartesian geometry.
+┌──────────┬──────────┐
+│          │          │
+│  GPU 0   │  GPU 1   │
+│          │          │
+│          │          │
+├──────────┼──────────┤
+│          │          │
+│  GPU 2   │  GPU 3   │
+│          │          │
+│          │          │
+└──────────┴──────────┘
+Execution time: min=0.034941s, mean=0.035445s
+Automatically setting open boundaries for Cartesian geometry.
+┌──────────┬──────────┐
+│          │          │
+│  GPU 0   │  GPU 1   │
+│          │          │
+│          │          │
+├──────────┼──────────┤
+│          │          │
+│  GPU 2   │  GPU 3   │
+│          │          │
+│          │          │
+└──────────┴──────────┘
+Execution time: min=0.167787s, mean=0.170035s
+Automatically setting open boundaries for Cartesian geometry.
+┌──────────┬──────────┐
+│          │          │
+│  GPU 0   │  GPU 1   │
+│          │          │
+│          │          │
+├──────────┼──────────┤
+│          │          │
+│  GPU 2   │  GPU 3   │
+│          │          │
+│          │          │
+└──────────┴──────────┘
+Execution time: min=0.451149s, mean=0.457919s
+Automatically setting open boundaries for Cartesian geometry.
+┌──────────┬──────────┐
+│          │          │
+│  GPU 0   │  GPU 1   │
+│          │          │
+│          │          │
+├──────────┼──────────┤
+│          │          │
+│  GPU 2   │  GPU 3   │
+│          │          │
+│          │          │
+└──────────┴──────────┘
+Execution time: min=2.114889s, mean=2.121713s

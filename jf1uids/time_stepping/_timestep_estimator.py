@@ -7,7 +7,8 @@ from functools import partial
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
 from typing import Union
-from jf1uids.option_classes.simulation_config import STATE_TYPE
+from jf1uids._stencil_operations._stencil_operations import custom_roll
+from jf1uids.option_classes.simulation_config import STATE_TYPE, XAXIS, YAXIS, ZAXIS
 
 # jf1uids containers
 from jf1uids.data_classes.simulation_helper_data import HelperData
@@ -65,13 +66,16 @@ def get_wave_speeds(
 
 
     # very simple approach for the wave velocities
-    # wave_speeds_right_plus = jnp.maximum(jnp.maximum(u_L + c_L, u_R + c_R), 0)
-    # wave_speeds_left_minus = jnp.minimum(jnp.minimum(u_L - c_L, u_R - c_R), 0)
+    wave_speeds_right_plus = jnp.maximum(jnp.maximum(u_L + c_L, u_R + c_R), 0)
+    wave_speeds_left_minus = jnp.minimum(jnp.minimum(u_L - c_L, u_R - c_R), 0)
 
-    wave_speeds_right_plus = jnp.abs(u_L) + c_L
-    wave_speeds_left_minus = jnp.abs(u_R) + c_R
+    # wave_speeds_right_plus = jnp.abs(u_L) + c_L
+    # wave_speeds_left_minus = jnp.abs(u_R) + c_R
 
-    max_wave_speed = jnp.maximum(jnp.max(jnp.abs(wave_speeds_right_plus)), jnp.max(jnp.abs(wave_speeds_left_minus)))
+    max_wave_speed = jnp.maximum(
+        jnp.max(jnp.abs(wave_speeds_right_plus)),
+        jnp.max(jnp.abs(wave_speeds_left_minus))
+    )
 
     return max_wave_speed
 
@@ -104,39 +108,39 @@ def _cfl_time_step(
 
     if config.dimensionality == 3:
         # wave speeds in x direction
-        primitive_state_left = primitive_state[:, :-1, :, :]
-        primitive_state_right = primitive_state[:, 1:, :, :]
+        primitive_state_left = custom_roll(primitive_state, shift = 1, axis = XAXIS)
+        primitive_state_right = primitive_state
         max_wave_speed_x = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, config, registered_variables.velocity_index.x)
 
         # wave speeds in y direction
-        primitive_state_left = primitive_state[:, :, :-1, :]
-        primitive_state_right = primitive_state[:, :, 1:, :]
+        primitive_state_left = custom_roll(primitive_state, shift = 1, axis = YAXIS)
+        primitive_state_right = primitive_state
         max_wave_speed_y = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, config, registered_variables.velocity_index.y)
 
         # wave speeds in z direction
-        primitive_state_left = primitive_state[:, :, :, :-1]
-        primitive_state_right = primitive_state[:, :, :, 1:]
+        primitive_state_left = custom_roll(primitive_state, shift = 1, axis = ZAXIS)
+        primitive_state_right = primitive_state
         max_wave_speed_z = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, config, registered_variables.velocity_index.z)
 
         # get the maximum wave speed
         max_wave_speed = jnp.maximum(jnp.maximum(max_wave_speed_x, max_wave_speed_y), max_wave_speed_z)
     elif config.dimensionality == 2:
         # wave speeds in x direction
-        primitive_state_left = primitive_state[:, :-1, :]
-        primitive_state_right = primitive_state[:, 1:, :]
+        primitive_state_left = custom_roll(primitive_state, shift = 1, axis = XAXIS)
+        primitive_state_right = primitive_state
         max_wave_speed_x = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, config, registered_variables.velocity_index.x)
 
         # wave speeds in y direction
-        primitive_state_left = primitive_state[:, :, :-1]
-        primitive_state_right = primitive_state[:, :, 1:]
+        primitive_state_left = custom_roll(primitive_state, shift = 1, axis = YAXIS)
+        primitive_state_right = primitive_state
         max_wave_speed_y = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, config, registered_variables.velocity_index.y)
 
         # get the maximum wave speed
         max_wave_speed = jnp.maximum(max_wave_speed_x, max_wave_speed_y)
     else:
         # wave speeds in x direction
-        primitive_state_left = primitive_state[:, :-1]
-        primitive_state_right = primitive_state[:, 1:]
+        primitive_state_left = custom_roll(primitive_state, shift = 1, axis = XAXIS)
+        primitive_state_right = primitive_state
         max_wave_speed = get_wave_speeds(primitive_state_left, primitive_state_right, gamma, registered_variables, config, registered_variables.velocity_index)
 
     # calculate the time step

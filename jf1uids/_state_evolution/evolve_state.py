@@ -16,7 +16,7 @@ from jf1uids._physics_modules._self_gravity._poisson_solver import _compute_grav
 from jf1uids._riemann_solver._riemann_solver import _riemann_solver
 from jf1uids._physics_modules._mhd._magnetic_field_update import magnetic_update
 from jf1uids._physics_modules._self_gravity._self_gravity import _apply_self_gravity, _gravitational_source_term_along_axis # , _mullen_source_along_axis, _mullen_source_along_axis2
-from jf1uids._stencil_operations._stencil_operations import _stencil_add
+from jf1uids._stencil_operations._stencil_operations import _stencil_add, custom_roll
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import CARTESIAN, HLL, HLLC, SPHERICAL, STATE_TYPE, SimulationConfig
@@ -41,7 +41,7 @@ def _evolve_state_along_axis(
     axis: int
 ) -> STATE_TYPE:
     
-    primitive_state = _boundary_handler(primitive_state, config)
+    # primitive_state = _boundary_handler(primitive_state, config)
 
     # get conserved variables
     conservative_states = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
@@ -52,7 +52,7 @@ def _evolve_state_along_axis(
         # primitive_state_left = jax.lax.slice_in_dim(primitive_state, 1, num_cells - 2, axis = axis)
         # primitive_state_right = jax.lax.slice_in_dim(primitive_state, 2, num_cells - 1, axis = axis)
 
-        primitive_state_left = jnp.roll(primitive_state, shift = 1, axis = axis)
+        primitive_state_left = custom_roll(primitive_state, shift = 1, axis = axis)
         primitive_state_right = primitive_state
     else:
         primitive_state_left, primitive_state_right = _reconstruct_at_interface(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
@@ -95,7 +95,7 @@ def _evolve_state_along_axis(
 
 
     primitive_state = primitive_state_from_conserved(conservative_states, gamma, config, registered_variables)
-    primitive_state = _boundary_handler(primitive_state, config)
+    # primitive_state = _boundary_handler(primitive_state, config)
 
     # check if the pressure is still positive
     p = primitive_state[registered_variables.pressure_index]
@@ -132,6 +132,10 @@ def _evolve_gas_state(
     Returns:
         The evolved primitive state array.
     """
+
+    # set boundaries
+    primitive_state = _boundary_handler(primitive_state, config)
+
     if config.dimensionality == 1:
         primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 1)
 
@@ -149,13 +153,19 @@ def _evolve_gas_state(
 
     elif config.dimensionality == 3:
 
-        old_primitive_state = primitive_state
+        if config.self_gravity:
+            old_primitive_state = primitive_state
 
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 3)
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
+        if not config.first_order_fallback:
+            primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
+            primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
+            primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 3)
+            primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
+            primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
+        else:
+            primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 1)
+            primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 2)
+            primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 3)
 
         if config.self_gravity:
             primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, registered_variables, helper_data, gamma, gravitational_constant, dt)

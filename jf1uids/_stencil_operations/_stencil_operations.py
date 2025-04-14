@@ -16,6 +16,22 @@ from beartype import beartype as typechecker
 from jaxtyping import Array, Float, jaxtyped
 from typing import Tuple, Union
 
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['shift', 'axis'])
+def custom_roll(
+    input_array: jnp.ndarray,
+    shift: int,
+    axis: int
+) -> jnp.ndarray:
+    i = (-shift) % input_array.shape[axis]
+    return jax.lax.concatenate(
+        [
+            jax.lax.slice_in_dim(input_array, i, input_array.shape[axis], axis = axis),
+            jax.lax.slice_in_dim(input_array, 0, i, axis = axis)
+        ],
+        dimension = axis
+    )
+
     
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['indices', 'axis'])
@@ -41,7 +57,7 @@ def _stencil_add(
 
     output = (
         sum(
-            factor * jnp.roll(
+            factor * custom_roll(
                 input_array,
                 -index,
                 axis = axis
