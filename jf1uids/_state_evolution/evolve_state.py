@@ -41,8 +41,6 @@ def _evolve_state_along_axis(
     axis: int
 ) -> STATE_TYPE:
     
-    # primitive_state = _boundary_handler(primitive_state, config)
-
     # get conserved variables
     conservative_states = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
 
@@ -169,91 +167,6 @@ def _evolve_gas_state(
 
         if config.self_gravity:
             primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, registered_variables, helper_data, gamma, gravitational_constant, dt)
-
-        # ======================================================================
-
-        # not working attempt at implementing
-        # the Mullen source term
-        # https://arxiv.org/abs/2012.01340
-
-                # def get_flux(primitive_state, dt):
-        #     conserved_state = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
-        #     # advance in x by dt/2 -> y by dt/2 -> z by dt -> y by dt/2 -> x by dt/2
-        #     primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
-        #     primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
-        #     primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 3)
-        #     primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
-        #     primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
-        #     flux = (conserved_state_from_primitive(primitive_state, gamma, config, registered_variables) - conserved_state) / dt
-        #     return flux
-        
-        # def get_gravitational_source1(primitive_state_zero, primitive_state_one, dt):
-        #     gravitational_source = jnp.zeros_like(primitive_state)
-
-        #     potential_zero = _compute_gravitational_potential(primitive_state_zero[registered_variables.density_index], config.grid_spacing, config, gravitational_constant)
-        #     potential_one = _compute_gravitational_potential(primitive_state_one[registered_variables.density_index], config.grid_spacing, config, gravitational_constant)
-
-        #     for i in range(3):
-                
-        #         gravitational_source = gravitational_source + _mullen_source_along_axis(
-        #                 potential_zero,
-        #                 potential_one,
-        #                 primitive_state_zero,
-        #                 config.grid_spacing,
-        #                 dt,
-        #                 gamma,
-        #                 helper_data,
-        #                 config,
-        #                 registered_variables,
-        #                 i + 1,
-        #         )
-            
-        #     return gravitational_source
-        
-        # def get_gravitational_source2(primitive_state_zero, primitive_state_one, primitive_state_two, dt):
-        #     gravitational_source = jnp.zeros_like(primitive_state)
-
-        #     potential_zero = _compute_gravitational_potential(primitive_state_zero[registered_variables.density_index], config.grid_spacing, config, gravitational_constant)
-        #     potential_one = _compute_gravitational_potential(primitive_state_one[registered_variables.density_index], config.grid_spacing, config, gravitational_constant)
-        #     potential_two = _compute_gravitational_potential(primitive_state_two[registered_variables.density_index], config.grid_spacing, config, gravitational_constant)
-
-        #     for i in range(3):
-                
-        #         gravitational_source = gravitational_source + _mullen_source_along_axis2(
-        #                 potential_zero,
-        #                 potential_one,
-        #                 potential_two,
-        #                 primitive_state_one,
-        #                 config.grid_spacing,
-        #                 dt,
-        #                 gamma,
-        #                 helper_data,
-        #                 config,
-        #                 registered_variables,
-        #                 i + 1,
-        #         )
-            
-        #     return gravitational_source
-        
-        # conserved_state = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
-
-        # flux_zero = get_flux(primitive_state, dt / 2)
-
-        # conserved_state_one_cross = conserved_state + flux_zero * dt / 2
-        # primitive_state_one_cross = primitive_state_from_conserved(conserved_state_one_cross, gamma, config, registered_variables)
-
-        # conserved_state_one = conserved_state_one_cross + dt / 2 * get_gravitational_source1(primitive_state, primitive_state_one_cross, dt / 2)
-        # primitive_state_one = primitive_state_from_conserved(conserved_state_one, gamma, config, registered_variables)
-
-        # flux_one = get_flux(primitive_state_one, dt)
-        # conserved_state_two_cross = conserved_state + flux_one * dt
-        # primitive_state_two_cross = primitive_state_from_conserved(conserved_state_two_cross, gamma, config, registered_variables)
-
-        # conserved_state_two = conserved_state_two_cross + dt * get_gravitational_source2(primitive_state, primitive_state_one, primitive_state_two_cross, dt)
-
-        # primitive_state = primitive_state_from_conserved(conserved_state_two, gamma, config, registered_variables)
-
-        # ======================================================================
 
     else:
         raise ValueError("Dimensionality not supported.")

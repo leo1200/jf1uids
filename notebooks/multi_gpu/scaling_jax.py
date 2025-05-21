@@ -1,11 +1,7 @@
-"""
-Benchmark of the baseline implementation in JAX.
-(currently rather untidy, code, TODO: clean up)
-"""
-
-import os
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3" 
+# ==== GPU selection ====
+from autocvd import autocvd
+autocvd(num_gpus = 4)
+# =======================
 
 import jax
 
@@ -119,8 +115,8 @@ def make_scaling_plots(sharding = False, num_cells_list = [32, 64, 128, 256, 512
             jax.debug.visualize_array_sharding(primitive_state[0, :, :, 0])
 
             helper_data = get_helper_data(config, sharding)
-        
-        helper_data = get_helper_data(config)
+        else:
+            helper_data = get_helper_data(config)
         
         execution_time = measure_execution_time(primitive_state, config, params, helper_data, registered_variables)
         execution_times.append(execution_time)
@@ -207,7 +203,7 @@ def plot_scaling_results(plot_sharded = True):
 
 
 
-make_scaling_plots(sharding = False, num_cells_list  = [32, 64, 96, 128, 196, 256, 384])
-make_scaling_plots(sharding = True, num_cells_list   = [32, 64, 96, 128, 196, 256, 384])
+make_scaling_plots(sharding = False, num_cells_list = [32, 64, 96, 128, 196, 256])
+make_scaling_plots(sharding = True,  num_cells_list = [32, 64, 96, 128, 196, 256])
 
 plot_scaling_results(plot_sharded = True)
