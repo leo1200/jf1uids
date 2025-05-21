@@ -1,12 +1,14 @@
 from typing import NamedTuple
 
+from jf1uids._physics_modules._cooling.cooling_options import CoolingParams
 from jf1uids._physics_modules._cosmic_rays.cosmic_ray_options import CosmicRayParams
 from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindParams
 
 class SimulationParams(NamedTuple):
-    """Different from the simulation configuration, the simulation parameters
-        do not require recompilation when changed. The simulation can be 
-        differentiated with respect to them.
+    """
+    Different from the simulation configuration, the simulation parameters
+    do not require recompilation when changed. The simulation can be 
+    differentiated with respect to them.
     """
 
     #: The Courant-Friedrichs-Lewy number, a factor
@@ -18,6 +20,12 @@ class SimulationParams(NamedTuple):
 
     #: The adiabatic index of the gas.
     gamma: float = 5/3
+
+    #: The boltzmann constant.
+    boltzmann_constant: float = 1.0
+
+    #: The atomic mass unit.
+    atomic_mass_unit: float = 1.0
 
     #: The maximum time step.
     dt_max: float = 0.001
@@ -32,3 +40,6 @@ class SimulationParams(NamedTuple):
 
     #: Cosmic ray parameters
     cosmic_ray_params: CosmicRayParams = CosmicRayParams()
+
+    #: The parameters of the cooling module.
+    cooling_params: CoolingParams = CoolingParams()

@@ -1,6 +1,7 @@
 from types import NoneType
 from typing import NamedTuple, Union
 
+from jf1uids._physics_modules._cooling.cooling_options import CoolingConfig
 from jf1uids._physics_modules._cosmic_rays.cosmic_ray_options import CosmicRayConfig
 from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindConfig
 
@@ -71,9 +72,11 @@ class BoundarySettings(NamedTuple):
     z: BoundarySettings1D = BoundarySettings1D()
 
 class SimulationConfig(NamedTuple):
-    """Configuration object for the simulation.
+    """
+    Configuration object for the simulation.
     The simulation configuration are parameters defining 
-    the simulation where changes necessitate recompilation."""
+    the simulation where changes necessitate recompilation.
+    """
 
     # Simulation parameters
 
@@ -183,6 +186,9 @@ class SimulationConfig(NamedTuple):
 
     #: Cosmic rays
     cosmic_ray_config: CosmicRayConfig = CosmicRayConfig()
+
+    #: The configuration for the cooling module.
+    cooling_config: CoolingConfig = CoolingConfig()
 
 
 def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:

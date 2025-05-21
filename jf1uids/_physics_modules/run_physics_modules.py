@@ -5,6 +5,7 @@ from functools import partial
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
 
+from jf1uids._physics_modules._cooling._cooling import update_pressure_by_cooling
 from jf1uids._physics_modules._cosmic_rays.cr_injection import inject_crs_at_strongest_shock
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids._geometry.boundaries import _boundary_handler
@@ -58,5 +59,8 @@ def _run_physics_modules(
             lambda primitive_state: primitive_state,
             primitive_state
         )
+
+    if config.cooling_config.cooling:
+        primitive_state = update_pressure_by_cooling(primitive_state, registered_variables, params, dt)
     
     return primitive_state
