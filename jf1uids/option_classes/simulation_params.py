@@ -21,12 +21,6 @@ class SimulationParams(NamedTuple):
     #: The adiabatic index of the gas.
     gamma: float = 5/3
 
-    #: The boltzmann constant.
-    boltzmann_constant: float = 1.0
-
-    #: The atomic mass unit.
-    atomic_mass_unit: float = 1.0
-
     #: The maximum time step.
     dt_max: float = 0.001
 

@@ -42,11 +42,13 @@ import jax.numpy as jnp
 
 from jf1uids.option_classes.simulation_params import SimulationParams
 
+# NOTE the rescaled units
+# \tilde{T} = T * k_B / u
+# \tilde{\Lambda} = \lambda / u^2
 
 def get_effective_molecular_weights(
     hydrogen_mass_fraction: float, # X
     metal_mass_fraction: float, # Z
-    atomic_mass_unit: float # u
 ) -> Tuple[float, float, float]:
     """
     Calculate the mean molecular weight (mu) 
@@ -55,15 +57,15 @@ def get_effective_molecular_weights(
     """
 
     # mean molecular weight
-    mu = atomic_mass_unit / (
+    mu = 1.0 / (
         2 * hydrogen_mass_fraction + 3 * (1 - hydrogen_mass_fraction - metal_mass_fraction) / 4 + metal_mass_fraction / 2
     )
 
     # effective molecular weight for electrons
-    mu_e = 2 * atomic_mass_unit / (1 + metal_mass_fraction)
+    mu_e = 2 * 1.0 / (1 + hydrogen_mass_fraction)
 
     # effective molecular weight for hydrogen
-    mu_H = atomic_mass_unit / metal_mass_fraction
+    mu_H = 1.0 / hydrogen_mass_fraction
 
     return mu, mu_e, mu_H
 
@@ -78,18 +80,15 @@ def get_pressure_from_temperature(
     temperature: FIELD_TYPE,
     hydrogen_mass_fraction: float,
     metal_mass_fraction: float,
-    atomic_mass_unit: float,
-    boltzmann_constant: float,
 ) -> FIELD_TYPE:
     """
-    P = n * k_B * T
+    P = n * \tilde{T}
     """
 
     # calculate the effective molecular weights
     mu, _, _ = get_effective_molecular_weights(
         hydrogen_mass_fraction,
         metal_mass_fraction,
-        atomic_mass_unit
     )
 
     # calculate the particle number density
@@ -99,25 +98,22 @@ def get_pressure_from_temperature(
     )
 
     # calculate the pressure
-    return n * boltzmann_constant * temperature
+    return n * temperature
 
 def get_temperature_from_pressure(
     density: FIELD_TYPE,
     pressure: FIELD_TYPE,
     hydrogen_mass_fraction: float,
     metal_mass_fraction: float,
-    atomic_mass_unit: float,
-    boltzmann_constant: float,
 ) -> FIELD_TYPE:
     """
-    T = P / (n * k_B)
+    \tilde{T} = P / \tilde{n}
     """
 
     # calculate the effective molecular weights
     mu, _, _ = get_effective_molecular_weights(
         hydrogen_mass_fraction,
-        metal_mass_fraction,
-        atomic_mass_unit
+        metal_mass_fraction
     )
 
     # calculate the particle number density
@@ -127,7 +123,7 @@ def get_temperature_from_pressure(
     )
 
     # calculate the temperature
-    return pressure / (n * boltzmann_constant) # so the density must never be zero
+    return pressure / n # so the density must never be zero
 
     
 # \Lambda(T)
@@ -145,8 +141,6 @@ def cooling_time(
     temperature: FIELD_TYPE,
     hydrogen_mass_fraction: float,
     metal_mass_fraction: float,
-    atomic_mass_unit: float,
-    boltzmann_constant: float,
     gamma: float,
     reference_temperature: float,
     factor: float,
@@ -160,7 +154,6 @@ def cooling_time(
     mu, mu_e, mu_H = get_effective_molecular_weights(
         hydrogen_mass_fraction,
         metal_mass_fraction,
-        atomic_mass_unit
     )
 
     # calculate the cooling rate
@@ -172,7 +165,7 @@ def cooling_time(
     )
 
     # calculate the cooling time
-    return (boltzmann_constant * mu_e * mu_H * temperature) / (
+    return (mu_e * mu_H * temperature) / (
         (gamma - 1) * density * mu * cooling_rate
     )
 
@@ -214,8 +207,6 @@ def update_temperature(
     time_step: float,
     hydrogen_mass_fraction: float,
     metal_mass_fraction: float,
-    atomic_mass_unit: float,
-    boltzmann_constant: float,
     gamma: float,
     reference_temperature: float,
     factor: float,
@@ -230,8 +221,6 @@ def update_temperature(
         temperature,
         hydrogen_mass_fraction,
         metal_mass_fraction,
-        atomic_mass_unit,
-        boltzmann_constant,
         gamma,
         reference_temperature,
         factor,
@@ -267,9 +256,6 @@ def update_temperature(
         exponent
     )
 
-    # floor the temperature to 10^4 Kelvin
-    new_temperature = jnp.maximum(new_temperature, 1e4)
-
     return new_temperature
 
 def update_pressure_by_cooling(
@@ -283,8 +269,6 @@ def update_pressure_by_cooling(
     cooling_params = simulation_params.cooling_params
     hydrogen_mass_fraction = cooling_params.hydrogen_mass_fraction
     metal_mass_fraction = cooling_params.metal_mass_fraction
-    atomic_mass_unit = simulation_params.atomic_mass_unit
-    boltzmann_constant = simulation_params.boltzmann_constant
     gamma = simulation_params.gamma
 
     # get the density and pressure
@@ -297,26 +281,28 @@ def update_pressure_by_cooling(
         pressure,
         hydrogen_mass_fraction,
         metal_mass_fraction,
-        atomic_mass_unit,
-        boltzmann_constant
     )
 
     # update the temperature
-    # new_temperature = update_temperature(
-    #     density,
-    #     temperature,
-    #     time_step,
-    #     hydrogen_mass_fraction,
-    #     metal_mass_fraction,
-    #     atomic_mass_unit,
-    #     boltzmann_constant,
-    #     gamma,
-    #     cooling_params.reference_temperature,
-    #     cooling_params.factor,
-    #     cooling_params.exponent
-    # )
+    new_temperature = update_temperature(
+        density,
+        temperature,
+        time_step,
+        hydrogen_mass_fraction,
+        metal_mass_fraction,
+        gamma,
+        cooling_params.reference_temperature,
+        cooling_params.factor,
+        cooling_params.exponent
+    )
 
-    new_temperature = temperature
+    new_temperature = jnp.where(
+        new_temperature > cooling_params.floor_temperature,
+        new_temperature,
+        temperature
+    )
+
+    # new_temperature = temperature
 
     # update the pressure
     new_pressure = get_pressure_from_temperature(
@@ -324,8 +310,6 @@ def update_pressure_by_cooling(
         new_temperature,
         hydrogen_mass_fraction,
         metal_mass_fraction,
-        atomic_mass_unit,
-        boltzmann_constant
     )
 
     # set the new pressure

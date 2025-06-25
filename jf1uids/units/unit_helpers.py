@@ -14,7 +14,7 @@ from astropy import constants as c
 
 class CodeUnits:
     
-    def __init__(self, unit_length, unit_mass, unit_velocity, unit_temperature = None):
+    def __init__(self, unit_length, unit_mass, unit_velocity):
         # expects input in astropy units
         # e.g. unit_length = 3 * u.parsec
         #      unit_mass = 1e5 * u.M_sun
@@ -23,9 +23,6 @@ class CodeUnits:
         self.code_length = u.def_unit('code_length', unit_length)
         self.code_mass = u.def_unit('code_mass', unit_mass)
         self.code_velocity = u.def_unit('code_velocity', unit_velocity)
-
-        if unit_temperature is not None:
-            self.code_temperature = u.def_unit('code_temperature', unit_temperature)
 
         self.code_time = self.code_length / self.code_velocity
         self.code_density = self.code_mass / self.code_length**3
