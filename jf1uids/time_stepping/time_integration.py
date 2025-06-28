@@ -14,7 +14,7 @@ from typing import Union
 from jax.experimental import checkify
 
 # jf1uids constants
-from jf1uids.option_classes.simulation_config import BACKWARDS, FORWARDS, STATE_TYPE
+from jf1uids.option_classes.simulation_config import BACKWARDS, CARTESIAN, FORWARDS, STATE_TYPE
 
 # jf1uids containers
 from jf1uids.option_classes.simulation_config import SimulationConfig
@@ -100,6 +100,21 @@ def _time_integration(
         Depending on the configuration (return_snapshots, num_snapshots) either the final state of the fluid
         after the time integration of snapshots of the time evolution.
     """
+
+    # we must pad the state with ghost cells
+    # for now only implemented for cartesian geometry
+    if config.geometry == CARTESIAN:
+        # pad the primitive state with two ghost cells on each side
+        # to account for the periodic boundary conditions
+
+        if config.dimensionality == 1:
+            primitive_state = jnp.pad(primitive_state, ((0, 0), (2, 2)), mode='edge')
+
+        elif config.dimensionality == 2:
+            primitive_state = jnp.pad(primitive_state, ((0, 0), (2, 2), (2, 2)), mode='edge')
+
+        elif config.dimensionality == 3:
+            primitive_state = jnp.pad(primitive_state, ((0, 0), (2, 2), (2, 2), (2, 2)), mode='edge')
 
     if config.return_snapshots:
         time_points = jnp.zeros(config.num_snapshots)
@@ -243,4 +258,17 @@ def _time_integration(
             return state
     else:
         _, state = carry
+
+        # unpad the primitive state if we padded it
+        if config.geometry == CARTESIAN:
+            if config.dimensionality == 1:
+                state = jax.lax.slice_in_dim(state, 2, state.shape[1] - 2, axis = 1)
+            elif config.dimensionality == 2:
+                state = jax.lax.slice_in_dim(state, 2, state.shape[1] - 2, axis = 1)
+                state = jax.lax.slice_in_dim(state, 2, state.shape[2] - 2, axis = 2)
+            elif config.dimensionality == 3:
+                state = jax.lax.slice_in_dim(state, 2, state.shape[1] - 2, axis = 1)
+                state = jax.lax.slice_in_dim(state, 2, state.shape[2] - 2, axis = 2)
+                state = jax.lax.slice_in_dim(state, 2, state.shape[3] - 2, axis = 3)
+                
         return state

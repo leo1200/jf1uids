@@ -7,6 +7,7 @@ from beartype import beartype as typechecker
 
 from jf1uids._physics_modules._cooling._cooling import update_pressure_by_cooling
 from jf1uids._physics_modules._cosmic_rays.cr_injection import inject_crs_at_strongest_shock
+from jf1uids._physics_modules._neural_net_force._neural_net_force import _neural_net_force
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
@@ -62,5 +63,16 @@ def _run_physics_modules(
 
     if config.cooling_config.cooling:
         primitive_state = update_pressure_by_cooling(primitive_state, registered_variables, params, dt)
+
+    if config.neural_net_force_config.neural_net_force:
+        primitive_state = _neural_net_force(
+            primitive_state,
+            config,
+            registered_variables,
+            params,
+            helper_data,
+            dt,
+            current_time
+        )
     
     return primitive_state

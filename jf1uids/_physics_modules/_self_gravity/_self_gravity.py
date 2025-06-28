@@ -94,8 +94,8 @@ def _gravitational_source_term_along_axis(
     num_cells = primitive_state.shape[axis]
 
     if config.first_order_fallback:
-        primitive_state_left = jax.lax.slice_in_dim(primitive_state, 1, num_cells - 2, axis = axis)
-        primitive_state_right = jax.lax.slice_in_dim(primitive_state, 2, num_cells - 1, axis = axis)
+        primitive_state_left = jax.lax.slice_in_dim(primitive_state, 1, -2, axis = axis)
+        primitive_state_right = jax.lax.slice_in_dim(primitive_state, 2, -1, axis = axis)
     else:
         primitive_state_left, primitive_state_right = _reconstruct_at_interface(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
     
@@ -104,7 +104,7 @@ def _gravitational_source_term_along_axis(
     fluxes_ip1_to_i = jnp.minimum(fluxes, 0)
 
     # these are the accelerations at the cell interfaces, starting at the interface between cell 1 and 2
-    acc = -(jax.lax.slice_in_dim(gravitational_potential, 2, num_cells - 1, axis = axis - 1) - jax.lax.slice_in_dim(gravitational_potential, 1, num_cells - 2, axis = axis - 1)) / (grid_spacing)
+    acc = -(jax.lax.slice_in_dim(gravitational_potential, 2, -1, axis = axis - 1) - jax.lax.slice_in_dim(gravitational_potential, 1, -2, axis = axis - 1)) / (grid_spacing)
 
     fluxes_acc = jnp.zeros_like(primitive_state)
     selection = (slice(None),) * (axis) + (slice(2,-2),) + (slice(None),)*(primitive_state.ndim - axis - 1)

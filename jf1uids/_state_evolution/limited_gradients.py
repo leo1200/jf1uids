@@ -10,10 +10,10 @@ from typing import Union
 
 # general jf1uids imports
 from jf1uids.data_classes.simulation_helper_data import HelperData
-from jf1uids.option_classes.simulation_config import CARTESIAN, MINMOD, OSHER, SPHERICAL, STATE_TYPE, STATE_TYPE_ALTERED, SimulationConfig
+from jf1uids.option_classes.simulation_config import CARTESIAN, MINMOD, OSHER, DOUBLE_MINMOD, SUPERBEE, SPHERICAL, STATE_TYPE, STATE_TYPE_ALTERED, SimulationConfig
 
 # limiter imports
-from jf1uids._state_evolution.limiters import _minmod
+from jf1uids._state_evolution.limiters import _double_minmod, _minmod, _superbee
 
 
 @jaxtyped(typechecker=typechecker)
@@ -75,6 +75,10 @@ def _calculate_limited_gradients(
     if config.limiter == MINMOD:
         # Limited average formulations:
         limited_gradients = _minmod(a, b)
+    elif config.limiter == SUPERBEE:
+        limited_gradients = _superbee(a, b)
+    elif config.limiter == DOUBLE_MINMOD:
+        limited_gradients = _double_minmod(a, b)
     elif config.limiter == OSHER:
         # Quotient formulation:
         epsilon = 1e-11  # Small constant to prevent division by zero

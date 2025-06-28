@@ -41,12 +41,14 @@ class HelperData(NamedTuple):
 def get_helper_data(config: SimulationConfig, sharding: Union[NoneType, NamedSharding] = None) -> HelperData:
     """Generate the helper data for the simulation from the configuration."""
 
+    grid_spacing = config.grid_spacing
+
     if config.dimensionality > 1:
-        x = jnp.linspace(0, config.box_size, config.num_cells)
-        y = jnp.linspace(0, config.box_size, config.num_cells)
+        x = jnp.linspace(grid_spacing / 2, config.box_size - grid_spacing / 2, config.num_cells)
+        y = jnp.linspace(grid_spacing / 2, config.box_size - grid_spacing / 2, config.num_cells)
 
         if config.dimensionality == 3:
-            z = jnp.linspace(0, config.box_size, config.num_cells)
+            z = jnp.linspace(grid_spacing / 2, config.box_size - grid_spacing / 2, config.num_cells)
             geometric_centers = jnp.meshgrid(x, y, z)
         else:
             geometric_centers = jnp.meshgrid(x, y)
@@ -67,9 +69,8 @@ def get_helper_data(config: SimulationConfig, sharding: Union[NoneType, NamedSha
 
         return HelperData(geometric_centers = geometric_centers, volumetric_centers = volumetric_centers, r = r)
 
-    grid_spacing = config.box_size / (config.num_cells - 1)
     if config.geometry == CARTESIAN:
-        r = jnp.linspace(0, config.box_size, config.num_cells)
+        r = jnp.linspace(grid_spacing / 2, config.box_size - grid_spacing / 2, config.num_cells)
         r_hat = grid_spacing * jnp.ones_like(r) # not really
         cell_volumes = grid_spacing * jnp.ones_like(r)
         inner_cell_boundaries = r - grid_spacing / 2

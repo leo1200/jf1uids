@@ -49,8 +49,8 @@ def _evolve_state_along_axis(
     num_cells = primitive_state.shape[axis]
 
     if config.first_order_fallback:
-        primitive_state_left = jax.lax.slice_in_dim(primitive_state, 1, num_cells - 2, axis = axis)
-        primitive_state_right = jax.lax.slice_in_dim(primitive_state, 2, num_cells - 1, axis = axis)
+        primitive_state_left = jax.lax.slice_in_dim(primitive_state, 1, -2, axis = axis)
+        primitive_state_right = jax.lax.slice_in_dim(primitive_state, 2, -1, axis = axis)
     else:
         primitive_state_left, primitive_state_right = _reconstruct_at_interface(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
     

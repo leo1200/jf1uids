@@ -2,6 +2,7 @@ from typing import NamedTuple
 
 from jf1uids._physics_modules._cooling.cooling_options import CoolingParams
 from jf1uids._physics_modules._cosmic_rays.cosmic_ray_options import CosmicRayParams
+from jf1uids._physics_modules._neural_net_force._neural_net_force_options import NeuralNetForceParams
 from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindParams
 
 class SimulationParams(NamedTuple):
@@ -37,3 +38,6 @@ class SimulationParams(NamedTuple):
 
     #: The parameters of the cooling module.
     cooling_params: CoolingParams = CoolingParams()
+
+    #: The parameters of the neural network force module.
+    neural_net_force_params: NeuralNetForceParams = NeuralNetForceParams()

@@ -3,6 +3,7 @@ from typing import NamedTuple, Union
 
 from jf1uids._physics_modules._cooling.cooling_options import CoolingConfig
 from jf1uids._physics_modules._cosmic_rays.cosmic_ray_options import CosmicRayConfig
+from jf1uids._physics_modules._neural_net_force._neural_net_force_options import NeuralNetForceConfig
 from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindConfig
 
 from jaxtyping import Array, Float
@@ -16,6 +17,8 @@ BACKWARDS = 1
 # limiter types
 MINMOD = 0
 OSHER = 1
+DOUBLE_MINMOD = 2
+SUPERBEE = 3
 
 # Riemann solvers
 HLL = 0
@@ -133,7 +136,7 @@ class SimulationConfig(NamedTuple):
     num_ghost_cells: int = reconstruction_order + 1
 
     #: Grid spacing.
-    grid_spacing: float = box_size / (num_cells - 1)
+    grid_spacing: float = box_size / num_cells
 
     #: Boundary settings for the simulation.
     boundary_settings: Union[NoneType, BoundarySettings1D, BoundarySettings] = None
@@ -144,7 +147,7 @@ class SimulationConfig(NamedTuple):
 
     #: Exactly reach the end time. In adaptive timestepping,
     #: one might otherwise overshoot.
-    exact_end_time: bool = False
+    exact_end_time: bool = True
 
     #: Adds the sources with the current timestep to
     #: a hypothetical state to estimate the actual timestep.
@@ -190,6 +193,9 @@ class SimulationConfig(NamedTuple):
     #: The configuration for the cooling module.
     cooling_config: CoolingConfig = CoolingConfig()
 
+    #: Configuration of the neural network force module.
+    neural_net_force_config: NeuralNetForceConfig = NeuralNetForceConfig()
+
 
 def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
     """Finalizes the simulation configuration."""
@@ -206,12 +212,12 @@ def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
         if num_cells_x != num_cells_y or num_cells_x != num_cells_z:
             raise ValueError("The number of cells in x, y and z must be equal.")
 
-    config = config._replace(grid_spacing = config.box_size / (config.num_cells - 1))
+    config = config._replace(grid_spacing = config.box_size / config.num_cells)
 
     if config.geometry == SPHERICAL:
 
         print("For spherical geometry, only HLL is currently supported.")
-
+        config = config._replace(grid_spacing = config.box_size / (config.num_cells - 1))
         config = config._replace(riemann_solver = HLL)
 
     # set boundary conditions if not set
