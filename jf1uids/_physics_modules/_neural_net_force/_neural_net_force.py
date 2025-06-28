@@ -22,7 +22,7 @@ class ForceNet(eqx.Module):
         self.mlp = eqx.nn.MLP(
             in_size=3,       # <- now takes (x, y, t)
             out_size=2,      # returns (Fx, Fy)
-            width_size=256,
+            width_size=128,
             depth=4,
             key=key,
         )

@@ -100,7 +100,8 @@ t_end = 2.0
 params = SimulationParams(
     t_end = t_end,
     C_cfl = 0.4,
-    neural_net_force_params = neural_net_force_params
+    neural_net_force_params = neural_net_force_params,
+    dt_max = 0.01,
 )
 
 registered_variables = get_registered_variables(config)

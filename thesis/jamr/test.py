@@ -7,7 +7,7 @@ import time
 
 import jax.numpy as jnp
 from matplotlib import pyplot as plt
-from jamr import _BufferedList, animation, time_integration_fixed_stepsize
+from jamr import _BufferedList, animation, plot_density, time_integration_fixed_stepsize
 
 
 # constants
@@ -184,6 +184,7 @@ def jf1uids_simulate(num_cells, dt):
 # import ExactPack solvers
 from exactpack.solvers.riemann.ep_riemann import IGEOS_Solver
 import numpy as np
+from matplotlib import cm
 
 def exact_solution(xvec = np.linspace(0.0, box_size, 1000)):
 
@@ -362,29 +363,39 @@ gs = fig.add_gridspec(3, 3)
 ax1 = fig.add_subplot(gs[0, 0])
 ax2 = fig.add_subplot(gs[0, 1])
 ax3 = fig.add_subplot(gs[0, 2])
+# Use a colorblind-friendly palette
+colors = {
+    'exact': '#000000',      # black
+    'jamr': '#0072B2',       # blue
+    'jf1uids': '#D55E00',    # orange
+    'jamr_density': '#0072B2',
+    'jamr_pressure': '#56B4E9',  # lighter blue
+    'jf1uids_density': '#D55E00',
+    'jf1uids_pressure': '#E69F00', # lighter orange
+}
 
 # Density Plot (ax1)
-ax1.plot(r_exact, rho_exact, label='Exact', linestyle='--')
-ax1.plot(r_jamr, rho_jamr, label='jamr', marker='o', markersize=2)
-ax1.plot(r_jf1uids, rho_jf1uids, label='jf1uids', marker='x', markersize=2)
+ax1.plot(r_exact, rho_exact, label='Exact', linestyle='--', color=colors['exact'])
+ax1.plot(r_jamr, rho_jamr, label='jamr', marker='o', markersize=2, linestyle='-', color=colors['jamr'])
+ax1.plot(r_jf1uids, rho_jf1uids, label='jf1uids', marker='x', markersize=2, linestyle='-', color=colors['jf1uids'])
 ax1.set_title('Density')
 ax1.set_xlabel('Position')
 ax1.set_ylabel('Density')
 ax1.legend()
 
 # Velocity Plot (ax2)
-ax2.plot(r_exact, u_exact, label='Exact', linestyle='--')
-ax2.plot(r_jamr, u_jamr, label='jamr', marker='o', markersize=2)
-ax2.plot(r_jf1uids, u_jf1uids, label='jf1uids', marker='x', markersize=2)
+ax2.plot(r_exact, u_exact, label='Exact', linestyle='--', color=colors['exact'])
+ax2.plot(r_jamr, u_jamr, label='jamr', marker='o', markersize=2, linestyle='-', color=colors['jamr'])
+ax2.plot(r_jf1uids, u_jf1uids, label='jf1uids', marker='x', markersize=2, linestyle='-', color=colors['jf1uids'])
 ax2.set_title('Velocity')
 ax2.set_xlabel('Position')
 ax2.set_ylabel('Velocity')
 ax2.legend()
 
 # Pressure Plot (ax3)
-ax3.plot(r_exact, p_exact, label='Exact', linestyle='--')
-ax3.plot(r_jamr, p_jamr, label='jamr', marker='o', markersize=2)
-ax3.plot(r_jf1uids, p_jf1uids, label='jf1uids', marker='x', markersize=2)
+ax3.plot(r_exact, p_exact, label='Exact', linestyle='--', color=colors['exact'])
+ax3.plot(r_jamr, p_jamr, label='jamr', marker='o', markersize=2, linestyle='-', color=colors['jamr'])
+ax3.plot(r_jf1uids, p_jf1uids, label='jf1uids', marker='x', markersize=2, linestyle='-', color=colors['jf1uids'])
 ax3.set_title('Pressure')
 ax3.set_xlabel('Position')
 ax3.set_ylabel('Pressure')
@@ -392,8 +403,10 @@ ax3.legend()
 
 # --- Middle Row: Mean Error Plot ---
 ax4 = fig.add_subplot(gs[1, :])
-ax4.plot(buffer_sizes, jf1uids_p_accuracies, label='jf1uids, pressure', marker='x')
-ax4.plot(buffer_sizes, jamr_p_accuracies, label='jamr, pressure', marker='o')
+ax4.plot(buffer_sizes, jf1uids_rho_accuracies, label='jf1uids, density', marker='x', color=colors['jf1uids_density'])
+ax4.plot(buffer_sizes, jf1uids_p_accuracies, label='jf1uids, pressure', marker='x', color=colors['jf1uids_pressure'])
+ax4.plot(buffer_sizes, jamr_rho_accuracies, label='jamr, density', marker='o', color=colors['jamr_density'])
+ax4.plot(buffer_sizes, jamr_p_accuracies, label='jamr, pressure', marker='o', color=colors['jamr_pressure'])
 ax4.set_title('Mean Errors')
 ax4.set_xlabel('buffer size (jamr), num cells (jf1uids)')
 ax4.set_ylabel('Mean Absolute Error')
@@ -402,8 +415,8 @@ ax4.grid(True)
 
 # --- Bottom Row: Runtime Plot ---
 ax5 = fig.add_subplot(gs[2, :])
-ax5.plot(buffer_sizes, jamr_runtimes, label='jamr', marker='o')
-ax5.plot(buffer_sizes, jf1uids_runtimes, label='jf1uids', marker='x')
+ax5.plot(buffer_sizes, jamr_runtimes, label='jamr', marker='o', color=colors['jamr'])
+ax5.plot(buffer_sizes, jf1uids_runtimes, label='jf1uids', marker='x', color=colors['jf1uids'])
 ax5.set_title('Runtime')
 ax5.set_xlabel('buffer size (jamr), num cells (jf1uids)')
 ax5.set_ylabel('Runtime in seconds')
@@ -413,3 +426,42 @@ ax5.grid(True)
 # Adjust layout and save the figure
 plt.tight_layout()
 plt.savefig('jamr_vs_jf1uids.svg')
+
+
+# create example initial fluid state
+shock_pos = 0.5
+N = 20
+r = jnp.linspace(0, 1, N)
+dx_coarse = 1 / (N - 1)
+rho = jnp.where(r < shock_pos, 1.0, 0.125)
+u = jnp.ones_like(r) * 0.0
+p = jnp.where(r < shock_pos, 1.0, 0.1)
+
+# create buffers
+buffer_size = 200
+fluid_buffer = jnp.full((3, buffer_size), 1.0)
+center_buffer = jnp.linspace(1, 2, buffer_size)
+volume_buffer = jnp.full((buffer_size,), 1.0)
+refinement_level_buffer = jnp.full((buffer_size,), 1.0)
+
+# fill buffers with initial fluid state
+fluid_buffer = fluid_buffer.at[:, 0:N].set(jnp.stack([rho, u, p], axis=0))
+center_buffer = center_buffer.at[0:N].set(r)
+volume_buffer = volume_buffer.at[0:N].set(dx_coarse)
+refinement_level_buffer = refinement_level_buffer.at[0:N].set(0)
+
+# create fluid data
+fluid_data = _BufferedList(
+    jnp.vstack([fluid_buffer, center_buffer, volume_buffer, refinement_level_buffer]), N
+)
+
+derefinement_tolerance = 0.5
+refinement_tolerance = 5.0
+
+fluid_data_final = time_integration_fixed_stepsize(
+    fluid_data, 0.001, 200, 3, refinement_tolerance, derefinement_tolerance
+)
+
+fig, ax = plt.subplots(figsize=(10, 6))
+plot_density(ax, fluid_data_final)
+plt.savefig('jamr_density_plot.svg')

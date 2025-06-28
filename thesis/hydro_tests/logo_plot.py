@@ -22,8 +22,8 @@ import os
 
 # plotting
 import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
 from matplotlib.colors import LogNorm
+from mpl_toolkits.axes_grid1 import make_axes_locatable # Import the necessary toolkit
 
 # jf1uids
 from jf1uids import SimulationConfig
@@ -101,7 +101,8 @@ t_end = 2.0
 params = SimulationParams(
     t_end = t_end,
     C_cfl = 0.4,
-    neural_net_force_params = neural_net_force_params
+    neural_net_force_params = neural_net_force_params,
+    dt_max = 0.01,  # Set a maximum timestep for stability
 )
 
 registered_variables = get_registered_variables(config)
@@ -229,38 +230,41 @@ def get_force_and_density(time):
 
     return forces, final_state[0]
 
-# just plot the target state
-target_density_reshaped = target_density.reshape(config.num_cells, config.num_cells)
 # Plot the target density
 fig, ax = plt.subplots(figsize=(6, 6))
-im = ax.imshow(target_density_reshaped, extent=(0, box_size, 0, box_size),
-               origin='lower', cmap='viridis', norm=LogNorm(vmin=1e-3, vmax=1.5))
+im = ax.imshow(target_density, extent=(0, box_size, 0, box_size),
+               origin='lower', cmap='viridis')
 ax.set_title("Target Density")
 ax.set_xlabel("x")
 ax.set_ylabel("y")
-plt.colorbar(im, ax=ax, label='Density')
-plt.tight_layout()
+# Create a divider for the axes and add a colorbar axes to it
+divider = make_axes_locatable(ax)
+cax = divider.append_axes("right", size="5%", pad=0.05)
+fig.colorbar(im, cax=cax, label='Density')
 plt.savefig("target_density.png", dpi=300)
 
 # plot the density and force field over time
-times = [0.0, 1.0, 2.0]
-fig, axs = plt.subplots(2, len(times), figsize=(15, 10))
+times = [0.0, 1.8, 2.0]
+fig, axs = plt.subplots(2, len(times), figsize=(15, 8))
 
 for i, time in enumerate(times):
     forces, density = get_force_and_density(time)
 
-    # Reshape density for plotting
-    density_reshaped = density[0].reshape(config.num_cells, config.num_cells)
+    # --- Plot the density ---
+    ax_density = axs[0, i]
+    im = ax_density.imshow(density, extent=(0, box_size, 0, box_size),
+                           origin='lower', cmap='viridis')
+    ax_density.set_title(f"Density at t={time:.2f}")
+    ax_density.set_xlabel("x")
+    ax_density.set_ylabel("y")
+    # Make colorbar the same height as the plot
+    divider_density = make_axes_locatable(ax_density)
+    cax_density = divider_density.append_axes("right", size="5%", pad=0.05)
+    fig.colorbar(im, cax=cax_density, label='Density')
 
-    # Plot the density
-    im = axs[0, i].imshow(density_reshaped, extent=(0, box_size, 0, box_size),
-                          origin='lower', cmap='viridis', norm=LogNorm(vmin=1e-3, vmax=1.5))
-    axs[0, i].set_title(f"Density at t={time:.2f}")
-    axs[0, i].set_xlabel("x")
-    axs[0, i].set_ylabel("y")
-    plt.colorbar(im, ax=axs[0, i], label='Density')
 
-    # Plot the force field with fixed arrow size and color by magnitude
+    # --- Plot the force field ---
+    ax_force = axs[1, i]
     xm, ym = helper_data.geometric_centers[..., 0], helper_data.geometric_centers[..., 1]
     step = 5
     X = xm[::step, ::step]
@@ -274,17 +278,20 @@ for i, time in enumerate(times):
     U_norm = jnp.where(norm > 0, U / norm, 0)
     V_norm = jnp.where(norm > 0, V / norm, 0)
 
-    q = axs[1, i].quiver(
+    q = ax_force.quiver(
         X, Y, U_norm, V_norm, magnitude,
         cmap='plasma', scale=30, clim=(magnitude.min(), magnitude.max())
     )
-    axs[1, i].set_title(f"Force Field at t={time:.2f}")
-    axs[1, i].set_xlabel("x")
-    axs[1, i].set_ylabel("y")
-    axs[1, i].set_xlim(0, box_size)
-    axs[1, i].set_ylim(0, box_size)
-    axs[1, i].set_aspect('equal')
-    plt.colorbar(q, ax=axs[1, i], label='Force Magnitude')
+    ax_force.set_title(f"Force Field at t={time:.2f}")
+    ax_force.set_xlabel("x")
+    ax_force.set_ylabel("y")
+    ax_force.set_xlim(0, box_size)
+    ax_force.set_ylim(0, box_size)
+    ax_force.set_aspect('equal')
+    # Make colorbar the same height as the plot
+    divider_force = make_axes_locatable(ax_force)
+    cax_force = divider_force.append_axes("right", size="5%", pad=0.05)
+    fig.colorbar(q, cax=cax_force, label='Force Magnitude')
 
 # Adjust layout and save the figure
 plt.tight_layout()
