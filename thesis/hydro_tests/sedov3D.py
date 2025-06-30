@@ -18,7 +18,7 @@ from jf1uids import SimulationConfig
 from jf1uids import SimulationParams
 
 # jf1uids constants
-from jf1uids.option_classes.simulation_config import CARTESIAN, SPHERICAL, HLL, MINMOD
+from jf1uids.option_classes.simulation_config import CARTESIAN, HLLC, SPHERICAL, HLL, MINMOD
 
 
 # jf1uids functions
@@ -43,7 +43,7 @@ config = SimulationConfig(
     progress_bar = True,
     runtime_debugging = False,
 
-    riemann_solver = HLL,
+    riemann_solver = HLLC,
     
     dimensionality = 3,
 
@@ -232,5 +232,5 @@ fig.legend(handles, labels, loc='lower center', ncol=3, bbox_to_anchor=(0.5, 0.0
 
 # Adjust layout and save the figure
 plt.tight_layout(rect=[0, 0.1, 1, 0.96]) # Adjust for suptitle and common legend
-plt.savefig('figures/sedov.pdf', dpi = 300, bbox_inches='tight')
+plt.savefig('figures/sedovHLLC.pdf', dpi = 300, bbox_inches='tight')
 print("Comparison plot 'figures/sedov.pdf' has been saved.")

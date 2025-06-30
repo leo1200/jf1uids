@@ -304,34 +304,34 @@ def jf1uids_test(cell_nums = [40, 80, 160, 320], dt = 0.0002):
         p_accuracies,
     )
 
-# Run the jamr test
-buffer_sizes, jamr_runtimes, jamr_rho_accuracies, jamr_u_accuracies, jamr_p_accuracies = jamr_test(base_resolutions=jnp.arange(20, 120, 5), dt=0.0001)
-# Run the jf1uids test
-jf1uids_runtimes, jf1uids_rho_accuracies, jf1uids_u_accuracies, jf1uids_p_accuracies = jf1uids_test(cell_nums=buffer_sizes, dt=0.0001)
+# # Run the jamr test
+# buffer_sizes, jamr_runtimes, jamr_rho_accuracies, jamr_u_accuracies, jamr_p_accuracies = jamr_test(base_resolutions=jnp.arange(20, 120, 5), dt=0.0001)
+# # Run the jf1uids test
+# jf1uids_runtimes, jf1uids_rho_accuracies, jf1uids_u_accuracies, jf1uids_p_accuracies = jf1uids_test(cell_nums=buffer_sizes, dt=0.0001)
 
-# save the runtimes and accuracies to a file
-buffer_sizes = jnp.array(buffer_sizes)
-jamr_runtimes = jnp.array(jamr_runtimes)
-jf1uids_runtimes = jnp.array(jf1uids_runtimes)
-jamr_rho_accuracies = jnp.array(jamr_rho_accuracies)
-jf1uids_rho_accuracies = jnp.array(jf1uids_rho_accuracies)
-jamr_u_accuracies = jnp.array(jamr_u_accuracies)
-jf1uids_u_accuracies = jnp.array(jf1uids_u_accuracies)
-jamr_p_accuracies = jnp.array(jamr_p_accuracies)
-jf1uids_p_accuracies = jnp.array(jf1uids_p_accuracies)
+# # save the runtimes and accuracies to a file
+# buffer_sizes = jnp.array(buffer_sizes)
+# jamr_runtimes = jnp.array(jamr_runtimes)
+# jf1uids_runtimes = jnp.array(jf1uids_runtimes)
+# jamr_rho_accuracies = jnp.array(jamr_rho_accuracies)
+# jf1uids_rho_accuracies = jnp.array(jf1uids_rho_accuracies)
+# jamr_u_accuracies = jnp.array(jamr_u_accuracies)
+# jf1uids_u_accuracies = jnp.array(jf1uids_u_accuracies)
+# jamr_p_accuracies = jnp.array(jamr_p_accuracies)
+# jf1uids_p_accuracies = jnp.array(jf1uids_p_accuracies)
 
-# save the results to a file
-jnp.savez('jamr_vs_jf1uids_results.npz',
-    buffer_sizes=buffer_sizes,
-    jamr_runtimes=jamr_runtimes,
-    jf1uids_runtimes=jf1uids_runtimes,
-    jamr_rho_accuracies=jamr_rho_accuracies,
-    jf1uids_rho_accuracies=jf1uids_rho_accuracies,
-    jamr_u_accuracies=jamr_u_accuracies,
-    jf1uids_u_accuracies=jf1uids_u_accuracies,
-    jamr_p_accuracies=jamr_p_accuracies,
-    jf1uids_p_accuracies=jf1uids_p_accuracies
-)
+# # save the results to a file
+# jnp.savez('jamr_vs_jf1uids_results.npz',
+#     buffer_sizes=buffer_sizes,
+#     jamr_runtimes=jamr_runtimes,
+#     jf1uids_runtimes=jf1uids_runtimes,
+#     jamr_rho_accuracies=jamr_rho_accuracies,
+#     jf1uids_rho_accuracies=jf1uids_rho_accuracies,
+#     jamr_u_accuracies=jamr_u_accuracies,
+#     jf1uids_u_accuracies=jf1uids_u_accuracies,
+#     jamr_p_accuracies=jamr_p_accuracies,
+#     jf1uids_p_accuracies=jf1uids_p_accuracies
+# )
 
 # load the results from the file
 results = jnp.load('jamr_vs_jf1uids_results.npz')
@@ -345,6 +345,18 @@ jf1uids_u_accuracies = results['jf1uids_u_accuracies']
 jamr_p_accuracies = results['jamr_p_accuracies']
 jf1uids_p_accuracies = results['jf1uids_p_accuracies']
 
+# print the maximum relative error difference of jamr to jf1uids and
+# where they occur
+
+max_rel_rho_diff = jnp.max((jf1uids_rho_accuracies - jamr_rho_accuracies) / jf1uids_rho_accuracies * 100)
+max_rel_rho_diff_idx = jnp.argmax((jf1uids_rho_accuracies - jamr_rho_accuracies) / jf1uids_rho_accuracies * 100)
+print(f"Maximum relative error difference in density: {max_rel_rho_diff:.2f}% at buffer size {buffer_sizes[max_rel_rho_diff_idx]}")
+max_rel_u_diff = jnp.max((jf1uids_u_accuracies - jamr_u_accuracies) / jf1uids_u_accuracies * 100)
+max_rel_u_diff_idx = jnp.argmax((jf1uids_u_accuracies - jamr_u_accuracies) / jf1uids_u_accuracies * 100)
+print(f"Maximum relative error difference in velocity: {max_rel_u_diff:.2f}% at buffer size {buffer_sizes[max_rel_u_diff_idx]}")
+max_rel_p_diff = jnp.max((jf1uids_p_accuracies - jamr_p_accuracies) / jf1uids_p_accuracies * 100)
+max_rel_p_diff_idx = jnp.argmax((jf1uids_p_accuracies - jamr_p_accuracies) / jf1uids_p_accuracies * 100)
+print(f"Maximum relative error difference in pressure: {max_rel_p_diff:.2f}% at buffer size {buffer_sizes[max_rel_p_diff_idx]}")
 
 # Get data for the top row plots (final state comparison)
 r_exact, rho_exact, u_exact, p_exact = exact_solution()

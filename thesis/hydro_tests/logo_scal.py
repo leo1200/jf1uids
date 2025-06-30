@@ -212,8 +212,8 @@ def cost_analyse_backprop(num_checkpoints):
         vals.block_until_ready()  # Ensure the computation is complete
         end = timer()
         runtimes.append(end - start)
-    # take minimum runtime
-    runtime = min(runtimes)
+    # take mean runtime
+    runtime = jnp.mean(jnp.array(runtimes))
 
     # get storage usage
     # print(jax.jit(f).lower(x).cost_analysis())

@@ -22,74 +22,74 @@ from jf1uids.option_classes.simulation_config import (
     BoundarySettings, BoundarySettings1D, finalize_config
 )
 
-def run_simulation(solver_name, solver_type, num_cells):
-    """
-    Runs a single simulation for a given solver and resolution,
-    and returns the final density field.
-    """
-    print(f"🚀 Starting simulation: Solver={solver_name}, Resolution={num_cells}x{num_cells}")
+# def run_simulation(solver_name, solver_type, num_cells):
+#     """
+#     Runs a single simulation for a given solver and resolution,
+#     and returns the final density field.
+#     """
+#     print(f"🚀 Starting simulation: Solver={solver_name}, Resolution={num_cells}x{num_cells}")
 
-    # simulation settings
-    box_size = 1.0
+#     # simulation settings
+#     box_size = 1.0
     
-    # setup simulation config
-    config = SimulationConfig(
-        runtime_debugging=False,
-        first_order_fallback=False,
-        riemann_solver=solver_type,
-        progress_bar=True,
-        dimensionality=2,
-        box_size=box_size,
-        num_cells=num_cells, # Use the passed resolution
-        fixed_timestep=False,
-        differentiation_mode=FORWARDS,
-        num_timesteps = 2000,
-        boundary_settings=BoundarySettings(
-            x=BoundarySettings1D(PERIODIC_BOUNDARY, PERIODIC_BOUNDARY),
-            y=BoundarySettings1D(PERIODIC_BOUNDARY, PERIODIC_BOUNDARY)
-        ),
-        limiter=MINMOD,
-        return_snapshots = False,
-        exact_end_time=True,
-    )
+#     # setup simulation config
+#     config = SimulationConfig(
+#         runtime_debugging=False,
+#         first_order_fallback=False,
+#         riemann_solver=solver_type,
+#         progress_bar=True,
+#         dimensionality=2,
+#         box_size=box_size,
+#         num_cells=num_cells, # Use the passed resolution
+#         fixed_timestep=False,
+#         differentiation_mode=FORWARDS,
+#         num_timesteps = 2000,
+#         boundary_settings=BoundarySettings(
+#             x=BoundarySettings1D(PERIODIC_BOUNDARY, PERIODIC_BOUNDARY),
+#             y=BoundarySettings1D(PERIODIC_BOUNDARY, PERIODIC_BOUNDARY)
+#         ),
+#         limiter=MINMOD,
+#         return_snapshots = False,
+#         exact_end_time=True,
+#     )
 
-    helper_data = get_helper_data(config)
-    params = SimulationParams(t_end=2.0, C_cfl=0.4)
-    registered_variables = get_registered_variables(config)
+#     helper_data = get_helper_data(config)
+#     params = SimulationParams(t_end=2.0, C_cfl=0.4)
+#     registered_variables = get_registered_variables(config)
 
-    # --- Initial Conditions ---
-    grid_spacing = config.box_size / config.num_cells
-    x = jnp.linspace(grid_spacing / 2, config.box_size - grid_spacing / 2, config.num_cells)
-    y = jnp.linspace(grid_spacing / 2, config.box_size - grid_spacing / 2, config.num_cells)
-    X, Y = jnp.meshgrid(x, y, indexing="ij")
+#     # --- Initial Conditions ---
+#     grid_spacing = config.box_size / config.num_cells
+#     x = jnp.linspace(grid_spacing / 2, config.box_size - grid_spacing / 2, config.num_cells)
+#     y = jnp.linspace(grid_spacing / 2, config.box_size - grid_spacing / 2, config.num_cells)
+#     X, Y = jnp.meshgrid(x, y, indexing="ij")
 
-    rho = jnp.ones_like(X)
-    u_x = 0.5 * jnp.ones_like(X)
-    u_y = 0.01 * jnp.sin(2 * jnp.pi * X)
+#     rho = jnp.ones_like(X)
+#     u_x = 0.5 * jnp.ones_like(X)
+#     u_y = 0.01 * jnp.sin(2 * jnp.pi * X)
     
-    mask = (Y > 0.25) & (Y < 0.75)
-    u_x = jnp.where(mask, -0.5, u_x)
-    rho = jnp.where(mask, 2.0, rho)
+#     mask = (Y > 0.25) & (Y < 0.75)
+#     u_x = jnp.where(mask, -0.5, u_x)
+#     rho = jnp.where(mask, 2.0, rho)
     
-    p = jnp.ones((num_cells, num_cells)) * 2.5
+#     p = jnp.ones((num_cells, num_cells)) * 2.5
 
-    initial_state = construct_primitive_state(
-        config=config,
-        registered_variables=registered_variables,
-        density=rho,
-        velocity_x=u_x,
-        velocity_y=u_y,
-        gas_pressure=p
-    )
-    config = finalize_config(config, initial_state.shape)
+#     initial_state = construct_primitive_state(
+#         config=config,
+#         registered_variables=registered_variables,
+#         density=rho,
+#         velocity_x=u_x,
+#         velocity_y=u_y,
+#         gas_pressure=p
+#     )
+#     config = finalize_config(config, initial_state.shape)
     
-    # --- Run Time Integration ---
-    result = time_integration(initial_state, config, params, helper_data, registered_variables)
+#     # --- Run Time Integration ---
+#     result = time_integration(initial_state, config, params, helper_data, registered_variables)
     
-    # Return only the final density field (index 0)
-    final_density = result[0, :, :]
-    print(f"✅ Finished simulation: Solver={solver_name}, Resolution={num_cells}x{num_cells}")
-    return final_density
+#     # Return only the final density field (index 0)
+#     final_density = result[0, :, :]
+#     print(f"✅ Finished simulation: Solver={solver_name}, Resolution={num_cells}x{num_cells}")
+#     return final_density
 
 
 # =============================================================================
@@ -108,27 +108,27 @@ box_size = 1.0
 # Store results in a dictionary
 results = {}
 
-# Run all simulations
-for solver_name, solver_const in solver_config.items():
-    for res in resolutions:
-        # Create a unique key using the string name and resolution
-        key = (solver_name, res)
-        results[key] = run_simulation(
-            solver_name=solver_name,
-            solver_type=solver_const,
-            num_cells=res
-        )
+# # Run all simulations
+# for solver_name, solver_const in solver_config.items():
+#     for res in resolutions:
+#         # Create a unique key using the string name and resolution
+#         key = (solver_name, res)
+#         results[key] = run_simulation(
+#             solver_name=solver_name,
+#             solver_type=solver_const,
+#             num_cells=res
+#         )
 
 print("\n📊 All simulations complete. Generating plot...")
 
 # Save the results to a file using jnp.savez
 
-os.makedirs("results", exist_ok=True)
+# os.makedirs("results", exist_ok=True)
 save_path = "results/kelvin_helmholtz_results.npz"
 
-# Convert keys to strings for saving
-save_dict = {f"{solver}_{res}": jnp.array(density) for (solver, res), density in results.items()}
-jnp.savez(save_path, **save_dict)
+# # Convert keys to strings for saving
+# save_dict = {f"{solver}_{res}": jnp.array(density) for (solver, res), density in results.items()}
+# jnp.savez(save_path, **save_dict)
 
 # To reload the results later:
 loaded = jnp.load(save_path)
@@ -158,7 +158,7 @@ num_cols = len(resolutions)
 fig, axes = plt.subplots(
     num_rows,
     num_cols,
-    figsize=(14, 7),
+    figsize=(12, 6),
     sharex=True,
     sharey=True,
     gridspec_kw={'wspace': 0.05, 'hspace': 0.2}
