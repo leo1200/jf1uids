@@ -117,7 +117,7 @@ class SimulationConfig(NamedTuple):
     reconstruction_order: int = 1
 
     #: The limiter for the reconstruction.
-    limiter: int = MINMOD
+    limiter: int = DOUBLE_MINMOD
 
     #: The Riemann solver used
     riemann_solver: int = HLLC

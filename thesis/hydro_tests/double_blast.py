@@ -1,7 +1,7 @@
-# ==== GPU selection ====
-from autocvd import autocvd
-autocvd(num_gpus = 1)
-# =======================
+# # ==== GPU selection ====
+# from autocvd import autocvd
+# autocvd(num_gpus = 1)
+# # =======================
 
 from jf1uids.option_classes.simulation_config import DOUBLE_MINMOD, HLLC, MINMOD, SUPERBEE, BoundarySettings1D
 
@@ -124,9 +124,9 @@ p_init = jnp.where(r_init > 0.9, 100.0, jnp.where(r_init < 0.1, 1000.0, 0.01))
 # and show the effect of higher resolution.
 parameter_combinations = [
     (MINMOD, 401),
-    (SUPERBEE, 401),
-    (SUPERBEE, 801),
-    (SUPERBEE, 1601),
+    (DOUBLE_MINMOD, 401),
+    (DOUBLE_MINMOD, 801),
+    (DOUBLE_MINMOD, 10001),
 ]
 
 for limiter, num_cells in parameter_combinations:
