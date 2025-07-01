@@ -1,7 +1,7 @@
-# ==== GPU selection ====
-from autocvd import autocvd
-autocvd(num_gpus = 1)
-# =======================
+# # ==== GPU selection ====
+# from autocvd import autocvd
+# autocvd(num_gpus = 1, interval = 10)
+# # =======================
 
 from jf1uids._physics_modules._cnn_mhd_corrector._cnn_mhd_corrector import CorrectorCNN
 from jf1uids._physics_modules._cnn_mhd_corrector._cnn_mhd_corrector_options import CNNMHDParams, CNNMHDconfig
@@ -222,65 +222,65 @@ def train_step(network_params_arrays, opt_state):
     network_params_arrays = eqx.apply_updates(network_params_arrays, updates)
     return network_params_arrays, opt_state, loss_value
 
-# ===================================================
-# ================== ↓ Training Loop ↓ ==============
-# ===================================================
-print("Starting training with optax...")
-num_steps = 5000
-losses = []
+# # ===================================================
+# # ================== ↓ Training Loop ↓ ==============
+# # ===================================================
+# print("Starting training with optax...")
+# num_steps = 5000
+# losses = []
 
-# This variable will hold the trained parameters and be updated in the loop
-trained_params = neural_net_params
+# # This variable will hold the trained parameters and be updated in the loop
+# trained_params = neural_net_params
 
-# Timing
-start_time = timer()
+# # Timing
+# start_time = timer()
 
-# The main training loop
-pbar = tqdm(range(num_steps))
-best_loss = float('inf')
-best_params = trained_params
-for step in pbar:
-    trained_params, opt_state, loss = train_step(trained_params, opt_state)
-    losses.append(loss)
-    if loss < best_loss:
-        best_loss = loss
-        best_params = trained_params
-    pbar.set_description(f"Step {step+1}/{num_steps} | Loss: {loss:.2e}")
+# # The main training loop
+# pbar = tqdm(range(num_steps))
+# best_loss = float('inf')
+# best_params = trained_params
+# for step in pbar:
+#     trained_params, opt_state, loss = train_step(trained_params, opt_state)
+#     losses.append(loss)
+#     if loss < best_loss:
+#         best_loss = loss
+#         best_params = trained_params
+#     pbar.set_description(f"Step {step+1}/{num_steps} | Loss: {loss:.2e}")
 
-# After training, use the best parameters found
-trained_params = best_params
+# # After training, use the best parameters found
+# trained_params = best_params
 
-end_time = timer()
-print(f"Training finished in {end_time - start_time:.2f} seconds.")
-# ===================================================
-# ================== ↑ Training Loop ↑ ==============
-# ===================================================
+# end_time = timer()
+# print(f"Training finished in {end_time - start_time:.2f} seconds.")
+# # ===================================================
+# # ================== ↑ Training Loop ↑ ==============
+# # ===================================================
 
-# pickle the trained parameters for later use
-import pickle
-with open("trained_paramsX.pkl", "wb") as f:
-    pickle.dump(trained_params, f)
+# # pickle the trained parameters for later use
+# import pickle
+# with open("trained_paramsX.pkl", "wb") as f:
+#     pickle.dump(trained_params, f)
 
-# load the trained parameters if needed
-with open("trained_paramsX.pkl", "rb") as f:
-    trained_params = pickle.load(f)
+# # load the trained parameters if needed
+# with open("trained_paramsX.pkl", "rb") as f:
+#     trained_params = pickle.load(f)
 
-# save the losses for later analysis with jnp.savez
-jnp.savez("lossesX.npz", losses = losses)
+# # save the losses for later analysis with jnp.savez
+# jnp.savez("lossesX.npz", losses = losses)
 
-# plot the target state and the final state after training and the
-# final state before training
-final_state_low_res = time_integration(
-    initial_state_low_res,
-    config_low_res,
-    params_low_res._replace(
-        cnn_mhd_corrector_params = cnn_mhd_corrector_params._replace(
-            network_params = trained_params
-        )
-    ),
-    helper_data_low_res,
-    registered_variables_low_res
-)
+# # plot the target state and the final state after training and the
+# # final state before training
+# final_state_low_res = time_integration(
+#     initial_state_low_res,
+#     config_low_res,
+#     params_low_res._replace(
+#         cnn_mhd_corrector_params = cnn_mhd_corrector_params._replace(
+#             network_params = trained_params
+#         )
+#     ),
+#     helper_data_low_res,
+#     registered_variables_low_res
+# )
 
 initial_state_low_res_uncorrected, config_low_res_uncorrected, params_low_res_uncorrected, helper_data_low_res_uncorrected, registered_variables_low_res_uncorrected = get_blast_setup(low_resolution)
 final_state_low_res_uncorrected = time_integration(
@@ -291,31 +291,38 @@ final_state_low_res_uncorrected = time_integration(
     registered_variables_low_res_uncorrected
 )
 
-# Plotting the target state, only the density
-fig, ax = plt.subplots(1, 3, figsize=(15, 5))
-im1 = ax[0].imshow(
-    target_state_low_res[registered_variables_low_res.density_index, ...],
-    extent=(0, config_low_res.box_size, 0, config_low_res.box_size),
-    origin='lower',
-    cmap='viridis',
-)
-im2 = ax[1].imshow(
-    final_state_low_res[registered_variables_low_res.density_index, ...],
-    extent=(0, config_low_res.box_size, 0, config_low_res.box_size),
-    origin='lower',
-    cmap='viridis',
-)
-im3 = ax[2].imshow(
-    final_state_low_res_uncorrected[registered_variables_low_res.density_index, ...],
-    extent=(0, config_low_res.box_size, 0, config_low_res.box_size),
-    origin='lower',
-    cmap='viridis',
-)
-ax[0].set_title("Target State (Density)")
-ax[1].set_title("Final State after Training (Density)")
-ax[2].set_title("Final State before Training (Density)")
-fig.colorbar(im1, ax=ax[0], label='Density')
-fig.colorbar(im2, ax=ax[1], label='Density')
-fig.colorbar(im3, ax=ax[2], label='Density')
-plt.tight_layout()
-plt.savefig("target_vs_final_state_density.png")
+# calculate and print initial L2 error
+l2_error = jnp.mean((final_state_low_res_uncorrected - target_state_low_res) ** 2)
+print(f"Initial L2 error (before training): {l2_error:.2e}")
+
+# # Plotting the target state, only the density
+# fig, ax = plt.subplots(1, 3, figsize=(15, 5))
+# im1 = ax[0].imshow(
+#     target_state_low_res[registered_variables_low_res.density_index, ...],
+#     extent=(0, config_low_res.box_size, 0, config_low_res.box_size),
+#     origin='lower',
+#     cmap='viridis',
+# )
+# ax[0].set_aspect('equal', adjustable='box')
+# im2 = ax[1].imshow(
+#     final_state_low_res[registered_variables_low_res.density_index, ...],
+#     extent=(0, config_low_res.box_size, 0, config_low_res.box_size),
+#     origin='lower',
+#     cmap='viridis',
+# )
+# ax[1].set_aspect('equal', adjustable='box')
+# im3 = ax[2].imshow(
+#     final_state_low_res_uncorrected[registered_variables_low_res.density_index, ...],
+#     extent=(0, config_low_res.box_size, 0, config_low_res.box_size),
+#     origin='lower',
+#     cmap='viridis',
+# )
+# ax[2].set_aspect('equal', adjustable='box')
+# ax[0].set_title("Target State (Density)")
+# ax[1].set_title("Final State after Training (Density)")
+# ax[2].set_title("Final State before Training (Density)")
+# fig.colorbar(im1, ax=ax[0], label='Density')
+# fig.colorbar(im2, ax=ax[1], label='Density')
+# fig.colorbar(im3, ax=ax[2], label='Density')
+# plt.tight_layout()
+# plt.savefig("target_vs_final_state_density.png")

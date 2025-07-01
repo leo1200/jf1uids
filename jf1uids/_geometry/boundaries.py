@@ -6,7 +6,7 @@ import jax
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
 
-from jf1uids.option_classes.simulation_config import OPEN_BOUNDARY, PERIODIC_BOUNDARY, REFLECTIVE_BOUNDARY, STATE_TYPE, SimulationConfig
+from jf1uids.option_classes.simulation_config import GAS_STATE, MAGNETIC_FIELD_ONLY, MHD_JET_BOUNDARY, OPEN_BOUNDARY, PERIODIC_BOUNDARY, REFLECTIVE_BOUNDARY, STATE_TYPE, VELOCITY_ONLY, SimulationConfig
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['axis', 'set_index', 'get_index'])
@@ -43,10 +43,11 @@ def _set_specific_var_along_axis(
     return primitive_state
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config'])
+@partial(jax.jit, static_argnames=['config', 'type_handled'])
 def _boundary_handler(
     primitive_state: STATE_TYPE,
-    config: SimulationConfig
+    config: SimulationConfig,
+    type_handled: int = GAS_STATE,
 ) -> STATE_TYPE:
     """Apply the boundary conditions to the primitive states.
 
@@ -108,6 +109,16 @@ def _boundary_handler(
 
         if config.boundary_settings.y.left_boundary == PERIODIC_BOUNDARY and config.boundary_settings.y.right_boundary == PERIODIC_BOUNDARY:
             primitive_state = _periodic_boundaries(primitive_state, config.num_ghost_cells, axis = 2)
+
+        if config.boundary_settings.y.left_boundary == MHD_JET_BOUNDARY:
+            primitive_state = _jet_left_boundary(
+                primitive_state,
+                config.num_ghost_cells,
+                axis = 2,
+                grid_spacing = config.grid_spacing,
+                num_cells = config.num_cells,
+                type_handled = type_handled
+            )
 
     if config.dimensionality == 3:
         if config.boundary_settings.x.left_boundary == OPEN_BOUNDARY:
@@ -324,5 +335,46 @@ def _reflective_right_boundary1d(
 
     primitive_state = primitive_state.at[:, -2].set(primitive_state[:, -3])
     primitive_state = primitive_state.at[1, -2].set(-primitive_state[1, -3])
+
+    return primitive_state
+
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['axis', 'num_ghost_cells', 'grid_spacing', 'num_cells', 'type_handled'])
+def _jet_left_boundary(
+    primitive_state: STATE_TYPE,
+    num_ghost_cells: int,
+    axis: int,
+    grid_spacing: float,
+    num_cells: int,
+    type_handled: int
+) -> STATE_TYPE:
+    get_index = num_ghost_cells
+
+    for set_index in range(num_ghost_cells):
+        primitive_state = _set_along_axis(primitive_state, axis, set_index, get_index)
+
+    half_inj_width = 0.025
+    half_inj_cell_num = int(half_inj_width / grid_spacing)
+
+    B0 = 200**0.5
+    # to_set = jnp.array([5/3, 0.0, 800.0, 0.0, 1.0, 0.0, B0, 0.0])
+    #                     rho, v_x, v_y,   v_z, p,   B_x, B_y, B_z
+    to_set_gas_state = jnp.array([
+        5/3, 800.0, 0.0, 1.0
+    ])
+    to_set_velocity = jnp.array([
+        800.0, 0.0, 0.0
+    ])
+    to_set_magnetic_field = jnp.array([
+        B0, 0.0, 0.0
+    ])
+
+    if type_handled == GAS_STATE:
+        primitive_state = primitive_state.at[:, 0:num_ghost_cells, (num_cells // 2 - half_inj_cell_num):(num_cells // 2 + half_inj_cell_num)].set(to_set_gas_state[:, None, None])
+    elif type_handled == VELOCITY_ONLY:
+        primitive_state = primitive_state.at[:, 0:num_ghost_cells, (num_cells // 2 - half_inj_cell_num):(num_cells // 2 + half_inj_cell_num)].set(to_set_velocity[:, None, None])
+    elif type_handled == MAGNETIC_FIELD_ONLY:
+        primitive_state = primitive_state.at[:, 0:num_ghost_cells, (num_cells // 2 - half_inj_cell_num):(num_cells // 2 + half_inj_cell_num)].set(to_set_magnetic_field[:, None, None])
 
     return primitive_state
