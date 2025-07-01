@@ -5,6 +5,7 @@ from functools import partial
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
 
+from jf1uids._physics_modules._cnn_mhd_corrector._cnn_mhd_corrector import _cnn_mhd_corrector
 from jf1uids._physics_modules._cooling._cooling import update_pressure_by_cooling
 from jf1uids._physics_modules._cosmic_rays.cr_injection import inject_crs_at_strongest_shock
 from jf1uids._physics_modules._neural_net_force._neural_net_force import _neural_net_force
@@ -73,6 +74,15 @@ def _run_physics_modules(
             helper_data,
             dt,
             current_time
+        )
+
+    if config.cnn_mhd_corrector_config.cnn_mhd_corrector:
+        primitive_state = _cnn_mhd_corrector(
+            primitive_state,
+            config,
+            registered_variables,
+            params,
+            dt
         )
     
     return primitive_state

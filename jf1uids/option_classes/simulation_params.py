@@ -1,5 +1,6 @@
 from typing import NamedTuple
 
+from jf1uids._physics_modules._cnn_mhd_corrector._cnn_mhd_corrector_options import CNNMHDconfig
 from jf1uids._physics_modules._cooling.cooling_options import CoolingParams
 from jf1uids._physics_modules._cosmic_rays.cosmic_ray_options import CosmicRayParams
 from jf1uids._physics_modules._neural_net_force._neural_net_force_options import NeuralNetForceParams
@@ -41,3 +42,6 @@ class SimulationParams(NamedTuple):
 
     #: The parameters of the neural network force module.
     neural_net_force_params: NeuralNetForceParams = NeuralNetForceParams()
+
+    #: The parameters of the CNN MHD corrector module.
+    cnn_mhd_corrector_params: CNNMHDconfig = CNNMHDconfig()
