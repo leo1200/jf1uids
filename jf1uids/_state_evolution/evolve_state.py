@@ -266,7 +266,7 @@ def _evolve_state(
             # IN EVERY EVOLVE_STATE CALL
             registered_variables_gas = registered_variables._replace(num_vars = registered_variables.num_vars - 3)
 
-            gas_state = jnp.zeros((registered_variables_gas.num_vars, *primitive_state.shape[1:]), dtype = jnp.float64)
+            gas_state = jnp.zeros((registered_variables_gas.num_vars, *primitive_state.shape[1:]), dtype = primitive_state.dtype)
             gas_state = primitive_state[:-3, ...]
             magnetic_field = primitive_state[-3:, ...]
 

@@ -35,7 +35,7 @@ def magnetic_update(magnetic_field, gas_state, grid_spacing, dt, registered_vari
     """
 
     # retrieve the velocity
-    velocity = jnp.zeros((3, *gas_state.shape[1:]), dtype = jnp.float64)
+    velocity = jnp.zeros((3, *gas_state.shape[1:]), dtype = magnetic_field.dtype)
     velocity = velocity.at[0:2, :, :].set(gas_state[registered_variables.velocity_index.x:registered_variables.velocity_index.x + 2, ...])
 
     density = gas_state[registered_variables.density_index, ...]

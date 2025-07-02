@@ -106,6 +106,7 @@ def _time_integration(
     if config.geometry == CARTESIAN:
         # pad the primitive state with two ghost cells on each side
         # to account for the periodic boundary conditions
+        original_shape = primitive_state.shape
 
         if config.dimensionality == 1:
             primitive_state = jnp.pad(primitive_state, ((0, 0), (2, 2)), mode='edge')
@@ -118,7 +119,7 @@ def _time_integration(
 
     if config.return_snapshots:
         time_points = jnp.zeros(config.num_snapshots)
-        states = jnp.zeros((config.num_snapshots, *primitive_state.shape))
+        states = jnp.zeros((config.num_snapshots, *original_shape))
         total_mass = jnp.zeros(config.num_snapshots)
         total_energy = jnp.zeros(config.num_snapshots)
         internal_energy = jnp.zeros(config.num_snapshots)
@@ -142,17 +143,31 @@ def _time_integration(
         if config.return_snapshots:
             time, state, snapshot_data = carry
 
-            def update_snapshot_data(snapshot_data):
+            def update_snapshot_data(time, state, snapshot_data):
                 time_points = snapshot_data.time_points.at[snapshot_data.current_checkpoint].set(time)
-                states = snapshot_data.states.at[snapshot_data.current_checkpoint].set(state)
-                total_mass = snapshot_data.total_mass.at[snapshot_data.current_checkpoint].set(calculate_total_mass(state, helper_data, config))
-                total_energy = snapshot_data.total_energy.at[snapshot_data.current_checkpoint].set(calculate_total_energy(state, helper_data, params.gamma, params.gravitational_constant, config, registered_variables))
 
-                internal_energy = snapshot_data.internal_energy.at[snapshot_data.current_checkpoint].set(calculate_internal_energy(state, helper_data, params.gamma, config, registered_variables))
-                kinetic_energy = snapshot_data.kinetic_energy.at[snapshot_data.current_checkpoint].set(calculate_kinetic_energy(state, helper_data, config, registered_variables))
+                # get the unpadded state to store in the snapshot
+                if config.geometry == CARTESIAN:
+                    if config.dimensionality == 1:
+                        unpad_state = jax.lax.slice_in_dim(state, 2, state.shape[1] - 2, axis = 1)
+                    elif config.dimensionality == 2:
+                        unpad_state = jax.lax.slice_in_dim(state, 2, state.shape[1] - 2, axis = 1)
+                        unpad_state = jax.lax.slice_in_dim(unpad_state, 2, unpad_state.shape[2] - 2, axis = 2)
+                    elif config.dimensionality == 3:
+                        unpad_state = jax.lax.slice_in_dim(state, 2, state.shape[1] - 2, axis = 1)
+                        unpad_state = jax.lax.slice_in_dim(unpad_state, 2, unpad_state.shape[2] - 2, axis = 2)
+                        unpad_state = jax.lax.slice_in_dim(unpad_state, 2, unpad_state.shape[3] - 2, axis = 3)
+
+                states = snapshot_data.states.at[snapshot_data.current_checkpoint].set(unpad_state)
+
+                total_mass = snapshot_data.total_mass.at[snapshot_data.current_checkpoint].set(calculate_total_mass(unpad_state, helper_data, config))
+                total_energy = snapshot_data.total_energy.at[snapshot_data.current_checkpoint].set(calculate_total_energy(unpad_state, helper_data, params.gamma, params.gravitational_constant, config, registered_variables))
+
+                internal_energy = snapshot_data.internal_energy.at[snapshot_data.current_checkpoint].set(calculate_internal_energy(unpad_state, helper_data, params.gamma, config, registered_variables))
+                kinetic_energy = snapshot_data.kinetic_energy.at[snapshot_data.current_checkpoint].set(calculate_kinetic_energy(unpad_state, helper_data, config, registered_variables))
 
                 if config.self_gravity:
-                    gravitational_energy = snapshot_data.gravitational_energy.at[snapshot_data.current_checkpoint].set(calculate_gravitational_energy(state, helper_data, params.gravitational_constant, config, registered_variables))
+                    gravitational_energy = snapshot_data.gravitational_energy.at[snapshot_data.current_checkpoint].set(calculate_gravitational_energy(unpad_state, helper_data, params.gravitational_constant, config, registered_variables))
                 else:
                     gravitational_energy = None
 
@@ -160,10 +175,23 @@ def _time_integration(
                 snapshot_data = snapshot_data._replace(time_points = time_points, states = states, current_checkpoint = current_checkpoint, total_mass = total_mass, total_energy = total_energy, internal_energy = internal_energy, kinetic_energy = kinetic_energy, gravitational_energy = gravitational_energy)
                 return snapshot_data
             
-            def dont_update_snapshot_data(snapshot_data):
+            def dont_update_snapshot_data(time, state, snapshot_data):
                 return snapshot_data
 
-            snapshot_data = jax.lax.cond(time >= snapshot_data.current_checkpoint * params.t_end / config.num_snapshots, update_snapshot_data, dont_update_snapshot_data, snapshot_data)
+            if config.use_specific_snapshot_timepoints:
+                snapshot_data = jax.lax.cond(
+                    jnp.abs(time - params.snapshot_timepoints[snapshot_data.current_checkpoint]) < 1e-12,
+                    update_snapshot_data,
+                    dont_update_snapshot_data,
+                    time, state, snapshot_data
+                )
+            else:
+                snapshot_data = jax.lax.cond(
+                    time >= snapshot_data.current_checkpoint * params.t_end / config.num_snapshots,
+                    update_snapshot_data,
+                    dont_update_snapshot_data,
+                    time, state, snapshot_data
+                )
 
             num_iterations = snapshot_data.num_iterations + 1
             snapshot_data = snapshot_data._replace(num_iterations = num_iterations)
@@ -200,7 +228,10 @@ def _time_integration(
         else:
             dt = params.t_end / config.num_timesteps
 
-        if config.exact_end_time:
+        if config.use_specific_snapshot_timepoints:
+            dt = jnp.minimum(dt, params.snapshot_timepoints[snapshot_data.current_checkpoint] - time)
+
+        if config.exact_end_time and not config.use_specific_snapshot_timepoints:
             dt = jnp.minimum(dt, params.t_end - time)
 
         # for now we mainly consider the stellar wind, a constant source term term, 
@@ -212,6 +243,14 @@ def _time_integration(
         state = _evolve_state(state, dt, params.gamma, params.gravitational_constant, config, helper_data, registered_variables)
 
         time += dt
+
+        if config.use_specific_snapshot_timepoints:
+            snapshot_data = jax.lax.cond(
+                jnp.abs(time - params.t_end) < 1e-12,
+                update_snapshot_data,
+                dont_update_snapshot_data,
+                time, state, snapshot_data
+            )
 
         if config.progress_bar:
             jax.debug.callback(_show_progress, time, params.t_end)

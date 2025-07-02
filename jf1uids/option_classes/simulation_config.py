@@ -182,6 +182,10 @@ class SimulationConfig(NamedTuple):
     #: callback(time, state, registered_variables).
     activate_snapshot_callback: bool = False
 
+    #: Return snapshots at specific time points.
+    use_specific_snapshot_timepoints: bool = False
+    specific_snapshot_timepoints: tuple = ()
+
     #: The number of snapshots to return.
     num_snapshots: int = 10
 
@@ -208,7 +212,7 @@ class SimulationConfig(NamedTuple):
 
 def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
     """Finalizes the simulation configuration."""
-    
+
     num_cells = state_shape[-1]
     config = config._replace(num_cells = num_cells)
 
