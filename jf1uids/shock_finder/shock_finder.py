@@ -103,6 +103,9 @@ def shock_criteria(
 
     M1sq = 1/gamma_eff2 * gammat * C / (C - ((gamma1 + 1) - (gamma1 - 1) * gammat) * (gamma2 - 1))
 
+    x_s = rho2 / rho1
+    M1sq = (P2 / P1 - 1) * x_s / (gamma_eff1 * (x_s - 1))
+
     # # calculate the pre-shock sound speed
     # c1 = jnp.sqrt(gamma_eff1 * P1 / rho1)
 
@@ -172,7 +175,7 @@ def find_shock_zone(
     # left first cell from the interface where the pressure either goes down or increases by less than bound_diff
     indices = jnp.arange(num_cells)
     left_indices = jnp.where((indices < max_shock_idx) & ((jnp.abs(pressure_differences) < bound_diff) | (pressure_differences > 0)), indices, -1)
-    right_indices = jnp.where((indices > max_shock_idx) & ((sensors < bound_val) | (jnp.abs(pressure_differences) < bound_diff)), indices, num_cells)
+    right_indices = jnp.where((indices > max_shock_idx) & ((jnp.abs(pressure_differences) < bound_diff) | (pressure_differences < 0)), indices, num_cells)
     left_idx = jnp.max(left_indices)
     right_idx = jnp.min(right_indices)
 
