@@ -39,14 +39,11 @@ num_cells = 128
 # setup simulation config
 config = SimulationConfig(
     progress_bar = True,
-    positivity_preserving = False,
     mhd = True,
     dimensionality = 2,
     box_size = box_size, 
     num_cells = num_cells,
     differentiation_mode = BACKWARDS,
-    limiter = MINMOD,
-    riemann_solver = HLL,
     boundary_settings = BoundarySettings(
         BoundarySettings1D(left_boundary = OPEN_BOUNDARY, right_boundary = OPEN_BOUNDARY),
         BoundarySettings1D(left_boundary = MHD_JET_BOUNDARY, right_boundary = OPEN_BOUNDARY),

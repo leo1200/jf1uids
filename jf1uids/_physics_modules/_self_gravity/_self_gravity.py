@@ -31,7 +31,7 @@ from jf1uids.option_classes.simulation_config import FIELD_TYPE, HLL, HLLC, OPEN
 # jf1uids functions
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids._riemann_solver.hll import _hll_solver, _hllc_solver
-from jf1uids._state_evolution.reconstruction import _reconstruct_at_interface
+from jf1uids._state_evolution.reconstruction import _reconstruct_at_interface_split
 from jf1uids.fluid_equations.euler import _euler_flux
 from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, primitive_state_from_conserved, speed_of_sound
 
@@ -97,7 +97,7 @@ def _gravitational_source_term_along_axis(
         primitive_state_left = jax.lax.slice_in_dim(primitive_state, 1, -2, axis = axis)
         primitive_state_right = jax.lax.slice_in_dim(primitive_state, 2, -1, axis = axis)
     else:
-        primitive_state_left, primitive_state_right = _reconstruct_at_interface(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
+        primitive_state_left, primitive_state_right = _reconstruct_at_interface_split(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
     
     fluxes = _riemann_solver(primitive_state_left, primitive_state_right, gamma, config, registered_variables, axis)
     fluxes_i_to_ip1 = jnp.maximum(fluxes, 0)

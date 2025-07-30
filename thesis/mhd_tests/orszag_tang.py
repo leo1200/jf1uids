@@ -38,7 +38,6 @@ num_cells = 200
 # setup simulation config
 config = SimulationConfig(
     progress_bar = True,
-    positivity_preserving = True,
     mhd = True,
     dimensionality = 2,
     box_size = box_size, 

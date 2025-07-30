@@ -7,7 +7,7 @@ from functools import partial
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
 from typing import Union
-from jf1uids.option_classes.simulation_config import STATE_TYPE
+from jf1uids.option_classes.simulation_config import STATE_TYPE, UNSPLIT
 
 # jf1uids containers
 from jf1uids.data_classes.simulation_helper_data import HelperData
@@ -102,7 +102,7 @@ def _cfl_time_step(
     
     """
 
-    if config.positivity_preserving:
+    if config.split == UNSPLIT:
         rho = primitive_state[registered_variables.density_index]
         p = primitive_state[registered_variables.pressure_index]
         c = speed_of_sound(rho, p, gamma)

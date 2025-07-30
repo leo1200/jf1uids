@@ -12,22 +12,24 @@ from beartype import beartype as typechecker
 from typing import Union
 
 # general jf1uids imports
-from jf1uids._physics_modules._self_gravity._poisson_solver import _compute_gravitational_potential
 from jf1uids._riemann_solver._riemann_solver import _riemann_solver
 from jf1uids._physics_modules._mhd._magnetic_field_update import magnetic_update
-from jf1uids._physics_modules._self_gravity._self_gravity import _apply_self_gravity, _gravitational_source_term_along_axis # , _mullen_source_along_axis, _mullen_source_along_axis2
+from jf1uids._physics_modules._self_gravity._self_gravity import _apply_self_gravity
 from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import CARTESIAN, HLL, HLLC, SPHERICAL, STATE_TYPE, SimulationConfig
+from jf1uids.option_classes.simulation_config import CARTESIAN, HLL, HLLC, LAX_FRIEDRICHS, RK2_SSP, SPHERICAL, STATE_TYPE, UNSPLIT, SimulationConfig
 
 from jf1uids._geometry.geometric_terms import _pressure_nozzling_source
-from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import gas_pressure_from_primitives_with_crs
-from jf1uids._state_evolution.reconstruction import _reconstruct_at_interface, _reconstruct_at_interface_pp
+from jf1uids._state_evolution.reconstruction import _reconstruct_at_interface_split, _reconstruct_at_interface_unsplit
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.fluid_equations.fluid import primitive_state_from_conserved, conserved_state_from_primitive
-from jf1uids._riemann_solver.hll import _hll_solver, _hllc_solver, _lax_friedrichs_solver
+from jf1uids._riemann_solver.hll import _lax_friedrichs_solver
 from jf1uids.option_classes.simulation_params import SimulationParams
+
+# -------------------------------------------------------------
+# ====================== ↓ Split Scheme ↓ =====================
+# -------------------------------------------------------------
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables', 'axis'])
@@ -47,13 +49,11 @@ def _evolve_state_along_axis(
     # get conserved variables
     conservative_states = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
 
-    num_cells = primitive_state.shape[axis]
-
     if config.first_order_fallback:
         primitive_state_left = jax.lax.slice_in_dim(primitive_state, 1, -2, axis = axis)
         primitive_state_right = jax.lax.slice_in_dim(primitive_state, 2, -1, axis = axis)
     else:
-        primitive_state_left, primitive_state_right = _reconstruct_at_interface(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
+        primitive_state_left, primitive_state_right = _reconstruct_at_interface_split(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
     
     fluxes = _riemann_solver(primitive_state_left, primitive_state_right, gamma, config, registered_variables, axis)
 
@@ -103,9 +103,82 @@ def _evolve_state_along_axis(
     
     return primitive_state
 
+
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _evolve_gas_state_pp_inner(
+def _evolve_gas_state_split(
+    primitive_state: STATE_TYPE,
+    dt: Float[Array, ""],
+    gamma: Union[float, Float[Array, ""]],
+    gravitational_constant: Union[float, Float[Array, ""]],
+    config: SimulationConfig,
+    helper_data: HelperData,
+    registered_variables: RegisteredVariables
+) -> STATE_TYPE:
+    """
+    Evolve the primitive state array.
+
+    Args:
+        primitive_state: The primitive state array.
+        grid_spacing: The cell width.
+        dt: The time step.
+        gamma: The adiabatic index.
+        config: The simulation configuration.
+        helper_data: The helper data.
+
+    Returns:
+        The evolved primitive state array.
+    """
+    if config.dimensionality == 1:
+
+        old_primitive_state = primitive_state
+
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 1)
+
+        if config.self_gravity:
+            primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, registered_variables, helper_data, gamma, gravitational_constant, dt)
+
+
+    elif config.dimensionality == 2:
+
+        old_primitive_state = primitive_state
+
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt/2, gamma, config, helper_data, registered_variables, 1)
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 2)
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt/2, gamma, config, helper_data, registered_variables, 1)
+
+        if config.self_gravity:
+            primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, registered_variables, helper_data, gamma, gravitational_constant, dt)
+
+    elif config.dimensionality == 3:
+
+        old_primitive_state = primitive_state
+
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 3)
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
+        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
+
+        if config.self_gravity:
+            primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, registered_variables, helper_data, gamma, gravitational_constant, dt)
+
+    else:
+        raise ValueError("Dimensionality not supported.")
+
+    return primitive_state
+
+# -------------------------------------------------------------
+# ====================== ↑ Split Scheme ↑ =====================
+# -------------------------------------------------------------
+
+# -------------------------------------------------------------
+# ===================== ↓ Unsplit Scheme ↓ ====================
+# -------------------------------------------------------------
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def _evolve_gas_state_unsplit_inner(
     primitive_state: STATE_TYPE,
     dt: Float[Array, ""],
     gamma: Union[float, Float[Array, ""]],
@@ -121,7 +194,7 @@ def _evolve_gas_state_pp_inner(
 
     # get left and right states along all dimensions
     # so dimensionality x state_shape
-    primitives_left_interface, primitives_right_interface = _reconstruct_at_interface_pp(
+    primitives_left_interface, primitives_right_interface = _reconstruct_at_interface_unsplit(
         primitive_state,
         dt,
         gamma,
@@ -135,15 +208,18 @@ def _evolve_gas_state_pp_inner(
         primitive_state = _boundary_handler(primitive_state, config)
 
         # get the fluxes at the interfaces
-        fluxes = _lax_friedrichs_solver(
-            primitives_left_interface[axis - 1],
-            primitives_right_interface[axis - 1],
-            primitive_state,
-            gamma,
-            config,
-            registered_variables,
-            axis
-        )
+        if config.riemann_solver == LAX_FRIEDRICHS:
+            fluxes = _lax_friedrichs_solver(
+                primitives_left_interface[axis - 1],
+                primitives_right_interface[axis - 1],
+                primitive_state,
+                gamma,
+                config,
+                registered_variables,
+                axis
+            )
+        else:
+            raise ValueError(f"Riemann solver {config.riemann_solver} currently not supported for unsplit scheme.")
 
         # update the conserved variables
         conserved_change = 1 / config.grid_spacing * _stencil_add(fluxes, indices = (0, 1), factors = (1.0, -1.0), axis = axis, zero_pad = True) * dt
@@ -157,7 +233,7 @@ def _evolve_gas_state_pp_inner(
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _evolve_gas_state_pp(
+def _evolve_gas_state_unsplit(
     primitive_state: STATE_TYPE,
     dt: Float[Array, ""],
     gamma: Union[float, Float[Array, ""]],
@@ -168,181 +244,50 @@ def _evolve_gas_state_pp(
     registered_variables: RegisteredVariables
 ) -> STATE_TYPE:
     
-    # RK2 SSP
+    old_primitive_state = primitive_state
     
-    primitive_state_1 = _evolve_gas_state_pp_inner(
-        primitive_state,
-        dt,
-        gamma,
-        gravitational_constant,
-        config,
-        params,
-        helper_data,
-        registered_variables
-    )
+    if config.time_integrator == RK2_SSP:
+        primitive_state_1 = _evolve_gas_state_unsplit_inner(
+            primitive_state,
+            dt,
+            gamma,
+            gravitational_constant,
+            config,
+            params,
+            helper_data,
+            registered_variables
+        )
 
-    primitive_state_2 = _evolve_gas_state_pp_inner(
-        primitive_state_1,
-        dt,
-        gamma,
-        gravitational_constant,
-        config,
-        params,
-        helper_data,
-        registered_variables
-    )
+        primitive_state_2 = _evolve_gas_state_unsplit_inner(
+            primitive_state_1,
+            dt,
+            gamma,
+            gravitational_constant,
+            config,
+            params,
+            helper_data,
+            registered_variables
+        )
 
-    conserved_state = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
-    conserved_state_2 = conserved_state_from_primitive(primitive_state_2, gamma, config, registered_variables)
+        conserved_state = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
+        conserved_state_2 = conserved_state_from_primitive(primitive_state_2, gamma, config, registered_variables)
 
-    # RK2
-    conserved_state = 0.5 * (conserved_state + conserved_state_2)
-    
-    primitive_state = primitive_state_from_conserved(conserved_state, gamma, config, registered_variables)
-
-    return primitive_state
-
-@jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config', 'registered_variables'])
-def _evolve_gas_state(
-    primitive_state: STATE_TYPE,
-    dt: Float[Array, ""],
-    gamma: Union[float, Float[Array, ""]],
-    gravitational_constant: Union[float, Float[Array, ""]],
-    config: SimulationConfig,
-    helper_data: HelperData,
-    registered_variables: RegisteredVariables
-) -> STATE_TYPE:
-    """Evolve the primitive state array.
-
-    Args:
-        primitive_state: The primitive state array.
-        grid_spacing: The cell width.
-        dt: The time step.
-        gamma: The adiabatic index.
-        config: The simulation configuration.
-        helper_data: The helper data.
-
-    Returns:
-        The evolved primitive state array.
-    """
-    if config.dimensionality == 1:
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 1)
-
-        if config.self_gravity:
-            primitive_state = _apply_self_gravity(primitive_state, config, registered_variables, gamma, gravitational_constant, dt)
-
-    elif config.dimensionality == 2:
-
-        if config.self_gravity:
-            primitive_state = _apply_self_gravity(primitive_state, config, registered_variables, gamma, gravitational_constant, dt)
-
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt/2, gamma, config, helper_data, registered_variables, 1)
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 2)
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt/2, gamma, config, helper_data, registered_variables, 1)
-
-    elif config.dimensionality == 3:
-
-        old_primitive_state = primitive_state
-
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 3)
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
-        primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
-
-        if config.self_gravity:
-            primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, registered_variables, helper_data, gamma, gravitational_constant, dt)
-
-        # ======================================================================
-
-        # not working attempt at implementing
-        # the Mullen source term
-        # https://arxiv.org/abs/2012.01340
-
-                # def get_flux(primitive_state, dt):
-        #     conserved_state = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
-        #     # advance in x by dt/2 -> y by dt/2 -> z by dt -> y by dt/2 -> x by dt/2
-        #     primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
-        #     primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
-        #     primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 3)
-        #     primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
-        #     primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
-        #     flux = (conserved_state_from_primitive(primitive_state, gamma, config, registered_variables) - conserved_state) / dt
-        #     return flux
+        # RK2
+        conserved_state = 0.5 * (conserved_state + conserved_state_2)
         
-        # def get_gravitational_source1(primitive_state_zero, primitive_state_one, dt):
-        #     gravitational_source = jnp.zeros_like(primitive_state)
-
-        #     potential_zero = _compute_gravitational_potential(primitive_state_zero[registered_variables.density_index], config.grid_spacing, config, gravitational_constant)
-        #     potential_one = _compute_gravitational_potential(primitive_state_one[registered_variables.density_index], config.grid_spacing, config, gravitational_constant)
-
-        #     for i in range(3):
-                
-        #         gravitational_source = gravitational_source + _mullen_source_along_axis(
-        #                 potential_zero,
-        #                 potential_one,
-        #                 primitive_state_zero,
-        #                 config.grid_spacing,
-        #                 dt,
-        #                 gamma,
-        #                 helper_data,
-        #                 config,
-        #                 registered_variables,
-        #                 i + 1,
-        #         )
-            
-        #     return gravitational_source
-        
-        # def get_gravitational_source2(primitive_state_zero, primitive_state_one, primitive_state_two, dt):
-        #     gravitational_source = jnp.zeros_like(primitive_state)
-
-        #     potential_zero = _compute_gravitational_potential(primitive_state_zero[registered_variables.density_index], config.grid_spacing, config, gravitational_constant)
-        #     potential_one = _compute_gravitational_potential(primitive_state_one[registered_variables.density_index], config.grid_spacing, config, gravitational_constant)
-        #     potential_two = _compute_gravitational_potential(primitive_state_two[registered_variables.density_index], config.grid_spacing, config, gravitational_constant)
-
-        #     for i in range(3):
-                
-        #         gravitational_source = gravitational_source + _mullen_source_along_axis2(
-        #                 potential_zero,
-        #                 potential_one,
-        #                 potential_two,
-        #                 primitive_state_one,
-        #                 config.grid_spacing,
-        #                 dt,
-        #                 gamma,
-        #                 helper_data,
-        #                 config,
-        #                 registered_variables,
-        #                 i + 1,
-        #         )
-            
-        #     return gravitational_source
-        
-        # conserved_state = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
-
-        # flux_zero = get_flux(primitive_state, dt / 2)
-
-        # conserved_state_one_cross = conserved_state + flux_zero * dt / 2
-        # primitive_state_one_cross = primitive_state_from_conserved(conserved_state_one_cross, gamma, config, registered_variables)
-
-        # conserved_state_one = conserved_state_one_cross + dt / 2 * get_gravitational_source1(primitive_state, primitive_state_one_cross, dt / 2)
-        # primitive_state_one = primitive_state_from_conserved(conserved_state_one, gamma, config, registered_variables)
-
-        # flux_one = get_flux(primitive_state_one, dt)
-        # conserved_state_two_cross = conserved_state + flux_one * dt
-        # primitive_state_two_cross = primitive_state_from_conserved(conserved_state_two_cross, gamma, config, registered_variables)
-
-        # conserved_state_two = conserved_state_two_cross + dt * get_gravitational_source2(primitive_state, primitive_state_one, primitive_state_two_cross, dt)
-
-        # primitive_state = primitive_state_from_conserved(conserved_state_two, gamma, config, registered_variables)
-
-        # ======================================================================
-
+        primitive_state = primitive_state_from_conserved(conserved_state, gamma, config, registered_variables)
     else:
-        raise ValueError("Dimensionality not supported.")
+        raise ValueError("Only the RK2 SSP time integrator is currently supported for the unsplit scheme.")
+
+    # apply self gravity if needed
+    if config.self_gravity:
+        primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, registered_variables, helper_data, gamma, gravitational_constant, dt)
 
     return primitive_state
+
+# -------------------------------------------------------------
+# ===================== ↑ Unsplit Scheme ↑ ====================
+# -------------------------------------------------------------
 
 
 @jaxtyped(typechecker=typechecker)
@@ -372,19 +317,19 @@ def _evolve_state(
 
             # evolve gas state by half a time step
             # evolved_gas = _evolve_gas_state(gas_state, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
-            if config.positivity_preserving:
-                evolved_gas = _evolve_gas_state_pp(gas_state, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas)
+            if config.split == UNSPLIT:
+                evolved_gas = _evolve_gas_state_unsplit(gas_state, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas)
             else:
-                evolved_gas = _evolve_gas_state(gas_state, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
+                evolved_gas = _evolve_gas_state_split(gas_state, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
 
             magnetic_field, evolved_gas = magnetic_update(magnetic_field, evolved_gas, config.grid_spacing, dt, registered_variables, config)
 
             # evolve gas state by half a time step
             # evolved_gas = _evolve_gas_state(evolved_gas, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
-            if config.positivity_preserving:
-                evolved_gas = _evolve_gas_state_pp(evolved_gas, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas)
+            if config.split == UNSPLIT:
+                evolved_gas = _evolve_gas_state_unsplit(evolved_gas, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas)
             else:
-                evolved_gas = _evolve_gas_state(evolved_gas, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
+                evolved_gas = _evolve_gas_state_split(evolved_gas, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
 
             return jnp.concatenate((evolved_gas, magnetic_field), axis = 0)
         else:
@@ -393,8 +338,8 @@ def _evolve_state(
 
     else:
         # for now only use pp for gas only
-        if config.positivity_preserving:
-            return _evolve_gas_state_pp(primitive_state, dt, gamma, gravitational_constant, config, params, helper_data, registered_variables)
+        if config.split == UNSPLIT:
+            return _evolve_gas_state_unsplit(primitive_state, dt, gamma, gravitational_constant, config, params, helper_data, registered_variables)
         else:
             # evolve the gas state
-            return _evolve_gas_state(primitive_state, dt, gamma, gravitational_constant, config, helper_data, registered_variables)
+            return _evolve_gas_state_split(primitive_state, dt, gamma, gravitational_constant, config, helper_data, registered_variables)

@@ -36,7 +36,6 @@ def run_blast_simulation(num_cells):
 
     # setup simulation config
     config = SimulationConfig(
-        positivity_preserving = True,
         runtime_debugging = False,
         progress_bar = True,
         mhd = True,

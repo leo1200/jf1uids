@@ -66,7 +66,11 @@ def _calculate_limited_gradients(
     # Next we calculate the finite differences of consecutive cells.
     # a is the left difference, b the right difference for cells
     # 1 to num_cells - 1.
+
+    # backward
     a = (jax.lax.slice_in_dim(primitive_state, 1, num_cells - 1, axis = axis) - jax.lax.slice_in_dim(primitive_state, 0, num_cells - 2, axis = axis)) / cell_distances_left
+
+    # forward
     b = (jax.lax.slice_in_dim(primitive_state, 2, num_cells, axis = axis) - jax.lax.slice_in_dim(primitive_state, 1, num_cells - 1, axis = axis)) / cell_distances_right
     
     # We apply limiting to not create new extrema in regions where consecutive finite

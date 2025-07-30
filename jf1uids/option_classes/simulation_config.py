@@ -20,11 +20,22 @@ MINMOD = 0
 OSHER = 1
 DOUBLE_MINMOD = 2
 SUPERBEE = 3
+VAN_ALBADA = 4
+VAN_ALBADA_PP = 5
+
+# splitting modes
+UNSPLIT = 0
+SPLIT = 1
 
 # Riemann solvers
 HLL = 0
 HLLC = 1
 HLLC_LM = 2
+LAX_FRIEDRICHS = 3
+
+# time integrators
+RK2_SSP = 0
+MUSCL = 1
 
 # boundary conditions
 OPEN_BOUNDARY = 0
@@ -123,10 +134,16 @@ class SimulationConfig(NamedTuple):
     reconstruction_order: int = 1
 
     #: The limiter for the reconstruction.
-    limiter: int = DOUBLE_MINMOD
+    limiter: int = VAN_ALBADA_PP
 
     #: The Riemann solver used
-    riemann_solver: int = HLLC
+    riemann_solver: int = LAX_FRIEDRICHS
+
+    #: Dimensional splitting / unsplit mode.
+    split: int = UNSPLIT
+
+    #: Time integration method.
+    time_integrator: int = RK2_SSP
 
     # Explanation of the ghost cells
     #                                |---------|
@@ -191,9 +208,6 @@ class SimulationConfig(NamedTuple):
 
     #: Fallback to the first order Godunov scheme.
     first_order_fallback: bool = False
-
-    #: positivity preserving scheme
-    positivity_preserving: bool = False
 
     # physical modules
 
