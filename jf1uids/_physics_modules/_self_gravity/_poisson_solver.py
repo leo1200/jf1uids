@@ -109,6 +109,8 @@ def _compute_gravitational_potential(
         # Multiply in Fourier space and invert.
         potential_k = greens_function * density_k
         gravitational_potential = jnp.real(ifftn(potential_k))
+
+        # this might be wrong for periodic boundaries
         return gravitational_potential  * grid_spacing ** dimensionality
 
     else:

@@ -1,7 +1,7 @@
-# ==== GPU selection ====
-from autocvd import autocvd
-autocvd(num_gpus = 1)
-# =======================
+# # ==== GPU selection ====
+# from autocvd import autocvd
+# autocvd(num_gpus = 1)
+# # =======================
 
 # numerics
 import jax
@@ -36,6 +36,8 @@ def run_blast_simulation(num_cells):
 
     # setup simulation config
     config = SimulationConfig(
+        positivity_preserving = True,
+        runtime_debugging = False,
         progress_bar = True,
         mhd = True,
         dimensionality = 2,
@@ -51,7 +53,7 @@ def run_blast_simulation(num_cells):
 
     params = SimulationParams(
         t_end = 0.2,
-        C_cfl = 0.1
+        C_cfl = 0.9
     )
 
     registered_variables = get_registered_variables(config)
@@ -144,9 +146,9 @@ def downaverage_state(state: jnp.ndarray, target_shape: tuple[int, int]) -> jnp.
     
     return downaveraged
 
-simulation_result_high_res = run_blast_simulation(num_cells=512)
+simulation_result_high_res = run_blast_simulation(num_cells=128)
 simulation_result_high_res_downsampled = downaverage_state(simulation_result_high_res, target_shape=(64, 64))
-simulation_result_low_res = run_blast_simulation(num_cells=64)
+simulation_result_low_res = run_blast_simulation(num_cells=128)
 
 # just plot the density with a linear colormap
 fig, ax = plt.subplots(1, 3, figsize=(15, 5))

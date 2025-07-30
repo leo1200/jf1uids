@@ -14,6 +14,7 @@ from typing import Union
 from jax.experimental import checkify
 
 # jf1uids constants
+from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.option_classes.simulation_config import BACKWARDS, CARTESIAN, FORWARDS, STATE_TYPE
 
 # jf1uids containers
@@ -116,6 +117,13 @@ def _time_integration(
 
         elif config.dimensionality == 3:
             primitive_state = jnp.pad(primitive_state, ((0, 0), (2, 2), (2, 2), (2, 2)), mode='edge')
+
+    # important for active boundaries influencing the time step criterion
+    # for now only gas state
+    if config.mhd:
+        primitive_state = primitive_state.at[:-3, ...].set(_boundary_handler(primitive_state[:-3, ...], config))
+    else:
+        primitive_state = _boundary_handler(primitive_state, config)
 
     if config.return_snapshots:
         time_points = jnp.zeros(config.num_snapshots)
@@ -240,7 +248,7 @@ def _time_integration(
 
         # state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables, time)
         state = _run_physics_modules(state, dt, config, params, helper_data, registered_variables, time + dt)
-        state = _evolve_state(state, dt, params.gamma, params.gravitational_constant, config, helper_data, registered_variables)
+        state = _evolve_state(state, dt, params.gamma, params.gravitational_constant, config, params, helper_data, registered_variables)
 
         time += dt
 

@@ -192,6 +192,9 @@ class SimulationConfig(NamedTuple):
     #: Fallback to the first order Godunov scheme.
     first_order_fallback: bool = False
 
+    #: positivity preserving scheme
+    positivity_preserving: bool = False
+
     # physical modules
 
     #: The configuration for the stellar wind module.

@@ -23,10 +23,11 @@ from jf1uids.option_classes.simulation_config import CARTESIAN, HLL, HLLC, SPHER
 
 from jf1uids._geometry.geometric_terms import _pressure_nozzling_source
 from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import gas_pressure_from_primitives_with_crs
-from jf1uids._state_evolution.reconstruction import _reconstruct_at_interface
+from jf1uids._state_evolution.reconstruction import _reconstruct_at_interface, _reconstruct_at_interface_pp
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.fluid_equations.fluid import primitive_state_from_conserved, conserved_state_from_primitive
-from jf1uids._riemann_solver.hll import _hll_solver, _hllc_solver
+from jf1uids._riemann_solver.hll import _hll_solver, _hllc_solver, _lax_friedrichs_solver
+from jf1uids.option_classes.simulation_params import SimulationParams
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables', 'axis'])
@@ -102,6 +103,104 @@ def _evolve_state_along_axis(
     
     return primitive_state
 
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def _evolve_gas_state_pp_inner(
+    primitive_state: STATE_TYPE,
+    dt: Float[Array, ""],
+    gamma: Union[float, Float[Array, ""]],
+    gravitational_constant: Union[float, Float[Array, ""]],
+    config: SimulationConfig,
+    params: SimulationParams,
+    helper_data: HelperData,
+    registered_variables: RegisteredVariables
+) -> STATE_TYPE:
+    
+    primitive_state = _boundary_handler(primitive_state, config)
+    conservative_states = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
+
+    # get left and right states along all dimensions
+    # so dimensionality x state_shape
+    primitives_left_interface, primitives_right_interface = _reconstruct_at_interface_pp(
+        primitive_state,
+        dt,
+        gamma,
+        config,
+        params,
+        helper_data,
+        registered_variables
+    )
+
+    for axis in range(1, config.dimensionality + 1):
+        primitive_state = _boundary_handler(primitive_state, config)
+
+        # get the fluxes at the interfaces
+        fluxes = _lax_friedrichs_solver(
+            primitives_left_interface[axis - 1],
+            primitives_right_interface[axis - 1],
+            primitive_state,
+            gamma,
+            config,
+            registered_variables,
+            axis
+        )
+
+        # update the conserved variables
+        conserved_change = 1 / config.grid_spacing * _stencil_add(fluxes, indices = (0, 1), factors = (1.0, -1.0), axis = axis, zero_pad = True) * dt
+        conservative_states += conserved_change
+
+    # update the primitive state
+    primitive_state = primitive_state_from_conserved(conservative_states, gamma, config, registered_variables)
+    primitive_state = _boundary_handler(primitive_state, config)
+
+    return primitive_state
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def _evolve_gas_state_pp(
+    primitive_state: STATE_TYPE,
+    dt: Float[Array, ""],
+    gamma: Union[float, Float[Array, ""]],
+    gravitational_constant: Union[float, Float[Array, ""]],
+    config: SimulationConfig,
+    params: SimulationParams,
+    helper_data: HelperData,
+    registered_variables: RegisteredVariables
+) -> STATE_TYPE:
+    
+    # RK2 SSP
+    
+    primitive_state_1 = _evolve_gas_state_pp_inner(
+        primitive_state,
+        dt,
+        gamma,
+        gravitational_constant,
+        config,
+        params,
+        helper_data,
+        registered_variables
+    )
+
+    primitive_state_2 = _evolve_gas_state_pp_inner(
+        primitive_state_1,
+        dt,
+        gamma,
+        gravitational_constant,
+        config,
+        params,
+        helper_data,
+        registered_variables
+    )
+
+    conserved_state = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
+    conserved_state_2 = conserved_state_from_primitive(primitive_state_2, gamma, config, registered_variables)
+
+    # RK2
+    conserved_state = 0.5 * (conserved_state + conserved_state_2)
+    
+    primitive_state = primitive_state_from_conserved(conserved_state, gamma, config, registered_variables)
+
+    return primitive_state
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
@@ -254,6 +353,7 @@ def _evolve_state(
     gamma: Union[float, Float[Array, ""]],
     gravitational_constant: Union[float, Float[Array, ""]],
     config: SimulationConfig,
+    params: SimulationParams,
     helper_data: HelperData,
     registered_variables: RegisteredVariables
 ) -> STATE_TYPE:
@@ -271,12 +371,20 @@ def _evolve_state(
             magnetic_field = primitive_state[-3:, ...]
 
             # evolve gas state by half a time step
-            evolved_gas = _evolve_gas_state(gas_state, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
+            # evolved_gas = _evolve_gas_state(gas_state, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
+            if config.positivity_preserving:
+                evolved_gas = _evolve_gas_state_pp(gas_state, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas)
+            else:
+                evolved_gas = _evolve_gas_state(gas_state, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
 
             magnetic_field, evolved_gas = magnetic_update(magnetic_field, evolved_gas, config.grid_spacing, dt, registered_variables, config)
 
             # evolve gas state by half a time step
-            evolved_gas = _evolve_gas_state(evolved_gas, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
+            # evolved_gas = _evolve_gas_state(evolved_gas, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
+            if config.positivity_preserving:
+                evolved_gas = _evolve_gas_state_pp(evolved_gas, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas)
+            else:
+                evolved_gas = _evolve_gas_state(evolved_gas, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
 
             return jnp.concatenate((evolved_gas, magnetic_field), axis = 0)
         else:
@@ -284,4 +392,9 @@ def _evolve_state(
             raise ValueError("MHD currently not supported in 1D.")
 
     else:
-        return _evolve_gas_state(primitive_state, dt, gamma, gravitational_constant, config, helper_data, registered_variables)
+        # for now only use pp for gas only
+        if config.positivity_preserving:
+            return _evolve_gas_state_pp(primitive_state, dt, gamma, gravitational_constant, config, params, helper_data, registered_variables)
+        else:
+            # evolve the gas state
+            return _evolve_gas_state(primitive_state, dt, gamma, gravitational_constant, config, helper_data, registered_variables)

@@ -1,7 +1,7 @@
-# ==== GPU selection ====
-from autocvd import autocvd
-autocvd(num_gpus = 1)
-# =======================
+# # ==== GPU selection ====
+# from autocvd import autocvd
+# autocvd(num_gpus = 1)
+# # =======================
 
 # numerics
 import jax
@@ -34,11 +34,12 @@ gamma = 5/3
 
 # spatial domain
 box_size = 1.0
-num_cells = 512
+num_cells = 128
 
 # setup simulation config
 config = SimulationConfig(
     progress_bar = True,
+    positivity_preserving = False,
     mhd = True,
     dimensionality = 2,
     box_size = box_size, 
@@ -56,7 +57,7 @@ helper_data = get_helper_data(config)
 
 params = SimulationParams(
     t_end = 0.001,
-    C_cfl = 0.01
+    C_cfl = 0.4
 )
 
 registered_variables = get_registered_variables(config)
