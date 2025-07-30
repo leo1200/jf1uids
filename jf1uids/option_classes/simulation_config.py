@@ -246,9 +246,26 @@ def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
 
     if config.geometry == SPHERICAL:
 
-        print("For spherical geometry, only HLL is currently supported.")
+        print("For spherical geometry, only HLL is currently supported. Also, only the unsplit mode has been tested.")
         config = config._replace(grid_spacing = config.box_size / (config.num_cells - 1))
-        config = config._replace(riemann_solver = HLL)
+
+        if config.riemann_solver != HLL:
+            print("Setting HLL Riemann solver for spherical geometry.")
+            config = config._replace(riemann_solver = HLL)
+
+        if config.split != UNSPLIT:
+            print("Setting unsplit mode for spherical geometry")
+            config = config._replace(split = UNSPLIT)
+
+        if config.limiter == VAN_ALBADA or config.limiter == VAN_ALBADA_PP:
+            print("Setting minmod limiter for spherical geometry")
+            config = config._replace(limiter = MINMOD)
+
+    if (config.limiter == MINMOD or config.limiter == DOUBLE_MINMOD or config.limiter == SUPERBEE or config.riemann_solver == HLL or config.riemann_solver == HLLC or config.riemann_solver == HLLC_LM) and config.split == UNSPLIT:
+        print("Due to different implementation approaches, currently only a limited set of Riemann solver and limiters work in unsplit mode, namely LAX_FRIEDRICHS with VAN_ALBADA limiter.")
+        print("Switching to split mode.")
+        config = config._replace(split = SPLIT)
+        
 
     # set boundary conditions if not set
     if config.boundary_settings is None:

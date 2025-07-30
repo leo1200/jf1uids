@@ -55,7 +55,7 @@ def _evolve_state_along_axis(
     else:
         primitive_state_left, primitive_state_right = _reconstruct_at_interface_split(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
     
-    fluxes = _riemann_solver(primitive_state_left, primitive_state_right, gamma, config, registered_variables, axis)
+    fluxes = _riemann_solver(primitive_state_left, primitive_state_right, primitive_state, gamma, config, registered_variables, axis)
 
     # ================ update the conserved variables =================
 
@@ -208,19 +208,15 @@ def _evolve_gas_state_unsplit_inner(
         primitive_state = _boundary_handler(primitive_state, config)
 
         # get the fluxes at the interfaces
-        if config.riemann_solver == LAX_FRIEDRICHS:
-            fluxes = _lax_friedrichs_solver(
-                primitives_left_interface[axis - 1],
-                primitives_right_interface[axis - 1],
-                primitive_state,
-                gamma,
-                config,
-                registered_variables,
-                axis
-            )
-        else:
-            raise ValueError(f"Riemann solver {config.riemann_solver} currently not supported for unsplit scheme.")
-
+        fluxes = _riemann_solver(
+            primitives_left_interface[axis - 1],
+            primitives_right_interface[axis - 1],
+            primitive_state,
+            gamma,
+            config,
+            registered_variables,
+            axis
+        )
         # update the conserved variables
         conserved_change = 1 / config.grid_spacing * _stencil_add(fluxes, indices = (0, 1), factors = (1.0, -1.0), axis = axis, zero_pad = True) * dt
         conservative_states += conserved_change

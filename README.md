@@ -1,11 +1,15 @@
 # jf1uids - differentiable (magneto)hydrodynamics for astrophysics in JAX
 
+> [!WARNING]  
+> This project is still an alpha version (but generally functional), updates might break examples. We are aiming for the first stable release in Fall 2025. The documentation might not reflect the current state of the code.
+
 [![DOI](https://zenodo.org/badge/848159116.svg)](https://doi.org/10.5281/zenodo.15052815)
 
 ## Features
 
 - [x] 1D, 2D and 3D hydrodynamics and magnetohydrodynamics simulations
-- [x] provably divergence free magnetic fields based on the approach of [Pang and Wu (2024)](https://arxiv.org/abs/2410.05173) (different from their approach not yet provably positivity preserving)
+- [x] provably divergence free magnetic fields and provably positivity preserving
+hydrodynamics based on the approach of [Pang and Wu (2024)](https://arxiv.org/abs/2410.05173)
 - [x] novel (possibly) conservative self gravity scheme, stable at strong discontinuities
 - [x] spherically symmetric simulations such that mass and energy are conserved based on the scheme of [Crittenden and Balachandar (2018)](https://doi.org/10.1007/s00193-017-0784-y)
 - [x] backwards and forwards differentiable with adaptive timestepping
