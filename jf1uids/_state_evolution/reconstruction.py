@@ -13,7 +13,7 @@ from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import speed_of_so
 from jf1uids._physics_modules._self_gravity._poisson_solver import _compute_gravitational_potential
 from jf1uids._state_evolution.limiters import _van_albada_limiter, _minmod
 from jf1uids._stencil_operations._stencil_operations import _stencil_add
-from jf1uids.option_classes.simulation_config import CARTESIAN, STATE_TYPE, STATE_TYPE_ALTERED, VAN_ALBADA, VAN_ALBADA_PP, SimulationConfig
+from jf1uids.option_classes.simulation_config import CARTESIAN, MUSCL, STATE_TYPE, STATE_TYPE_ALTERED, VAN_ALBADA, VAN_ALBADA_PP, SimulationConfig
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 
@@ -59,40 +59,43 @@ def _reconstruct_at_interface_split(
     # get the limited gradients on the cells
     limited_gradients = _calculate_limited_gradients(primitive_state, config, helper_data, axis = axis)
 
-    # calculate the sound speed
-    if not config.cosmic_ray_config.cosmic_rays:
-        c = speed_of_sound(rho, p, gamma)
+    if config.time_integrator == MUSCL:
+        # calculate the sound speed
+        if not config.cosmic_ray_config.cosmic_rays:
+            c = speed_of_sound(rho, p, gamma)
+        else:
+            c = speed_of_sound_crs(primitive_state, registered_variables)
+
+        # ================ construct A_W, the "primitive Jacabian" (not an actual Jacabian) ================
+        # see https://diglib.uibk.ac.at/download/pdf/4422963.pdf, 2.11
+
+        # calculate the vectors making up A_W
+        A_W = jnp.zeros((registered_variables.num_vars,) + primitive_state.shape)
+
+        # set u diagonal, this way all quantities are automatically advected
+        A_W = A_W.at[jnp.arange(registered_variables.num_vars), jnp.arange(registered_variables.num_vars)].set(u)
+
+        # set rest
+        A_W = A_W.at[registered_variables.density_index, axis].set(rho)
+        A_W = A_W.at[registered_variables.pressure_index, 1].set(rho * c ** 2)
+        A_W = A_W.at[axis, registered_variables.pressure_index].set(1 / rho)
+
+        A_W = jax.lax.slice_in_dim(A_W, 1, num_cells - 1, axis = axis + 1)
+
+        # ====================================================================================================
+
+        # project the gradients
+        if config.dimensionality == 1:
+            projected_gradients = jnp.einsum('bax, ax -> bx', A_W, limited_gradients)
+        elif config.dimensionality == 2:
+            projected_gradients = jnp.einsum('baxy, axy -> bxy', A_W, limited_gradients)
+        elif config.dimensionality == 3:
+            projected_gradients = jnp.einsum('baxyz, axyz -> bxyz', A_W, limited_gradients)
+
+        # predictor step
+        predictors = jax.lax.slice_in_dim(primitive_state, 1, num_cells - 1, axis = axis) - dt / 2 * projected_gradients
     else:
-        c = speed_of_sound_crs(primitive_state, registered_variables)
-
-    # ================ construct A_W, the "primitive Jacabian" (not an actual Jacabian) ================
-    # see https://diglib.uibk.ac.at/download/pdf/4422963.pdf, 2.11
-
-    # calculate the vectors making up A_W
-    A_W = jnp.zeros((registered_variables.num_vars,) + primitive_state.shape)
-
-    # set u diagonal, this way all quantities are automatically advected
-    A_W = A_W.at[jnp.arange(registered_variables.num_vars), jnp.arange(registered_variables.num_vars)].set(u)
-
-    # set rest
-    A_W = A_W.at[registered_variables.density_index, axis].set(rho)
-    A_W = A_W.at[registered_variables.pressure_index, 1].set(rho * c ** 2)
-    A_W = A_W.at[axis, registered_variables.pressure_index].set(1 / rho)
-
-    A_W = jax.lax.slice_in_dim(A_W, 1, num_cells - 1, axis = axis + 1)
-
-    # ====================================================================================================
-
-    # project the gradients
-    if config.dimensionality == 1:
-        projected_gradients = jnp.einsum('bax, ax -> bx', A_W, limited_gradients)
-    elif config.dimensionality == 2:
-        projected_gradients = jnp.einsum('baxy, axy -> bxy', A_W, limited_gradients)
-    elif config.dimensionality == 3:
-        projected_gradients = jnp.einsum('baxyz, axyz -> bxyz', A_W, limited_gradients)
-
-    # predictor step
-    predictors = jax.lax.slice_in_dim(primitive_state, 1, num_cells - 1, axis = axis) - dt / 2 * projected_gradients
+        raise ValueError(f"Time integrator {config.time_integrator} not supported for split reconstruction. Only MUSCL is supported.")
 
     # compute primitives at the interfaces
     if config.geometry == CARTESIAN:
@@ -158,7 +161,15 @@ def _reconstruct_at_interface_unsplit(
         # NOTE: formula will change for different grid spacings along dimensions!!!
         
         C = alpha_lax / jnp.sum(alpha_lax)
-        q = 2 / params.C_cfl # 2 because Delta t half steps ?
+
+        if config.mhd:
+            # in the MHD case we go half-time steps as of
+            # the strang splitting, so effectively, for the
+            # hydro part we use C_cfl / 2, so 1 / (C_cfl / 2)
+            # = 2 / C_cfl
+            q = 2 / params.C_cfl
+        else:
+            q = 1 / params.C_cfl
 
         density_diff_protected = jnp.where(
             jnp.abs(differences[:, registered_variables.density_index]) > eps,
