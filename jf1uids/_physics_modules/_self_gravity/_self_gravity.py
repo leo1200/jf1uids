@@ -93,9 +93,6 @@ def _gravitational_source_term_along_axis(
         # ===============================================
 
         # better energy source
-
-        num_cells = primitive_state.shape[axis]
-
         if config.first_order_fallback:
             primitive_state_left = jnp.roll(primitive_state, shift = 1, axis = axis)
             primitive_state_right = primitive_state
@@ -107,8 +104,8 @@ def _gravitational_source_term_along_axis(
         fluxes_i_to_ip1 = jnp.maximum(jnp.roll(fluxes, shift = -1, axis = axis), 0)
         fluxes_i_to_im1 = jnp.minimum(fluxes, 0)
 
-        acc_backward = -_stencil_add(gravitational_potential, indices = (0, -1), factors = (1.0, -1.0), axis = axis - 1)
-        acc_forward = -_stencil_add(gravitational_potential, indices = (1, 0), factors = (1.0, -1.0), axis = axis - 1)
+        acc_backward = -_stencil_add(gravitational_potential, indices = (0, -1), factors = (1.0, -1.0), axis = axis - 1) / grid_spacing
+        acc_forward = -_stencil_add(gravitational_potential, indices = (1, 0), factors = (1.0, -1.0), axis = axis - 1) / grid_spacing
 
         fluxes_acc = fluxes_i_to_im1 * acc_backward + fluxes_i_to_ip1 * acc_forward
 

@@ -1,6 +1,6 @@
-# only use gpu 7
+# only use gpu 4
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+os.environ["CUDA_VISIBLE_DEVICES"] = "4"
 
 # numerics
 import jax
@@ -32,7 +32,7 @@ from jf1uids.option_classes.simulation_config import (
     BoundarySettings, BoundarySettings1D
 )
 
-self_gravity_version = SIMPLE_SOURCE_TERM
+self_gravity_version = CONSERVATIVE_SOURCE_TERM
 
 def simulate_collapse(num_cells):
     print("👷 Setting up simulation...")
@@ -130,7 +130,7 @@ def simulate_collapse(num_cells):
 
 def resolution_study():
 
-    num_cells_list = [32, 64, 128, 192]
+    num_cells_list = [32, 64]
     line_styles = ['-', '--', '-.', ':']
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 5))
