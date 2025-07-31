@@ -31,7 +31,7 @@ from jf1uids.option_classes.simulation_config import FIELD_TYPE, HLL, HLLC, OPEN
 # jf1uids functions
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids._riemann_solver.hll import _hll_solver, _hllc_solver
-from jf1uids._state_evolution.reconstruction import _reconstruct_at_interface
+from jf1uids._state_evolution.reconstruction import _reconstruct_at_interface_split
 from jf1uids.fluid_equations.euler import _euler_flux
 from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, primitive_state_from_conserved, speed_of_sound
 
@@ -97,21 +97,20 @@ def _gravitational_source_term_along_axis(
         num_cells = primitive_state.shape[axis]
 
         if config.first_order_fallback:
-            primitive_state_left = jax.lax.slice_in_dim(primitive_state, 1, -2, axis = axis)
-            primitive_state_right = jax.lax.slice_in_dim(primitive_state, 2, -1, axis = axis)
+            primitive_state_left = jnp.roll(primitive_state, shift = 1, axis = axis)
+            primitive_state_right = primitive_state
         else:
-            primitive_state_left, primitive_state_right = _reconstruct_at_interface(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
+            primitive_state_left, primitive_state_right = _reconstruct_at_interface_split(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
         
-        fluxes = _riemann_solver(primitive_state_left, primitive_state_right, gamma, config, registered_variables, axis)
-        fluxes_i_to_ip1 = jnp.maximum(fluxes, 0)
-        fluxes_ip1_to_i = jnp.minimum(fluxes, 0)
+        # at index i, the fluxes array contains the flux from i-1 to i
+        fluxes = _riemann_solver(primitive_state_left, primitive_state_right, primitive_state, gamma, config, registered_variables, axis)
+        fluxes_i_to_ip1 = jnp.maximum(jnp.roll(fluxes, shift = -1, axis = axis), 0)
+        fluxes_i_to_im1 = jnp.minimum(fluxes, 0)
 
-        # these are the accelerations at the cell interfaces, starting at the interface between cell 1 and 2
-        acc = -(jax.lax.slice_in_dim(gravitational_potential, 2, -1, axis = axis - 1) - jax.lax.slice_in_dim(gravitational_potential, 1, -2, axis = axis - 1)) / (grid_spacing)
+        acc_backward = -_stencil_add(gravitational_potential, indices = (0, -1), factors = (1.0, -1.0), axis = axis - 1)
+        acc_forward = -_stencil_add(gravitational_potential, indices = (1, 0), factors = (1.0, -1.0), axis = axis - 1)
 
-        fluxes_acc = jnp.zeros_like(primitive_state)
-        selection = (slice(None),) * (axis) + (slice(2,-2),) + (slice(None),)*(primitive_state.ndim - axis - 1)
-        fluxes_acc = fluxes_acc.at[selection].set(jax.lax.slice_in_dim(fluxes_i_to_ip1, 1, None, axis = axis) * jax.lax.slice_in_dim(acc, 1, None, axis = axis - 1) + jax.lax.slice_in_dim(fluxes_ip1_to_i, 0, -1, axis = axis) * jax.lax.slice_in_dim(acc, 0, -1, axis = axis - 1))
+        fluxes_acc = fluxes_i_to_im1 * acc_backward + fluxes_i_to_ip1 * acc_forward
 
         source_term = source_term.at[registered_variables.pressure_index].set(fluxes_acc[0])
 

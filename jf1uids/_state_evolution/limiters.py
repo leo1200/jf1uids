@@ -1,7 +1,9 @@
 import jax.numpy as jnp
 import jax
 
-# TODO: rewrite limiters to the one-argument convention
+from jf1uids._stencil_operations._stencil_operations import _stencil_add
+from jf1uids.data_classes.simulation_helper_data import HelperData
+from jf1uids.option_classes.simulation_config import STATE_TYPE, STATE_TYPE_ALTERED, SimulationConfig
 
 @jax.jit
 def _minmod(a, b):
@@ -36,6 +38,22 @@ def _superbee(a, b):
         _minmod(2 * a, 2 * b)
     ), 0.0)
 
-# @jax.jit
-# def _minmod(r):
-#     return jnp.maximum(0, jnp.minimum(1,r))
+# TODO: bring into common interface
+def _van_albada_limiter(
+    primitive_state: STATE_TYPE,
+    config: SimulationConfig,
+    helper_data: HelperData,
+    axis: int
+) -> STATE_TYPE_ALTERED:
+    """
+    van Albada limited gradients along an axis
+    """
+
+    grid_spacing = config.grid_spacing
+    epsilon = 3 * grid_spacing
+    forward_difference = _stencil_add(primitive_state, indices = (1, 0), factors = (1.0, -1.0), axis = axis) / grid_spacing
+    backward_difference = _stencil_add(primitive_state, indices = (0, -1), factors = (1.0, -1.0), axis = axis) / grid_spacing
+
+    limited_gradients = ((forward_difference ** 2 + epsilon) * backward_difference + (backward_difference ** 2 + epsilon) * forward_difference) / (forward_difference ** 2 + backward_difference ** 2 + 2 * epsilon)
+
+    return limited_gradients
