@@ -9,6 +9,7 @@ from jaxtyping import jaxtyped
 from typing import Union
 
 # general jf1uids imports
+from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.option_classes.simulation_config import CARTESIAN, MINMOD, OSHER, DOUBLE_MINMOD, SUPERBEE, SPHERICAL, STATE_TYPE, STATE_TYPE_ALTERED, SimulationConfig
 
@@ -57,8 +58,8 @@ def _calculate_limited_gradients(
         cell_distances_right = config.grid_spacing # distances r_{i+1} - r_i
     elif config.geometry == SPHERICAL and config.dimensionality == 1:
         # calculate the distances
-        cell_distances_left = helper_data.volumetric_centers[1:-1] - helper_data.volumetric_centers[:-2]
-        cell_distances_right = helper_data.volumetric_centers[2:] - helper_data.volumetric_centers[1:-1]
+        cell_distances_left = _stencil_add(helper_data.volumetric_centers, indices = (0, -1), factors = (1.0, -1.0), axis = 0)
+        cell_distances_right = _stencil_add(helper_data.volumetric_centers, indices = (1, 0), factors = (1.0, -1.0), axis = 0)
     else:
         raise ValueError("Geometry and dimensionality combination not supported.")
 
@@ -68,11 +69,11 @@ def _calculate_limited_gradients(
     # 1 to num_cells - 1.
 
     # backward
-    a = (jax.lax.slice_in_dim(primitive_state, 1, num_cells - 1, axis = axis) - jax.lax.slice_in_dim(primitive_state, 0, num_cells - 2, axis = axis)) / cell_distances_left
+    a = _stencil_add(primitive_state, indices = (0, -1), factors = (1.0, -1.0), axis = axis) / cell_distances_left
 
     # forward
-    b = (jax.lax.slice_in_dim(primitive_state, 2, num_cells, axis = axis) - jax.lax.slice_in_dim(primitive_state, 1, num_cells - 1, axis = axis)) / cell_distances_right
-    
+    b = _stencil_add(primitive_state, indices = (1, 0), factors = (1.0, -1.0), axis = axis) / cell_distances_right
+
     # We apply limiting to not create new extrema in regions where consecutive finite
     # differences differ strongly.
 

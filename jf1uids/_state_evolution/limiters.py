@@ -5,8 +5,6 @@ from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.option_classes.simulation_config import STATE_TYPE, STATE_TYPE_ALTERED, SimulationConfig
 
-# TODO: rewrite limiters to the one-argument convention
-
 @jax.jit
 def _minmod(a, b):
     return 0.5 * (jnp.sign(a) + jnp.sign(b)) * jnp.minimum(jnp.abs(a), jnp.abs(b))
@@ -53,8 +51,8 @@ def _van_albada_limiter(
 
     grid_spacing = config.grid_spacing
     epsilon = 3 * grid_spacing
-    forward_difference = _stencil_add(primitive_state, indices = (1, 0), factors = (1.0, -1.0), axis = axis, zero_pad = True) / grid_spacing
-    backward_difference = _stencil_add(primitive_state, indices = (0, -1), factors = (1.0, -1.0), axis = axis, zero_pad = True) / grid_spacing
+    forward_difference = _stencil_add(primitive_state, indices = (1, 0), factors = (1.0, -1.0), axis = axis) / grid_spacing
+    backward_difference = _stencil_add(primitive_state, indices = (0, -1), factors = (1.0, -1.0), axis = axis) / grid_spacing
 
     limited_gradients = ((forward_difference ** 2 + epsilon) * backward_difference + (backward_difference ** 2 + epsilon) * forward_difference) / (forward_difference ** 2 + backward_difference ** 2 + 2 * epsilon)
 

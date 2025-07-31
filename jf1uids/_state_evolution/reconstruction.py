@@ -49,8 +49,6 @@ def _reconstruct_at_interface_split(
         The primitive variables at both sides of the interfaces.
     """
 
-    num_cells = primitive_state.shape[axis]
-
     # get fluid variables for convenience
     rho = primitive_state[registered_variables.density_index]
     p = primitive_state[registered_variables.pressure_index]
@@ -80,8 +78,6 @@ def _reconstruct_at_interface_split(
         A_W = A_W.at[registered_variables.pressure_index, 1].set(rho * c ** 2)
         A_W = A_W.at[axis, registered_variables.pressure_index].set(1 / rho)
 
-        A_W = jax.lax.slice_in_dim(A_W, 1, num_cells - 1, axis = axis + 1)
-
         # ====================================================================================================
 
         # project the gradients
@@ -93,7 +89,7 @@ def _reconstruct_at_interface_split(
             projected_gradients = jnp.einsum('baxyz, axyz -> bxyz', A_W, limited_gradients)
 
         # predictor step
-        predictors = jax.lax.slice_in_dim(primitive_state, 1, num_cells - 1, axis = axis) - dt / 2 * projected_gradients
+        predictors = primitive_state - dt / 2 * projected_gradients
     else:
         raise ValueError(f"Time integrator {config.time_integrator} not supported for split reconstruction. Only MUSCL is supported.")
 
@@ -105,16 +101,21 @@ def _reconstruct_at_interface_split(
         r = helper_data.geometric_centers
         rv = helper_data.volumetric_centers
 
-        distances_to_left_interfaces = rv[1:-1] - (r[1:-1] - config.grid_spacing / 2)
-        distances_to_right_interfaces = (r[1:-1] + config.grid_spacing / 2) - rv[1:-1]
+        distances_to_left_interfaces = rv - (r - config.grid_spacing / 2)
+        distances_to_right_interfaces = (r + config.grid_spacing / 2) - rv
 
     primitives_left = predictors - distances_to_left_interfaces * limited_gradients
     primitives_right = predictors + distances_to_right_interfaces * limited_gradients
 
-    # the first entries are the state to the left and right
-    # of the interface between cell 1 and 2
-    num_prim = primitives_left.shape[axis]
-    return jax.lax.slice_in_dim(primitives_right, 0, num_prim - 1, axis = axis), jax.lax.slice_in_dim(primitives_left, 1, num_prim, axis = axis)
+    # primitives left at i is the left state at the interface
+    # between i-1 and i so the right extrapolation from the cell i-1
+    p_left_interface = jnp.roll(primitives_right, shift = 1, axis = axis)
+
+    # primitives right at i is the right state at the interface
+    # between i-1 and i so the left extrapolation from the cell i
+    p_right_interface = primitives_left
+
+    return p_left_interface, p_right_interface
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
