@@ -110,12 +110,15 @@ def _time_integration(
 
         if config.dimensionality == 1:
             primitive_state = jnp.pad(primitive_state, ((0, 0), (2, 2)), mode='edge')
+            helper_data = helper_data._replace(r = jnp.pad(helper_data.r, ((2, 2),), mode='edge'))
 
         elif config.dimensionality == 2:
             primitive_state = jnp.pad(primitive_state, ((0, 0), (2, 2), (2, 2)), mode='edge')
+            helper_data = helper_data._replace(r = jnp.pad(helper_data.r, ((2, 2), (2, 2)), mode='edge'))
 
         elif config.dimensionality == 3:
             primitive_state = jnp.pad(primitive_state, ((0, 0), (2, 2), (2, 2), (2, 2)), mode='edge')
+            helper_data = helper_data._replace(r = jnp.pad(helper_data.r, ((2, 2), (2, 2), (2, 2)), mode='edge'))
 
     if config.return_snapshots:
         time_points = jnp.zeros(config.num_snapshots)

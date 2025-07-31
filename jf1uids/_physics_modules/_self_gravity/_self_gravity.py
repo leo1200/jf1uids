@@ -23,7 +23,7 @@ from jf1uids._riemann_solver._riemann_solver import _riemann_solver
 from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import STATE_TYPE_ALTERED, SimulationConfig
+from jf1uids.option_classes.simulation_config import CONSERVATIVE_SOURCE_TERM, SIMPLE_SOURCE_TERM, STATE_TYPE_ALTERED, SimulationConfig
 
 # jf1uids constants
 from jf1uids.option_classes.simulation_config import FIELD_TYPE, HLL, HLLC, OPEN_BOUNDARY, STATE_TYPE
@@ -72,7 +72,7 @@ def _gravitational_source_term_along_axis(
     """
 
     rho = primitive_state[registered_variables.density_index]
-    # v_axis = primitive_state[axis]
+    v_axis = primitive_state[axis]
 
     # a_i = - (phi_{i+1} - phi_{i-1}) / (2 * dx)
     acceleration = -_stencil_add(gravitational_potential, indices = (1, -1), factors = (1.0, -1.0), axis = axis - 1) / (2 * grid_spacing)
@@ -84,35 +84,38 @@ def _gravitational_source_term_along_axis(
     # set momentum source
     source_term = source_term.at[axis].set(rho * acceleration)
 
-    # set energy source
-    # source_term = source_term.at[registered_variables.pressure_index].set(rho * v_axis * acceleration)
+    if config.self_gravity_version == SIMPLE_SOURCE_TERM:
 
-    # ===============================================
+        # set energy source
+        source_term = source_term.at[registered_variables.pressure_index].set(rho * v_axis * acceleration)
 
-    # better energy source
+    elif config.self_gravity_version == CONSERVATIVE_SOURCE_TERM:
+        # ===============================================
 
-    num_cells = primitive_state.shape[axis]
+        # better energy source
 
-    if config.first_order_fallback:
-        primitive_state_left = jax.lax.slice_in_dim(primitive_state, 1, -2, axis = axis)
-        primitive_state_right = jax.lax.slice_in_dim(primitive_state, 2, -1, axis = axis)
-    else:
-        primitive_state_left, primitive_state_right = _reconstruct_at_interface(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
-    
-    fluxes = _riemann_solver(primitive_state_left, primitive_state_right, gamma, config, registered_variables, axis)
-    fluxes_i_to_ip1 = jnp.maximum(fluxes, 0)
-    fluxes_ip1_to_i = jnp.minimum(fluxes, 0)
+        num_cells = primitive_state.shape[axis]
 
-    # these are the accelerations at the cell interfaces, starting at the interface between cell 1 and 2
-    acc = -(jax.lax.slice_in_dim(gravitational_potential, 2, -1, axis = axis - 1) - jax.lax.slice_in_dim(gravitational_potential, 1, -2, axis = axis - 1)) / (grid_spacing)
+        if config.first_order_fallback:
+            primitive_state_left = jax.lax.slice_in_dim(primitive_state, 1, -2, axis = axis)
+            primitive_state_right = jax.lax.slice_in_dim(primitive_state, 2, -1, axis = axis)
+        else:
+            primitive_state_left, primitive_state_right = _reconstruct_at_interface(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
+        
+        fluxes = _riemann_solver(primitive_state_left, primitive_state_right, gamma, config, registered_variables, axis)
+        fluxes_i_to_ip1 = jnp.maximum(fluxes, 0)
+        fluxes_ip1_to_i = jnp.minimum(fluxes, 0)
 
-    fluxes_acc = jnp.zeros_like(primitive_state)
-    selection = (slice(None),) * (axis) + (slice(2,-2),) + (slice(None),)*(primitive_state.ndim - axis - 1)
-    fluxes_acc = fluxes_acc.at[selection].set(jax.lax.slice_in_dim(fluxes_i_to_ip1, 1, None, axis = axis) * jax.lax.slice_in_dim(acc, 1, None, axis = axis - 1) + jax.lax.slice_in_dim(fluxes_ip1_to_i, 0, -1, axis = axis) * jax.lax.slice_in_dim(acc, 0, -1, axis = axis - 1))
+        # these are the accelerations at the cell interfaces, starting at the interface between cell 1 and 2
+        acc = -(jax.lax.slice_in_dim(gravitational_potential, 2, -1, axis = axis - 1) - jax.lax.slice_in_dim(gravitational_potential, 1, -2, axis = axis - 1)) / (grid_spacing)
 
-    source_term = source_term.at[registered_variables.pressure_index].set(fluxes_acc[0])
+        fluxes_acc = jnp.zeros_like(primitive_state)
+        selection = (slice(None),) * (axis) + (slice(2,-2),) + (slice(None),)*(primitive_state.ndim - axis - 1)
+        fluxes_acc = fluxes_acc.at[selection].set(jax.lax.slice_in_dim(fluxes_i_to_ip1, 1, None, axis = axis) * jax.lax.slice_in_dim(acc, 1, None, axis = axis - 1) + jax.lax.slice_in_dim(fluxes_ip1_to_i, 0, -1, axis = axis) * jax.lax.slice_in_dim(acc, 0, -1, axis = axis - 1))
 
-    # ===============================================
+        source_term = source_term.at[registered_variables.pressure_index].set(fluxes_acc[0])
+
+        # ===============================================
 
     return source_term
 

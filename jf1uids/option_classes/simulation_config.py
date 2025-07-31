@@ -47,6 +47,10 @@ XAXIS = 1
 YAXIS = 2
 ZAXIS = 3
 
+# self-gravity versions
+SIMPLE_SOURCE_TERM = 0
+CONSERVATIVE_SOURCE_TERM = 1
+
 # ============================================================
 
 # ===================== type definitions =====================
@@ -109,6 +113,7 @@ class SimulationConfig(NamedTuple):
     #: Self gravity switch, currently only
     #: for periodic boundaries.
     self_gravity: bool = False
+    self_gravity_version: int = CONSERVATIVE_SOURCE_TERM
 
     #: The size of the simulation box.
     box_size: float = 1.0
