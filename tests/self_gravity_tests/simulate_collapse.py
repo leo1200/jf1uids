@@ -16,7 +16,7 @@ from matplotlib.gridspec import GridSpec
 # jf1uids classes
 from jf1uids import SimulationConfig
 from jf1uids import SimulationParams
-from jf1uids.option_classes.simulation_config import CONSERVATIVE_SOURCE_TERM, SIMPLE_SOURCE_TERM, BoundarySettings, BoundarySettings1D
+from jf1uids.option_classes.simulation_config import CONSERVATIVE_SOURCE_TERM, DOUBLE_MINMOD, LAX_FRIEDRICHS, MUSCL, RK2_SSP, SIMPLE_SOURCE_TERM, SPLIT, UNSPLIT, BoundarySettings, BoundarySettings1D
 
 # jf1uids functions
 from jf1uids import get_helper_data
@@ -56,8 +56,10 @@ def simulate_collapse(num_cells):
         box_size = box_size, 
         num_cells = num_cells,
         fixed_timestep = fixed_timestep,
+        split = SPLIT,
         differentiation_mode = FORWARDS,
         limiter = MINMOD,
+        time_integrator = MUSCL,
         riemann_solver = HLL,
         boundary_settings = BoundarySettings(
             BoundarySettings1D(

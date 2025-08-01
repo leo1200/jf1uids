@@ -11,10 +11,10 @@ from typing import Union
 # general jf1uids imports
 from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.data_classes.simulation_helper_data import HelperData
-from jf1uids.option_classes.simulation_config import CARTESIAN, MINMOD, OSHER, DOUBLE_MINMOD, SUPERBEE, SPHERICAL, STATE_TYPE, STATE_TYPE_ALTERED, SimulationConfig
+from jf1uids.option_classes.simulation_config import CARTESIAN, MINMOD, OSHER, DOUBLE_MINMOD, SUPERBEE, SPHERICAL, STATE_TYPE, STATE_TYPE_ALTERED, VAN_ALBADA, VAN_ALBADA_PP, SimulationConfig
 
 # limiter imports
-from jf1uids._state_evolution.limiters import _double_minmod, _minmod, _superbee
+from jf1uids._state_evolution.limiters import _double_minmod, _minmod, _superbee, _van_albada_limiter
 
 
 @jaxtyped(typechecker=typechecker)
@@ -41,13 +41,6 @@ def _calculate_limited_gradients(
 
     """
 
-    # TODO: improve shape annotations, two smaller 
-    # in the flux_direction_index dimension
-    # or maybe better: equal shapes everywhere
-
-    # get array sizee along the axis
-    num_cells = primitive_state.shape[axis]
-
     # We first need to calculate the distances between the cells.
     # For 1D simulations in spherical geometry, we have to mind
     # that the distances of the volumetric centers to the cell 
@@ -69,34 +62,41 @@ def _calculate_limited_gradients(
     # 1 to num_cells - 1.
 
     # backward
-    a = _stencil_add(primitive_state, indices = (0, -1), factors = (1.0, -1.0), axis = axis) / cell_distances_left
+    backward_diff = _stencil_add(primitive_state, indices = (0, -1), factors = (1.0, -1.0), axis = axis) / cell_distances_left
 
     # forward
-    b = _stencil_add(primitive_state, indices = (1, 0), factors = (1.0, -1.0), axis = axis) / cell_distances_right
+    forward_diff = _stencil_add(primitive_state, indices = (1, 0), factors = (1.0, -1.0), axis = axis) / cell_distances_right
 
     # We apply limiting to not create new extrema in regions where consecutive finite
     # differences differ strongly.
 
     if config.limiter == MINMOD:
         # Limited average formulations:
-        limited_gradients = _minmod(a, b)
+        limited_gradients = _minmod(backward_diff, forward_diff)
     elif config.limiter == SUPERBEE:
-        limited_gradients = _superbee(a, b)
+        limited_gradients = _superbee(backward_diff, forward_diff)
     elif config.limiter == DOUBLE_MINMOD:
-        limited_gradients = _double_minmod(a, b)
+        limited_gradients = _double_minmod(backward_diff, forward_diff)
+    elif config.limiter == VAN_ALBADA or config.limiter == VAN_ALBADA_PP:
+        # van Albada limiter
+        limited_gradients = _van_albada_limiter(
+            backward_diff,
+            forward_diff,
+            config
+        )
     elif config.limiter == OSHER:
         # Quotient formulation:
         epsilon = 1e-11  # Small constant to prevent division by zero
         g = jnp.where(
-            jnp.abs(a) > epsilon,  # Avoid division if `a` is very small
-            b / (a + epsilon),  # Add epsilon to `a` for numerical stability
-            jnp.zeros_like(a)
+            jnp.abs(backward_diff) > epsilon,  # Avoid division if `a` is very small
+            forward_diff / (backward_diff + epsilon),  # Add epsilon to `a` for numerical stability
+            jnp.zeros_like(backward_diff)
         )
         # slope_limited = jnp.maximum(0, jnp.minimum(1, g))  # Minmod limiter
         slope_limited = jnp.maximum(0, jnp.minimum(1.3, g))  # Osher limiter with beta = 1.3
         # ospre limiter
         # slope_limited = (1.5 * (g ** 2 + g)) / (g ** 2 + g + 1)
-        limited_gradients = slope_limited * a
+        limited_gradients = slope_limited * backward_diff
     else:
         raise ValueError("Unknown limiter.")
 

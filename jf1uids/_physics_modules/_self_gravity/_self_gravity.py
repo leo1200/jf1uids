@@ -23,7 +23,7 @@ from jf1uids._riemann_solver._riemann_solver import _riemann_solver
 from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import CONSERVATIVE_SOURCE_TERM, SIMPLE_SOURCE_TERM, STATE_TYPE_ALTERED, SimulationConfig
+from jf1uids.option_classes.simulation_config import CONSERVATIVE_SOURCE_TERM, LAX_FRIEDRICHS, SIMPLE_SOURCE_TERM, SPLIT, STATE_TYPE_ALTERED, SimulationConfig
 
 # jf1uids constants
 from jf1uids.option_classes.simulation_config import FIELD_TYPE, HLL, HLLC, OPEN_BOUNDARY, STATE_TYPE
@@ -31,9 +31,10 @@ from jf1uids.option_classes.simulation_config import FIELD_TYPE, HLL, HLLC, OPEN
 # jf1uids functions
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids._riemann_solver.hll import _hll_solver, _hllc_solver
-from jf1uids._state_evolution.reconstruction import _reconstruct_at_interface_split
+from jf1uids._state_evolution.reconstruction import _reconstruct_at_interface_split, _reconstruct_at_interface_unsplit
 from jf1uids.fluid_equations.euler import _euler_flux
 from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, primitive_state_from_conserved, speed_of_sound
+from jf1uids.option_classes.simulation_params import SimulationParams
 
 
 @jaxtyped(typechecker=typechecker)
@@ -46,6 +47,7 @@ def _gravitational_source_term_along_axis(
         dt: Union[float, Float[Array, ""]],
         gamma: Union[float, Float[Array, ""]],
         config: SimulationConfig,
+        params: SimulationParams,
         helper_data: HelperData,
         axis: int,
 ) -> STATE_TYPE:
@@ -97,12 +99,53 @@ def _gravitational_source_term_along_axis(
             primitive_state_left = jnp.roll(primitive_state, shift = 1, axis = axis)
             primitive_state_right = primitive_state
         else:
-            primitive_state_left, primitive_state_right = _reconstruct_at_interface_split(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
+            if config.split == SPLIT:
+                primitive_state_left, primitive_state_right = _reconstruct_at_interface_split(primitive_state, dt, gamma, config, helper_data, registered_variables, axis)
+            else:
+                # TODO: improve efficiency
+                # this is currently suboptimal, the reconstruction is done for all axes
+                # but we only need it for the current axis
+                primitives_left_interface, primitives_right_interface = _reconstruct_at_interface_unsplit(
+                    primitive_state,
+                    dt,
+                    gamma,
+                    config,
+                    params,
+                    helper_data,
+                    registered_variables
+                )
+                primitive_state_left = primitives_left_interface[axis - 1]
+                primitive_state_right = primitives_right_interface[axis - 1]
         
-        # at index i, the fluxes array contains the flux from i-1 to i
-        fluxes = _riemann_solver(primitive_state_left, primitive_state_right, primitive_state, gamma, config, registered_variables, axis)
-        fluxes_i_to_ip1 = jnp.maximum(jnp.roll(fluxes, shift = -1, axis = axis), 0)
-        fluxes_i_to_im1 = jnp.minimum(fluxes, 0)
+        if config.riemann_solver == LAX_FRIEDRICHS:
+
+            conserved_left = conserved_state_from_primitive(primitive_state_left, gamma, config, registered_variables)
+            conserved_right = conserved_state_from_primitive(primitive_state_right, gamma, config, registered_variables)
+
+            # alpha = jnp.max(jnp.maximum(jnp.abs(u_L) + c_L, jnp.abs(u_R) + c_R))
+            u = primitive_state[axis]
+            rho = primitive_state[registered_variables.density_index]
+            p = primitive_state[registered_variables.pressure_index]
+            c = speed_of_sound(rho, p, gamma)
+            alpha = jnp.max(jnp.abs(u) + c)
+
+            fluxes_left = _euler_flux(primitive_state_left, gamma, config, registered_variables, axis)
+            fluxes_right = _euler_flux(primitive_state_right, gamma, config, registered_variables, axis)
+
+            # fluxes = 0.5 * (fluxes_left + fluxes_right) - 0.5 * alpha * (conserved_right - conserved_left)
+
+            # what cell i accounts for regarding the flux between i-1 and i
+            fluxes_i_to_im1 = 0.5 * fluxes_right + jnp.minimum(- 0.5 * alpha * (conserved_right - conserved_left), 0)
+
+            # what cell i-1 accounts for regarding the flux between i-1 and i
+            fluxes_im1 = 0.5 * fluxes_left + jnp.maximum(- 0.5 * alpha * (conserved_right - conserved_left), 0)
+            fluxes_i_to_ip1 = jnp.roll(fluxes_im1, shift = -1, axis = axis)
+        else:
+        
+            # at index i, the fluxes array contains the flux from i-1 to i
+            fluxes = _riemann_solver(primitive_state_left, primitive_state_right, primitive_state, gamma, config, registered_variables, axis)
+            fluxes_i_to_ip1 = jnp.maximum(jnp.roll(fluxes, shift = -1, axis = axis), 0)
+            fluxes_i_to_im1 = jnp.minimum(fluxes, 0)
 
         acc_backward = -_stencil_add(gravitational_potential, indices = (0, -1), factors = (1.0, -1.0), axis = axis - 1) / grid_spacing
         acc_forward = -_stencil_add(gravitational_potential, indices = (1, 0), factors = (1.0, -1.0), axis = axis - 1) / grid_spacing
@@ -121,6 +164,7 @@ def _apply_self_gravity(
     primitive_state: STATE_TYPE,
     old_primitive_state: STATE_TYPE,
     config: SimulationConfig,
+    params: SimulationParams,
     registered_variables: RegisteredVariables,
     helper_data: HelperData,
     gamma: Union[float, Float[Array, ""]],
@@ -143,6 +187,7 @@ def _apply_self_gravity(
                                         dt,
                                         gamma,
                                         config,
+                                        params,
                                         helper_data,
                                         i + 1
                                     )

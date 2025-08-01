@@ -136,14 +136,14 @@ def _reconstruct_at_interface_unsplit(
     limited_gradients = jnp.zeros((config.dimensionality,) + primitive_state.shape)
 
     for axis in range(1, config.dimensionality + 1):
-        if config.limiter == VAN_ALBADA or config.limiter == VAN_ALBADA_PP:
-            limited_gradients = limited_gradients.at[axis - 1].set(
-                _van_albada_limiter(primitive_state, config, helper_data, axis = axis)
-            )
-        else:
-            raise ValueError(f"Limiter {config.limiter} currently not supported for unsplit reconstruction.")
-
+        limited_gradients = limited_gradients.at[axis - 1].set(
+            _calculate_limited_gradients(primitive_state, config, helper_data, axis = axis)
+        )
+    
     differences = limited_gradients * config.grid_spacing / 2
+
+    primitives_left_interface = jnp.zeros((config.dimensionality,) + primitive_state.shape)
+    primitives_right_interface = jnp.zeros((config.dimensionality,) + primitive_state.shape)
 
     if config.limiter == VAN_ALBADA_PP:
         # positivity preserving reconstruction
@@ -216,9 +216,6 @@ def _reconstruct_at_interface_unsplit(
         A2 = jnp.where(vsum > eps, A2, eps)
 
         beta = jnp.where(vsum > eps, jnp.minimum(jnp.sqrt(((q - 2) ** 2 * primitive_state[registered_variables.density_index] * primitive_state[registered_variables.pressure_index]) / ((gamma - 1) * (2 * A1 + (q - 2) * primitive_state[registered_variables.density_index] ** 2 * A2))), 1), 1)
-
-        primitives_left_interface = jnp.zeros((config.dimensionality,) + primitive_state.shape)
-        primitives_right_interface = jnp.zeros((config.dimensionality,) + primitive_state.shape)
 
         differences_pp = differences
 

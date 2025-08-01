@@ -112,6 +112,7 @@ def _evolve_gas_state_split(
     gamma: Union[float, Float[Array, ""]],
     gravitational_constant: Union[float, Float[Array, ""]],
     config: SimulationConfig,
+    params: SimulationParams,
     helper_data: HelperData,
     registered_variables: RegisteredVariables
 ) -> STATE_TYPE:
@@ -136,7 +137,7 @@ def _evolve_gas_state_split(
         primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt, gamma, config, helper_data, registered_variables, 1)
 
         if config.self_gravity:
-            primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, registered_variables, helper_data, gamma, gravitational_constant, dt)
+            primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, params, registered_variables, helper_data, gamma, gravitational_constant, dt)
 
 
     elif config.dimensionality == 2:
@@ -148,7 +149,7 @@ def _evolve_gas_state_split(
         primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt/2, gamma, config, helper_data, registered_variables, 1)
 
         if config.self_gravity:
-            primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, registered_variables, helper_data, gamma, gravitational_constant, dt)
+            primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, params, registered_variables, helper_data, gamma, gravitational_constant, dt)
 
     elif config.dimensionality == 3:
 
@@ -161,7 +162,7 @@ def _evolve_gas_state_split(
         primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
 
         if config.self_gravity:
-            primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, registered_variables, helper_data, gamma, gravitational_constant, dt)
+            primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, params, registered_variables, helper_data, gamma, gravitational_constant, dt)
 
     else:
         raise ValueError("Dimensionality not supported.")
@@ -277,7 +278,7 @@ def _evolve_gas_state_unsplit(
 
     # apply self gravity if needed
     if config.self_gravity:
-        primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, registered_variables, helper_data, gamma, gravitational_constant, dt)
+        primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, params, registered_variables, helper_data, gamma, gravitational_constant, dt)
 
     return primitive_state
 
@@ -316,7 +317,7 @@ def _evolve_state(
             if config.split == UNSPLIT:
                 evolved_gas = _evolve_gas_state_unsplit(gas_state, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas)
             else:
-                evolved_gas = _evolve_gas_state_split(gas_state, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
+                evolved_gas = _evolve_gas_state_split(gas_state, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas)
 
             magnetic_field, evolved_gas = magnetic_update(magnetic_field, evolved_gas, config.grid_spacing, dt, registered_variables, config)
 
@@ -325,7 +326,7 @@ def _evolve_state(
             if config.split == UNSPLIT:
                 evolved_gas = _evolve_gas_state_unsplit(evolved_gas, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas)
             else:
-                evolved_gas = _evolve_gas_state_split(evolved_gas, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
+                evolved_gas = _evolve_gas_state_split(evolved_gas, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas)
 
             return jnp.concatenate((evolved_gas, magnetic_field), axis = 0)
         else:
@@ -338,4 +339,4 @@ def _evolve_state(
             return _evolve_gas_state_unsplit(primitive_state, dt, gamma, gravitational_constant, config, params, helper_data, registered_variables)
         else:
             # evolve the gas state
-            return _evolve_gas_state_split(primitive_state, dt, gamma, gravitational_constant, config, helper_data, registered_variables)
+            return _evolve_gas_state_split(primitive_state, dt, gamma, gravitational_constant, config, params, helper_data, registered_variables)
