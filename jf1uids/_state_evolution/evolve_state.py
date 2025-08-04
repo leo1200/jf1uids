@@ -24,7 +24,7 @@ from jf1uids._geometry.geometric_terms import _pressure_nozzling_source
 from jf1uids._state_evolution.reconstruction import _reconstruct_at_interface_split, _reconstruct_at_interface_unsplit
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.fluid_equations.fluid import primitive_state_from_conserved, conserved_state_from_primitive
-from jf1uids._riemann_solver.hll import _lax_friedrichs_solver
+from jf1uids._riemann_solver._lax_friedrichs import _lax_friedrichs_solver
 from jf1uids.option_classes.simulation_params import SimulationParams
 
 # -------------------------------------------------------------

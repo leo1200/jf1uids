@@ -3,6 +3,8 @@ from autocvd import autocvd
 autocvd(num_gpus = 1)
 # =======================
 
+import jax.random as jr
+
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,7 +20,7 @@ from jf1uids import SimulationConfig
 from jf1uids import SimulationParams
 
 # jf1uids constants
-from jf1uids.option_classes.simulation_config import CARTESIAN, HLLC, SPHERICAL, HLL, MINMOD
+from jf1uids.option_classes.simulation_config import AM_HLLC, CARTESIAN, HLLC, HLLC_LM, HYBRID_HLLC, MUSCL, SPHERICAL, HLL, MINMOD, SPLIT
 
 
 # jf1uids functions
@@ -43,7 +45,9 @@ config = SimulationConfig(
     progress_bar = True,
     runtime_debugging = False,
 
-    riemann_solver = HLLC,
+    riemann_solver = HYBRID_HLLC,
+    # split = SPLIT,
+    # time_integrator = MUSCL,
     
     dimensionality = 3,
 
@@ -135,57 +139,68 @@ result = time_integration(initial_state, config, params, helper_data, registered
 
 print("Simulation finished. Starting analysis and plotting...")
 
-# --- Prepare Simulation Data for Plotting ---
-# Convert JAX arrays to NumPy arrays for processing
-r_flat = np.array(helper_data.r.flatten())
-rho_sim = np.array(result[registered_variables.density_index].flatten())
-p_sim = np.array(result[registered_variables.pressure_index].flatten())
+# --- Parameters ---
+num_bins = 200
+num_scatter_samples = 100_000
+key = jr.PRNGKey(42)  # Random seed for reproducibility
 
-# Calculate absolute velocity magnitude
-vx = result[registered_variables.velocity_index.x]
-vy = result[registered_variables.velocity_index.y]
-vz = result[registered_variables.velocity_index.z]
-v_abs_sim = np.array(jnp.sqrt(vx**2 + vy**2 + vz**2).flatten())
+# --- Flatten simulation data ---
+r_flat = helper_data.r.flatten()
+rho_flat = result[registered_variables.density_index].flatten()
+p_flat = result[registered_variables.pressure_index].flatten()
+vx = result[registered_variables.velocity_index.x].flatten()
+vy = result[registered_variables.velocity_index.y].flatten()
+vz = result[registered_variables.velocity_index.z].flatten()
+v_abs_flat = jnp.sqrt(vx**2 + vy**2 + vz**2)
 
+domain_max_r = jnp.max(r_flat)
 
-# --- Calculate Radially Averaged Profiles ---
-# Create bins for averaging based on radius
-num_bins = 100
-domain_max_r = np.max(r_flat)
-bins = np.linspace(0, domain_max_r, num_bins + 1)
-bin_centers = (bins[:-1] + bins[1:]) / 2
+# --- Radial Binning (in JAX) ---
+bins = jnp.linspace(0, domain_max_r, num_bins + 1)
+bin_centers = 0.5 * (bins[:-1] + bins[1:])
 
-# Use binned_statistic to average data in each radial bin
-mean_rho, _, _ = binned_statistic(r_flat, rho_sim, statistic='mean', bins=bins)
-mean_v_abs, _, _ = binned_statistic(r_flat, v_abs_sim, statistic='mean', bins=bins)
-mean_p, _, _ = binned_statistic(r_flat, p_sim, statistic='mean', bins=bins)
+bin_indices = jnp.searchsorted(bins, r_flat, side='right') - 1
+bin_indices = jnp.clip(bin_indices, 0, num_bins - 1)
 
+rho_sum = jnp.zeros(num_bins)
+v_sum = jnp.zeros(num_bins)
+p_sum = jnp.zeros(num_bins)
+counts = jnp.zeros(num_bins)
 
-# --- Generate the Exact Sedov-Taylor Solution ---
-# The Sedov solver needs parameters consistent with the simulation.
-# The `eblast` parameter for the solver corresponds to E_explosion / rho_ambient.
-eblast_exact = E_explosion / rho_ambient
+rho_sum = rho_sum.at[bin_indices].add(rho_flat)
+v_sum = v_sum.at[bin_indices].add(v_abs_flat)
+p_sum = p_sum.at[bin_indices].add(p_flat)
+counts = counts.at[bin_indices].add(1)
 
-# Set up the solver for a spherical (geometry=3), uniform ambient medium (omega=0) explosion
-sedov_solver = Sedov(geometry=3, eblast=eblast_exact,
-                     gamma=params.gamma, omega=0.)
+counts = jnp.where(counts == 0, 1, counts)
+mean_rho = rho_sum / counts
+mean_v_abs = v_sum / counts
+mean_p = p_sum / counts
 
-# Generate the solution at the final time of the simulation on a fine grid
-r_exact = np.linspace(0.0, domain_max_r, 500)
+# --- JAX-based Random Subsampling for Scatter Plot ---
+total_points = r_flat.shape[0]
+perm = jr.permutation(key, total_points)
+indices = perm[:num_scatter_samples]
+
+r_scatter = r_flat[indices]
+rho_scatter = rho_flat[indices]
+v_abs_scatter = v_abs_flat[indices]
+p_scatter = p_flat[indices]
+
+# --- Exact Sedov-Taylor Solution ---
+eblast_exact = 1.0 / 1.0  # E_explosion / rho_ambient
+sedov_solver = Sedov(geometry=3, eblast=eblast_exact, gamma=params.gamma, omega=0.0)
+r_exact = jnp.linspace(0.0, domain_max_r, 500)
 solution_exact = sedov_solver(r=r_exact, t=params.t_end)
 
-
-
-# --- Create the Comparison Plots ---
+# --- Plotting ---
 fig, axes = plt.subplots(1, 3, figsize=(12, 4), dpi=120)
-fig.suptitle(f'Sedov Blast Wave Comparison at t = {params.t_end:.2f} (3D Cartesian Grid, {config.num_cells}³ grid)', fontsize=16)
+fig.suptitle(f'Sedov Blast Wave at t = {params.t_end:.2f} (Grid: {config.num_cells}³)', fontsize=16)
 
-# --- 1. Density Plot ---
+# --- Density Plot ---
 ax = axes[0]
-ax.scatter(r_flat, rho_sim, color='lightgray', alpha=0.5, label='simulation (raw data)', rasterized=True)
-ax.plot(bin_centers, mean_rho, 'o', color='royalblue', markersize=4, label='simulation (radial avg.)')
-
-# FIXED: Plot exact solution data directly using ax.plot
+ax.scatter(r_scatter, rho_scatter, color='lightgray', alpha=0.5, s=1, rasterized=True, label='simulation (sampled)')
+ax.plot(bin_centers, mean_rho, '-', color='royalblue', label='binned average')
 ax.plot(r_exact, solution_exact['density'], ls='--', lw=2, c='red', label='exact solution')
 ax.set_title('Density')
 ax.set_xlabel('Radius')
@@ -193,14 +208,10 @@ ax.set_ylabel('Density')
 ax.grid(True, linestyle=':', alpha=0.7)
 ax.set_xlim(0, domain_max_r)
 
-
-# --- 2. Absolute Velocity Plot ---
+# --- Velocity Plot ---
 ax = axes[1]
-# Plot raw simulation data for absolute velocity
-ax.scatter(r_flat, v_abs_sim, color='lightgray', alpha=0.5, label='simulation (raw data)', rasterized=True)
-ax.plot(bin_centers, mean_v_abs, 'o', color='royalblue', markersize=4, label='simulation (radial avg.)')
-
-# FIXED: Plot exact solution data directly using ax.plot
+ax.scatter(r_scatter, v_abs_scatter, color='lightgray', alpha=0.5, s=1, rasterized=True, label='simulation (sampled)')
+ax.plot(bin_centers, mean_v_abs, '-', color='royalblue', label='binned average')
 ax.plot(r_exact, solution_exact['velocity'], ls='--', lw=2, c='red', label='exact solution')
 ax.set_title('Absolute Velocity')
 ax.set_xlabel('Radius')
@@ -209,28 +220,23 @@ ax.grid(True, linestyle=':', alpha=0.7)
 ax.set_xlim(0, domain_max_r)
 ax.set_ylim(0, None)
 
-
-# --- 3. Pressure Plot ---
+# --- Pressure Plot ---
 ax = axes[2]
-# FIXED: Plot exact solution data directly using ax.plot
-ax.scatter(r_flat, p_sim, color='lightgray', alpha=0.5, label='simulation (raw data)', rasterized=True)
-ax.plot(bin_centers, mean_p, 'o', color='royalblue', markersize=4, label='simulation (radial avg.)')
-
+ax.scatter(r_scatter, p_scatter, color='lightgray', alpha=0.5, s=1, rasterized=True, label='simulation (sampled)')
+ax.plot(bin_centers, mean_p, '-', color='royalblue', label='binned average')
 ax.plot(r_exact, solution_exact['pressure'], ls='--', lw=2, c='red', label='exact solution')
 ax.set_title('Pressure')
 ax.set_xlabel('Radius')
 ax.set_ylabel('Pressure')
+ax.set_yscale('log')
 ax.grid(True, linestyle=':', alpha=0.7)
-ax.set_yscale('log') # Pressure spans orders of magnitude, so a log scale is better
 ax.set_xlim(0, domain_max_r)
-ax.set_ylim(bottom=p_ambient/2)
+ax.set_ylim(bottom=p_ambient / 2)
 
-
-# --- Create a common legend below the plots ---
+# --- Legend ---
 handles, labels = axes[0].get_legend_handles_labels()
 fig.legend(handles, labels, loc='lower center', ncol=3, bbox_to_anchor=(0.5, 0.02))
 
-# Adjust layout and save the figure
-plt.tight_layout(rect=[0, 0.1, 1, 0.96]) # Adjust for suptitle and common legend
-plt.savefig('figures/sedovHLLC.pdf', dpi = 300, bbox_inches='tight')
-print("Comparison plot 'figures/sedov.pdf' has been saved.")
+plt.tight_layout(rect=[0, 0.1, 1, 0.96])
+plt.savefig('figures/sedovAM_HLLC.png', dpi=300)
+print("Plot with binned profiles and JAX-sampled scatter saved as 'sedovAM_HLLC.png'.")

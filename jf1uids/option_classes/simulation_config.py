@@ -32,6 +32,8 @@ HLL = 0
 HLLC = 1
 HLLC_LM = 2
 LAX_FRIEDRICHS = 3
+HYBRID_HLLC = 4
+AM_HLLC = 5
 
 # time integrators
 RK2_SSP = 0
@@ -139,10 +141,10 @@ class SimulationConfig(NamedTuple):
     reconstruction_order: int = 1
 
     #: The limiter for the reconstruction.
-    limiter: int = VAN_ALBADA_PP
+    limiter: int = MINMOD
 
     #: The Riemann solver used
-    riemann_solver: int = LAX_FRIEDRICHS
+    riemann_solver: int = HLL
 
     #: Dimensional splitting / unsplit mode.
     split: int = UNSPLIT
