@@ -203,8 +203,8 @@ def _reconstruct_at_interface_unsplit(
         )
 
         if config.dimensionality == 1:
-            A1 = jnp.sum(jnp.sum(C[:, None] * alpha_density * differences[:, registered_variables.density_index] * differences[:, registered_variables.velocity_index.x: registered_variables.velocity_index.x + config.dimensionality], axis = 0) ** 2, axis = 0)
-            A2 = jnp.sum(C[:, None] * jnp.sum(differences[:, registered_variables.velocity_index.x: registered_variables.velocity_index.x + config.dimensionality] ** 2, axis = 1), axis = 0)
+            A1 = jnp.sum(jnp.sum(C[:, None] * alpha_density * differences[:, registered_variables.density_index] * differences[:, registered_variables.velocity_index], axis = 0) ** 2, axis = 0)
+            A2 = jnp.sum(C[:, None] * jnp.sum(differences[:, registered_variables.velocity_index] ** 2, axis = 1), axis = 0)
         elif config.dimensionality == 2:
             A1 = jnp.sum(jnp.sum(C[:, None, None] * alpha_density * differences[:, registered_variables.density_index] * differences[:, registered_variables.velocity_index.x: registered_variables.velocity_index.x + config.dimensionality], axis = 0) ** 2, axis = 0)
             A2 = jnp.sum(C[:, None, None] * jnp.sum(differences[:, registered_variables.velocity_index.x: registered_variables.velocity_index.x + config.dimensionality] ** 2, axis = 1), axis = 0)

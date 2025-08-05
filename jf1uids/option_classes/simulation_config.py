@@ -260,9 +260,9 @@ def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
             print("Setting HLL Riemann solver for spherical geometry.")
             config = config._replace(riemann_solver = HLL)
 
-        if config.split != UNSPLIT:
+        if config.split != SPLIT:
             print("Setting unsplit mode for spherical geometry")
-            config = config._replace(split = UNSPLIT)
+            config = config._replace(split = SPLIT)
 
         if config.limiter == VAN_ALBADA or config.limiter == VAN_ALBADA_PP:
             print("Setting minmod limiter for spherical geometry")

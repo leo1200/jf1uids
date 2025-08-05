@@ -119,6 +119,8 @@ def _gravitational_source_term_along_axis(
         
         if config.riemann_solver == LAX_FRIEDRICHS:
 
+            # TODO: analogous split for the other solvers
+
             conserved_left = conserved_state_from_primitive(primitive_state_left, gamma, config, registered_variables)
             conserved_right = conserved_state_from_primitive(primitive_state_right, gamma, config, registered_variables)
 
