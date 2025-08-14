@@ -198,7 +198,12 @@ def _time_integration(
     def update_step(carry):
 
         if config.return_snapshots:
-            time, state, snapshot_data = carry
+            ########## NEW ##########
+            if config.binary_config.binary:
+                time, state, snapshot_data, binary_state = carry
+            else:
+                time, state, snapshot_data = carry
+            ##################
 
             def update_snapshot_data(time, state, snapshot_data):
                 time_points = snapshot_data.time_points.at[snapshot_data.current_checkpoint].set(time)
@@ -253,7 +258,12 @@ def _time_integration(
             snapshot_data = snapshot_data._replace(num_iterations = num_iterations)
 
         elif config.activate_snapshot_callback:
-            time, state, snapshot_data = carry
+            #NEW #############
+            if config.binary_config.binary:
+                time, state, snapshot_data, binary_state = carry
+            else:
+                time, state, snapshot_data = carry
+            #################
 
             def update_snapshot_data(snapshot_data):
                 current_checkpoint = snapshot_data.current_checkpoint + 1
@@ -271,7 +281,12 @@ def _time_integration(
             num_iterations = snapshot_data.num_iterations + 1
             snapshot_data = snapshot_data._replace(num_iterations = num_iterations)
         else:
-            time, state = carry
+            # NEW ##########
+            if config.binary_config.binary:
+                time, state, binary_state = carry
+            else:
+                time, state = carry
+            #################
 
         # dt = _cfl_time_step(state, config.grid_spacing, params.dt_max, params.gamma, params.C_cfl)
 
@@ -296,7 +311,14 @@ def _time_integration(
 
         # state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables, time)
         state = _run_physics_modules(state, dt, config, params, helper_data_pad, registered_variables, time + dt)
-        state = _evolve_state(state, dt, params.gamma, params.gravitational_constant, config, params, helper_data_pad, registered_variables)
+        # state = _evolve_state(state, dt, params.gamma, params.gravitational_constant, config, params, helper_data_pad, registered_variables)
+
+        ###### NEW ######
+        if config.binary_config.binary:
+            state, binary_state = _evolve_state(state, dt, params.gamma, params.gravitational_constant, config, params, helper_data_pad, registered_variables, binary_state=binary_state)
+        else:
+            state = _evolve_state(state, dt, params.gamma, params.gravitational_constant, config, params, helper_data_pad, registered_variables, binary_state=None)
+        ##################
 
         time += dt
 
@@ -311,10 +333,18 @@ def _time_integration(
         if config.progress_bar:
             jax.debug.callback(_show_progress, time, params.t_end)
 
+        ########### NEW ###########
         if config.return_snapshots or config.activate_snapshot_callback:
-            carry = (time, state, snapshot_data)
+            if config.binary_config.binary:
+                carry = (time, state, snapshot_data, binary_state)
+            else:
+                carry = (time, state, snapshot_data)
         else:
-            carry = (time, state)
+            if config.binary_config.binary:
+                carry = (time, state, binary_state)
+            else:
+                carry = (time, state)
+        ###########################
 
         return carry
     
@@ -322,16 +352,25 @@ def _time_integration(
         return update_step(carry)
     
     def condition(carry):
-        if config.return_snapshots or config.activate_snapshot_callback:
-            t, _, _ = carry
-        else:
-            t, _ = carry
+        ################ NEW  ########
+        t, *rest = carry
         return t < params.t_end
+        ##################
     
+    #######################  NEW #######################
+    if config.binary_config.binary:
+        binary_state = params.binary_params.binary_state    
     if config.return_snapshots or config.activate_snapshot_callback:
-        carry = (0.0, primitive_state, snapshot_data)
+        if config.binary_config.binary:
+            carry = (0.0, primitive_state, snapshot_data, binary_state)
+        else:
+            carry = (0.0, primitive_state, snapshot_data)
     else:
-        carry = (0.0, primitive_state)
+        if config.binary_config.binary:
+            carry = (0.0, primitive_state, binary_state)
+        else:
+            carry = (0.0, primitive_state)
+    ####################################################
     
     if not config.fixed_timestep:
         if config.differentiation_mode == BACKWARDS:
@@ -344,15 +383,17 @@ def _time_integration(
         carry = jax.lax.fori_loop(0, config.num_timesteps, update_step_for, carry)
 
 
+    ############  NEW ###########
     if config.return_snapshots or config.activate_snapshot_callback:
-        _, state, snapshot_data = carry
+        _, state, snapshot_data, *rest = carry
 
         if config.return_snapshots:
             return snapshot_data
         else:
             return state
     else:
-        _, state = carry
+        _, state, *rest = carry
+    ###############################
 
         # unpad the primitive state if we padded it
         if config.dimensionality == 1:
