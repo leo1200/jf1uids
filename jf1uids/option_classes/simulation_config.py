@@ -6,6 +6,7 @@ from jf1uids._physics_modules._cooling.cooling_options import CoolingConfig
 from jf1uids._physics_modules._cosmic_rays.cosmic_ray_options import CosmicRayConfig
 from jf1uids._physics_modules._neural_net_force._neural_net_force_options import NeuralNetForceConfig
 from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindConfig
+from jf1uids._physics_modules._binary._binary_options import BinaryConfig
 
 from jaxtyping import Array, Float
 
@@ -232,6 +233,9 @@ class SimulationConfig(NamedTuple):
 
     #: Configuration of the CNN MHD corrector module.
     cnn_mhd_corrector_config: CNNMHDconfig = CNNMHDconfig()
+
+    #: The configuration for the binary system module.
+    binary_config: BinaryConfig = BinaryConfig()
 
 
 def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
