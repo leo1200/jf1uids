@@ -9,7 +9,7 @@ from jax.experimental import checkify
 # type checking imports
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
-from typing import Union
+from typing import Union, Tuple
 
 # general jf1uids imports
 from jf1uids._riemann_solver._riemann_solver import _riemann_solver
@@ -19,6 +19,8 @@ from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import CARTESIAN, HLL, HLLC, LAX_FRIEDRICHS, RK2_SSP, SPHERICAL, STATE_TYPE, UNSPLIT, SimulationConfig
+from jf1uids._physics_modules._binary._binary import binary_full
+from jf1uids._physics_modules._binary._binary_options import BinaryParams
 
 from jf1uids._geometry.geometric_terms import _pressure_nozzling_source
 from jf1uids._state_evolution.reconstruction import _reconstruct_at_interface_split, _reconstruct_at_interface_unsplit
@@ -114,8 +116,9 @@ def _evolve_gas_state_split(
     config: SimulationConfig,
     params: SimulationParams,
     helper_data: HelperData,
-    registered_variables: RegisteredVariables
-) -> STATE_TYPE:
+    registered_variables: RegisteredVariables,
+    binary_state: Union[None, Float[Array, "14"]] = None
+) -> Union[STATE_TYPE, Tuple[STATE_TYPE, Float[Array, "14"]]]:
     """
     Evolve the primitive state array.
 
@@ -161,13 +164,27 @@ def _evolve_gas_state_split(
         primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 2)
         primitive_state = _evolve_state_along_axis(primitive_state, config.grid_spacing, dt / 2, gamma, config, helper_data, registered_variables, 1)
 
-        if config.self_gravity:
-            primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, params, registered_variables, helper_data, gamma, gravitational_constant, dt)
+        # if config.self_gravity:
+        #     primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, params, registered_variables, helper_data, gamma, gravitational_constant, dt)
 
+        #### NEW ####################
+        if config.self_gravity:
+            if config.binary_config.binary:
+                if binary_state is None:
+                    binary_state = BinaryParams().binary_state
+                primitive_state, binary_state = binary_full(primitive_state, old_primitive_state, config, params, registered_variables, helper_data, gamma, gravitational_constant, dt, binary_state)
+            else:
+                primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, params, registered_variables, helper_data, gamma, gravitational_constant, dt)
+        #######################
     else:
         raise ValueError("Dimensionality not supported.")
 
-    return primitive_state
+    ##### NEW ####################
+    if config.binary_config.binary:
+        return primitive_state, binary_state
+    else:
+        return primitive_state
+    ########################
 
 # -------------------------------------------------------------
 # ====================== ↑ Split Scheme ↑ =====================
@@ -187,7 +204,7 @@ def _evolve_gas_state_unsplit_inner(
     config: SimulationConfig,
     params: SimulationParams,
     helper_data: HelperData,
-    registered_variables: RegisteredVariables
+    registered_variables: RegisteredVariables,
 ) -> STATE_TYPE:
     
     primitive_state = _boundary_handler(primitive_state, config)
@@ -238,8 +255,9 @@ def _evolve_gas_state_unsplit(
     config: SimulationConfig,
     params: SimulationParams,
     helper_data: HelperData,
-    registered_variables: RegisteredVariables
-) -> STATE_TYPE:
+    registered_variables: RegisteredVariables,
+    binary_state: Union[None, Float[Array, "14"]] = None
+) -> Union[STATE_TYPE, Tuple[STATE_TYPE, Float[Array, "14"]]]:
     
     old_primitive_state = primitive_state
     
@@ -276,11 +294,20 @@ def _evolve_gas_state_unsplit(
     else:
         raise ValueError("Only the RK2 SSP time integrator is currently supported for the unsplit scheme.")
 
-    # apply self gravity if needed
+    #### NEW ####################
     if config.self_gravity:
-        primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, params, registered_variables, helper_data, gamma, gravitational_constant, dt)
+        if config.binary_config.binary:
+            if binary_state is None:
+                binary_state = BinaryParams().binary_state
+            primitive_state, binary_state = binary_full(primitive_state, old_primitive_state, config, params, registered_variables, helper_data, gamma, gravitational_constant, dt, binary_state)
+        else:
+            primitive_state = _apply_self_gravity(primitive_state, old_primitive_state, config, params, registered_variables, helper_data, gamma, gravitational_constant, dt)
 
-    return primitive_state
+    if config.binary_config.binary:
+        return primitive_state, binary_state
+    else:
+        return primitive_state
+    ########################
 
 # -------------------------------------------------------------
 # ===================== ↑ Unsplit Scheme ↑ ====================
@@ -297,10 +324,18 @@ def _evolve_state(
     config: SimulationConfig,
     params: SimulationParams,
     helper_data: HelperData,
-    registered_variables: RegisteredVariables
-) -> STATE_TYPE:
+    registered_variables: RegisteredVariables,
+    binary_state: Union[None, Float[Array, "14"]] = None
+) -> Union[STATE_TYPE, Tuple[STATE_TYPE, Float[Array, "14"]]]:
+    
+    if config.binary_config.binary:
+        binary_state=binary_state
+    else:
+        binary_state = None
     
     if config.mhd:
+        if config.binary_config.binary:
+            raise ValueError("MHD is currently not supported in binary simulations.")
 
         if config.dimensionality > 1:
 
@@ -334,9 +369,13 @@ def _evolve_state(
             raise ValueError("MHD currently not supported in 1D.")
 
     else:
-        # for now only use pp for gas only
         if config.split == UNSPLIT:
-            return _evolve_gas_state_unsplit(primitive_state, dt, gamma, gravitational_constant, config, params, helper_data, registered_variables)
+            result = _evolve_gas_state_unsplit(primitive_state, dt, gamma, gravitational_constant, config, params, helper_data, registered_variables, binary_state=binary_state)
         else:
             # evolve the gas state
-            return _evolve_gas_state_split(primitive_state, dt, gamma, gravitational_constant, config, params, helper_data, registered_variables)
+            result = _evolve_gas_state_split(primitive_state, dt, gamma, gravitational_constant, config, params, helper_data, registered_variables, binary_state=binary_state)
+        if config.binary_config.binary:
+            primitive_state, binary_state = result
+        else:
+            primitive_state = result
+        return result
