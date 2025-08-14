@@ -246,8 +246,6 @@ def binary_full(
     pos2 = new_flat[8:11]
     particle_positions = jnp.stack([pos1, pos2], axis=0)
     particle_masses    = jnp.array([M1, M2])
-    jax.debug.print("masses{}",particle_masses)
-    jax.debug.print("pos{}",particle_positions)
     grid_shape   = rho_gas.shape
     grid_spacing = config.grid_spacing
     if config.binary_config.deposit_particles == "ngp":
@@ -386,3 +384,4 @@ if __name__ == "__main__":
     plt.ylabel('Relative Error')
     plt.legend()
     plt.savefig(save_path+"/JAX_orbits_errors.png", dpi=300)
+
