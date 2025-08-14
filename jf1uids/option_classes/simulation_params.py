@@ -6,6 +6,7 @@ from jf1uids._physics_modules._cooling.cooling_options import CoolingParams
 from jf1uids._physics_modules._cosmic_rays.cosmic_ray_options import CosmicRayParams
 from jf1uids._physics_modules._neural_net_force._neural_net_force_options import NeuralNetForceParams
 from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindParams
+from jf1uids._physics_modules._binary._binary_options import BinaryParams
 
 class SimulationParams(NamedTuple):
     """
@@ -49,3 +50,6 @@ class SimulationParams(NamedTuple):
 
     #: The parameters of the CNN MHD corrector module.
     cnn_mhd_corrector_params: CNNMHDconfig = CNNMHDconfig()
+
+    #: The parameters of the binary module.
+    binary_params: BinaryParams = BinaryParams()
