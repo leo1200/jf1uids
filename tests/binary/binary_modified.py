@@ -35,7 +35,7 @@ from jf1uids.option_classes.simulation_config import (
     PERIODIC_BOUNDARY, OPEN_BOUNDARY, REFLECTIVE_BOUNDARY, 
     BoundarySettings, BoundarySettings1D
 )
-jax.config.update('jax_enable_x64', True)
+#jax.config.update('jax_enable_x64', True)
 
 print("Setting up simulation...")
 
@@ -59,7 +59,7 @@ config = SimulationConfig(
     progress_bar = True,
     binary_config = BinaryConfig(
         binary = True,
-        deposit_particles = "cic"  # Options: "ngp", "cic", "tsc"
+        deposit_particles = "ngp"  # Options: "ngp", "cic", "tsc"
     ),
     self_gravity = True,
     self_gravity_version = self_gravity_version,
@@ -109,12 +109,12 @@ z_cyl = geometric_centers[..., 2] - config.box_size / 2
 ################################################################################
 
 helper_data = get_helper_data(config)
-x1=0.8
-x2=-0.3
+x1=0.5
+x2=-0.5
 ## initial state of each point mass [t,x,y,z,vx,vy,vz]
-txv1 = jnp.array([0.0, x1, 0.0, 0.0, 0.0, 0.5, 0.0], dtype=jnp.float64)   
-txv2 = jnp.array([0.0, x2, 0.0, 0.0, 0.0,-0.5, 0.0], dtype=jnp.float64)
-masses = jnp.array([0.8, 0.2], dtype=jnp.float64)  
+txv1 = jnp.array([0.0, x1, 0.0, 0.0, 0.0, 0.5, 0.0])   
+txv2 = jnp.array([0.0, x2, 0.0, 0.0, 0.0,-0.5, 0.0])
+masses = jnp.array([0.5, 0.5])  
 binary_state = jnp.concatenate([txv1, txv2])
 
 binary_params = BinaryParams(
