@@ -21,9 +21,6 @@ from jf1uids._physics_modules._self_gravity._self_gravity import _gravitational_
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, primitive_state_from_conserved
 
-
-jax.config.update('jax_enable_x64', True)
-
 class PointMassPotential:
     """
     Point-mass gravitational potential for two-body interactions.
@@ -384,4 +381,5 @@ if __name__ == "__main__":
     plt.ylabel('Relative Error')
     plt.legend()
     plt.savefig(save_path+"/JAX_orbits_errors.png", dpi=300)
+
 
