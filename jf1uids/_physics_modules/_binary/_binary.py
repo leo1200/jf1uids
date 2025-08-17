@@ -97,7 +97,7 @@ def _deposit_particles_ngp(
     rho_flat = rho_flat.at[flat_idx].add(particle_masses)
     return rho_flat.reshape(grid_shape)
 
-### Cloud-In-Cell (CIC) particle deposition (might be better????)
+### Cloud-In-Cell (CIC) particle deposition (might be better?)
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=('grid_shape', 'grid_spacing'))
 def _deposit_particles_cic(
@@ -152,7 +152,7 @@ def _deposit_particles_cic(
 
 # Triangular-Shaped-Cloud (TSC) particle deposition (quadratic B-spline)
 # This is a more accurate method than CIC, but more expensive. It spreads each particle’s mass to the
-#  3 nearest grid points along each axis (3×3×3 = 27 cells in 3D) with quadratic weights.
+# 3 nearest grid points along each axis (3×3×3 = 27 cells in 3D) with quadratic weights.
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=('grid_shape', 'grid_spacing'))
 def _deposit_particles_tsc(
@@ -325,13 +325,17 @@ def integrateBinary(orbit1, orbit2, M1, M2, h, T):
     traj1 = traj[:, :7]
     traj2 = traj[:, 7:14]
 
+    totalM = M1 + M2
     # Center-of-mass frame
-    Rx = (M2 * traj2[:,1] + M1 * traj1[:,1]) / (M1 + M2)
-    Ry = (M2 * traj2[:,2] + M1 * traj1[:,2]) / (M1 + M2)
+    Rx = (M2 * traj2[:,1] + M1 * traj1[:,1]) / totalM
+    Ry = (M2 * traj2[:,2] + M1 * traj1[:,2]) / totalM
+    Rz = (M2 * traj2[:,3] + M1 * traj1[:,3]) / totalM
     traj1_com = traj1.at[:,1].set(traj1[:,1] - Rx)
-    traj1_com = traj1_com.at[:,2].set(traj1_com[:,2] - Ry)
+    traj1_com = traj1_com.at[:,2].set(traj1[:,2] - Ry)
+    traj1_com = traj1_com.at[:,3].set(traj1[:,3] - Rz)
     traj2_com = traj2.at[:,1].set(traj2[:,1] - Rx)
-    traj2_com = traj2.at[:,2].set(traj2_com[:,2] - Ry)
+    traj2_com = traj2_com.at[:,2].set(traj2[:,2] - Ry)
+    traj2_com = traj2_com.at[:,3].set(traj2[:,3] - Rz)
 
     return traj1_com, traj2_com
 
@@ -344,16 +348,16 @@ def quantity_test(orbit1, orbit2, M1, M2, h, T):
     E   = 0.5*(M1*(traj1[:,4]**2+traj1[:,5]**2) + M2*(traj2[:,4]**2+traj2[:,5]**2)) \
     + PointMassPotential(M1,M2).potential(traj1[:,1],traj1[:,2],traj1[:,3],traj2[:,1],traj2[:,2],traj2[:,3])
 
-    dE  = (E-E[0])/E
+    dE  = (E-E[0])/E[0]
     L = x_rel*vy - y_rel*vx    # x*vy - y*vx
-    dL  = (L-L[0])/L
+    dL  = (L-L[0])/L[0]
     return traj1, traj2, dE, dL
 
 if __name__ == "__main__":
-    orbit1 = jnp.array([0.0,  0.5, 0.0, 0.0, 0.0, 0.5, 0.0], dtype=jnp.float64)
-    orbit2 = jnp.array([0.0, -0.5, 0.0, 0.0, 0.0,-0.5, 0.0], dtype=jnp.float64)
+    orbit1 = jnp.array([0.0,  0.3, 0.0, 0.0, 0.0, 0.5, 0.0])
+    orbit2 = jnp.array([0.0, -0.7, 0.0, 0.0, 0.0,-0.4, 0.0])
     M1 = 0.5
-    M2 = 0.5
+    M2 = 0.8
     h = 0.0008
     T = 20
     traj1_com, traj2_com, dE, dL = quantity_test(orbit1, orbit2, M1, M2, h, T)
@@ -372,7 +376,7 @@ if __name__ == "__main__":
     plt.ylabel('y')
     plt.axis('equal')
     plt.title("Binary Orbits")
-    plt.savefig(save_path+"/JAX_orbits.png", dpi=300)
+    plt.savefig(save_path+"/JAX_orbits3.png", dpi=300)
     plt.close()
     # energy / angular momentum errors
     plt.plot(traj1_com[:,0],dE,label=r'$\Delta E/E_0$')
@@ -380,6 +384,4 @@ if __name__ == "__main__":
     plt.xlabel('time')
     plt.ylabel('Relative Error')
     plt.legend()
-    plt.savefig(save_path+"/JAX_orbits_errors.png", dpi=300)
-
-
+    plt.savefig(save_path+"/JAX_orbits_errors3.png", dpi=300)
