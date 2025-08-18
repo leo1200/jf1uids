@@ -21,6 +21,7 @@ from jf1uids._physics_modules._self_gravity._self_gravity import _gravitational_
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, primitive_state_from_conserved
 
+
 class PointMassPotential:
     """
     Point-mass gravitational potential for two-body interactions.
@@ -86,15 +87,16 @@ def _deposit_particles_ngp(
     Deposit n point-masses to nearest grid cell (NGP).
     Positions in same units as grid, origin at (0,0,0).
     """
-    grid_extent = jnp.array(grid_shape) * grid_spacing    # e.g. [Nx*dx, Ny*dy, Nz*dz]
-    grid_min    = -0.5 * grid_extent                      
+    grid_extent = jnp.array(grid_shape) * grid_spacing   
+    grid_min    = -0.5 * grid_extent                  
+    particle_densities = particle_masses / (grid_spacing ** 3)    
     # map world->grid indices by subtracting the minimum corner:
     idx = ((particle_positions - grid_min) // grid_spacing).astype(int)
     idx = jnp.clip(idx, 0, jnp.array(grid_shape) - 1)
     # Flatten grid and scatter-add masses
     flat_idx = idx[:,0] * (grid_shape[1]*grid_shape[2]) + idx[:,1] * grid_shape[2] + idx[:,2]
     rho_flat = jnp.zeros(grid_shape[0]*grid_shape[1]*grid_shape[2])
-    rho_flat = rho_flat.at[flat_idx].add(particle_masses)
+    rho_flat = rho_flat.at[flat_idx].add(particle_densities)
     return rho_flat.reshape(grid_shape)
 
 ### Cloud-In-Cell (CIC) particle deposition (might be better?)
@@ -108,26 +110,21 @@ def _deposit_particles_cic(
 ) -> Float[jnp.ndarray, "nx ny nz"]:
     """
     Cloud-In-Cell (CIC) deposit (3D).
-
-    particle_positions: (N,3) world coords
-    particle_masses:    (N,)
-    grid_shape:         (nx,ny,nz) -- MUST be a Python tuple at call time (static)
-    grid_spacing:       scalar dx (treated as static here)
     """
     nx, ny, nz = grid_shape
     grid_extent = jnp.array([nx, ny, nz]) * grid_spacing
     grid_min = -0.5 * grid_extent
-    # relative continuous index in grid coordinates
-    rel = (particle_positions - grid_min) / grid_spacing   # (N,3)
-    i0 = jnp.floor(rel).astype(jnp.int32)                 # lower index (N,3)
-    f  = rel - i0.astype(rel.dtype)                       # fractional part (N,3) in [0,1)
-    # 8 neighbor offsets for CIC (cartesian product of {0,1}^3)
+    particle_densities = particle_masses / (grid_spacing ** 3)  
+    # relative index in grid coordinates
+    rel = (particle_positions - grid_min) / grid_spacing  
+    i0 = jnp.floor(rel).astype(jnp.int32)                 
+    f  = rel - i0.astype(rel.dtype)                      
+    # 8 neighbor offsets for CIC 
     offsets = jnp.array([
         [0,0,0],[0,0,1],[0,1,0],[0,1,1],
         [1,0,0],[1,0,1],[1,1,0],[1,1,1],
     ], dtype=jnp.int32)                                   # (8,3)
 
-    # neighbor indices (N,8,3)
     neigh_idx = i0[:, None, :] + offsets[None, :, :]
     # clip indices to grid boundaries (non-periodic)
     max_idx = jnp.array([nx - 1, ny - 1, nz - 1], dtype=jnp.int32)
@@ -135,17 +132,17 @@ def _deposit_particles_cic(
     # weights: for each dim weight is (1-f) if offset==0 else f; multiply over dims -> (N,8)
     f_b = f[:, None, :]                                   # (N,1,3)
     # boolean mask of offsets==0 broadcasted -> choose (1-f) or f
-    w_comp = jnp.where(offsets[None, :, :] == 0, 1.0 - f_b, f_b)  # (N,8,3)
-    weights = jnp.prod(w_comp, axis=-1)                   # (N,8)
+    w_comp = jnp.where(offsets[None, :, :] == 0, 1.0 - f_b, f_b)  
+    weights = jnp.prod(w_comp, axis=-1)                  
     # linearize 3D indices to flat indices (row-major: x*(ny*nz) + y*nz + z)
     flat_idx = (neigh_idx[..., 0] * (ny * nz)
                 + neigh_idx[..., 1] * nz
-                + neigh_idx[..., 2])                      # (N,8)
+                + neigh_idx[..., 2])                      
     # flatten for scatter
-    flat_idx_flat = flat_idx.reshape(-1)                  # (N*8,)
-    values_flat = (particle_masses[:, None] * weights).reshape(-1)  # (N*8,)
-    n_cells = nx * ny * nz                                # Python int (static)
-    rho_flat = jnp.zeros(n_cells, dtype=particle_masses.dtype)
+    flat_idx_flat = flat_idx.reshape(-1)                  
+    values_flat = (particle_densities[:, None] * weights).reshape(-1)  
+    n_cells = nx * ny * nz                               
+    rho_flat = jnp.zeros(n_cells, dtype=particle_densities.dtype)
     rho_flat = rho_flat.at[flat_idx_flat].add(values_flat)
 
     return rho_flat.reshape((nx, ny, nz))
@@ -162,34 +159,28 @@ def _deposit_particles_tsc(
     grid_spacing:       float
 ) -> Float[jnp.ndarray, "nx ny nz"]:
     """
-    TSC (Triangular-Shaped-Cloud) deposit in 3D.
-
-    - particle_positions: (N,3) world coordinates
-    - particle_masses:    (N,)
-    - grid_shape:         (nx,ny,nz) as a Python tuple (must be static at call time)
-    - grid_spacing:       scalar dx (treated as static here)
-    Returns: rho (nx,ny,nz) with total mass conserved.
+    TSC (Triangular-Shaped-Cloud) deposit in 3D
     """
     nx, ny, nz = grid_shape
     grid_extent = jnp.array([nx, ny, nz]) * grid_spacing
-    grid_min = -0.5 * grid_extent   # center the grid
-    # continuous position in grid units (index-space)
-    rel = (particle_positions - grid_min) / grid_spacing    # (N,3)
+    grid_min = -0.5 * grid_extent   
+    particle_densities = particle_masses / (grid_spacing ** 3) 
+    # continuous position in grid units 
+    rel = (particle_positions - grid_min) / grid_spacing   
     # floor(rel) gives a central index; neighbors are floor(rel)-1, floor(rel), floor(rel)+1
-    i_center = jnp.floor(rel).astype(jnp.int32)             # (N,3)
-    # Offsets for TSC: cartesian product of [-1,0,1]^3 -> 27 neighbors
+    i_center = jnp.floor(rel).astype(jnp.int32)           
+    # Offsets for TSC: 27 neighbors
     offsets = jnp.array([[i, j, k]
                          for i in (-1, 0, 1)
                          for j in (-1, 0, 1)
-                         for k in (-1, 0, 1)], dtype=jnp.int32)   # (27,3)
+                         for k in (-1, 0, 1)], dtype=jnp.int32)   
     # neighbor indices (N,27,3)
-    neigh_idx = i_center[:, None, :] + offsets[None, :, :]   # (N,27,3)
-    # Clip indices to grid bounds (non-periodic behaviour)
+    neigh_idx = i_center[:, None, :] + offsets[None, :, :]   
     max_idx = jnp.array([nx - 1, ny - 1, nz - 1], dtype=jnp.int32)
     neigh_idx = jnp.clip(neigh_idx, 0, max_idx)
-    # compute 1D distances 
-    r = rel[:, None, :] - neigh_idx.astype(rel.dtype)       # (N,27,3)
-    s = jnp.abs(r)                                          # (N,27,3)
+    # 1D distances 
+    r = rel[:, None, :] - neigh_idx.astype(rel.dtype)       
+    s = jnp.abs(r)                                          
     # 1D TSC kernel evaluated vectorized:
     def W1D_from_s(s_component):
         w = jnp.where(s_component <= 0.5,
@@ -199,19 +190,19 @@ def _deposit_particles_tsc(
                                 0.0))
         return w
 
-    wx = W1D_from_s(s[..., 0])   # (N,27)
-    wy = W1D_from_s(s[..., 1])   # (N,27)
-    wz = W1D_from_s(s[..., 2])   # (N,27)
-    weights = wx * wy * wz      # (N,27)
+    wx = W1D_from_s(s[..., 0])   
+    wy = W1D_from_s(s[..., 1])   
+    wz = W1D_from_s(s[..., 2])   
+    weights = wx * wy * wz      
     # Flatten neighbor flat indices and weighted mass values for scatter
     flat_idx = (neigh_idx[..., 0] * (ny * nz)
                 + neigh_idx[..., 1] * nz
-                + neigh_idx[..., 2])                    # (N,27)
+                + neigh_idx[..., 2])                    
 
-    flat_idx_flat = flat_idx.reshape(-1)                 # (N*27,)
-    values_flat = (particle_masses[:, None] * weights).reshape(-1)  # (N*27,)
-    n_cells = nx * ny * nz    # Python int (static)
-    rho_flat = jnp.zeros(n_cells, dtype=particle_masses.dtype)
+    flat_idx_flat = flat_idx.reshape(-1)                 
+    values_flat = (particle_densities[:, None] * weights).reshape(-1)  
+    n_cells = nx * ny * nz   
+    rho_flat = jnp.zeros(n_cells, dtype=particle_densities.dtype)
     rho_flat = rho_flat.at[flat_idx_flat].add(values_flat)
 
     return rho_flat.reshape((nx, ny, nz))
@@ -229,7 +220,6 @@ def binary_full(
     gamma: Union[float, Float[Array, ""]],
     gravitational_constant: Union[float, Float[Array, ""]],
     dt: Float[Array, ""],
-    # binary_masses: Union[None, Float[Array, "2"]] = None,
     binary_state: Union[None, Float[Array, "14"]] = None
     ) -> Tuple[STATE_TYPE, Float[Array, "14"]]:  
     
@@ -345,19 +335,23 @@ def quantity_test(orbit1, orbit2, M1, M2, h, T):
     vy=(traj1[:,5]-traj2[:,5])
     x_rel=(traj1[:,1]-traj2[:,1])
     y_rel=(traj1[:,2]-traj2[:,2])
+
+    # m1m2=M1*M2
     E   = 0.5*(M1*(traj1[:,4]**2+traj1[:,5]**2) + M2*(traj2[:,4]**2+traj2[:,5]**2)) \
     + PointMassPotential(M1,M2).potential(traj1[:,1],traj1[:,2],traj1[:,3],traj2[:,1],traj2[:,2],traj2[:,3])
 
     dE  = (E-E[0])/E[0]
-    L = x_rel*vy - y_rel*vx    # x*vy - y*vx
+
+    L = x_rel*vy - y_rel*vx 
     dL  = (L-L[0])/L[0]
     return traj1, traj2, dE, dL
 
 if __name__ == "__main__":
-    orbit1 = jnp.array([0.0,  0.3, 0.0, 0.0, 0.0, 0.5, 0.0])
-    orbit2 = jnp.array([0.0, -0.7, 0.0, 0.0, 0.0,-0.4, 0.0])
+    jax.config.update('jax_enable_x64', True)
+    orbit1 = jnp.array([0.0,  0.5, 0.0, 0.0, 0.0, 0.5, 0.0])
+    orbit2 = jnp.array([0.0, -0.5, 0.0, 0.0, 0.0,-0.5, 0.0])
     M1 = 0.5
-    M2 = 0.8
+    M2 = 0.5
     h = 0.0008
     T = 20
     traj1_com, traj2_com, dE, dL = quantity_test(orbit1, orbit2, M1, M2, h, T)
@@ -376,7 +370,7 @@ if __name__ == "__main__":
     plt.ylabel('y')
     plt.axis('equal')
     plt.title("Binary Orbits")
-    plt.savefig(save_path+"/JAX_orbits3.png", dpi=300)
+    plt.savefig(save_path+"/JAX_orbits.png", dpi=300)
     plt.close()
     # energy / angular momentum errors
     plt.plot(traj1_com[:,0],dE,label=r'$\Delta E/E_0$')
@@ -384,4 +378,4 @@ if __name__ == "__main__":
     plt.xlabel('time')
     plt.ylabel('Relative Error')
     plt.legend()
-    plt.savefig(save_path+"/JAX_orbits_errors3.png", dpi=300)
+    plt.savefig(save_path+"/JAX_orbits_errors.png", dpi=300)
