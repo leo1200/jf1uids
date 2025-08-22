@@ -153,12 +153,12 @@ def _time_integration_train(
         else:
             gravitational_energy = None
 
-        current_checkpoint = 0
+        current_checkpoint = TrainingConfig.current_checkpoint
 
         snapshot_data = SnapshotData(time_points = time_points, states = states, total_mass = total_mass, total_energy = total_energy, internal_energy = internal_energy, kinetic_energy = kinetic_energy, gravitational_energy = gravitational_energy, current_checkpoint = current_checkpoint)
 
     elif config.activate_snapshot_callback:
-        current_checkpoint = 0
+        current_checkpoint = TrainingConfig.current_checkpoint
         snapshot_data = SnapshotData(time_points = None, states = None, total_mass = None, total_energy = None, current_checkpoint = current_checkpoint)
 
     def update_step(carry):
@@ -299,7 +299,8 @@ def _time_integration_train(
         carry = (0.0, primitive_state, snapshot_data)
     else:
         carry = (0.0, primitive_state)
-    
+
+    ### LOOP DEFINITION
     if not config.fixed_timestep:
         if config.differentiation_mode == BACKWARDS:
             carry = checkpointed_while_loop(condition, update_step, carry, checkpoints = config.num_checkpoints)

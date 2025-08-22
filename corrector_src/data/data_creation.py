@@ -4,11 +4,11 @@
 # THEY BLOCK THE GPU MEMORY IF NOT
 # RESET PROPERLY
 import yaml
-
-config_file = yaml.safe_load(
-    open("home/jalegria/Thesis/jf1uids/corrector_src/config.yaml", "r")
-)
 import os
+config_path = os.path.expanduser("~/Thesis/jf1uids/corrector_src/config.yaml")
+
+with open(config_path, "r") as f:
+    config_file = yaml.safe_load(f)   # or json.load(f), depending on your format
 
 # # ==== GPU selection ====
 from autocvd import autocvd
@@ -46,7 +46,7 @@ import h5py
 
 from scipy.ndimage import convolve
 
-from jf1uids.corrector_src.utils.downaverage import downaverage_state
+from corrector_src.utils.downaverage import downaverage_state
 
 dimensionality = 2
 

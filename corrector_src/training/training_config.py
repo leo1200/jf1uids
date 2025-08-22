@@ -30,7 +30,7 @@ from jf1uids.option_classes.simulation_config import (
 # units
 from jf1uids import CodeUnits
 from astropy import units as u
-from typing import NamedTuple, Union
+from typing import NamedTuple, Callable, Optional, Dict
 
 """
 create a simulation config tailored to our training, this is:
@@ -68,5 +68,29 @@ def create_config(num_cells, num_snapshots = 80, ):
     return config
 
 class TrainingConfig(NamedTuple):
-    #Current checkpoint trough the training
-    current_checkpoint: int = 0
+    # Intermediate loss computation settings
+    compute_intermediate_losses: bool = True
+    n_look_behind: int = 10
+    
+    # Loss function and related settings
+    loss_function: Optional[Callable] = None
+    loss_weights: Optional[Dict[str, float]] = None
+    use_relative_error: bool = False
+    
+    # Ground truth data (if using supervised learning)
+    ground_truth_snapshots: Optional[jnp.ndarray] = None
+    
+    # Training state tracking
+    accumulated_loss: float = 0.0
+    loss_count: int = 0
+    
+    # Optional spatial mask for loss computation
+    loss_mask: Optional[jnp.ndarray] = None
+    
+    # Downscaling method for ground truth
+    downscale_method: str = 'average'
+
+    current_checkpoint_total: int = 0
+    current_checkpoint_chunk: int = 0
+
+    return_full_sim: bool = True

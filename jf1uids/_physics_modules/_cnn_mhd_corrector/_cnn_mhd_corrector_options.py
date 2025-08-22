@@ -7,7 +7,6 @@ from jaxtyping import PyTree
 class CNNMHDconfig(NamedTuple):
     cnn_mhd_corrector: bool = False
     network_static: Union[PyTree, NoneType] = None
-    look_ahead: Union[NoneType, int]
 
 
 class CNNMHDParams(NamedTuple):
