@@ -189,3 +189,5 @@ cython_debug/
 
 .venv
 /poetry.toml
+
+/corrector_src/data/ground_truth.npy

@@ -11,13 +11,23 @@ from corrector_src.utils.downaverage import downaverage_states
 import numpy as np
 
 import jax.numpy as jnp
-
-from corrector_src.figures.hr_lr_animation import hr_lr_animate
+import jax
 
 from corrector_src.training.scan_based_training import scan_based_training_with_losses
 from corrector_src.training.training_config import TrainingConfig
+from corrector_src.model._cnn_mhd_corrector import CorrectorCNN
+from corrector_src.model._cnn_mhd_corrector_options import (
+    CNNMHDParams,
+    CNNMHDconfig,
+)
+
 from corrector_src.training.loss import mse_loss
 
+import equinox as eqx
+num_cells_hr = 64
+downsampling_factor = 2
+
+#Load ground truth data (TO BE CHANGED)
 def load_ground_truth(filepath='ground_truth.npy'):
     """
     Load the ground truth array from a saved numpy file.
@@ -48,9 +58,6 @@ def load_ground_truth(filepath='ground_truth.npy'):
         print(f"Error loading ground truth: {str(e)}")
         return None
     
-num_cells_hr = 64
-downsampling_factor = 2
-
 ground_truth = load_ground_truth('data/ground_truth.npy')
 if ground_truth is None:
     initial_state, config, params, helper_data, registered_variables, randomized_variables = blast.randomized_initial_blast_state(num_cells_hr)
@@ -64,6 +71,7 @@ if ground_truth is None:
 
     np.save('data/ground_truth.npy', np.array(ground_truth))
 
+#Training configuration
 training_config = TrainingConfig(
     compute_intermediate_losses = True,
     n_look_behind = 10 ,
@@ -73,10 +81,32 @@ training_config = TrainingConfig(
     ground_truth_snapshots = ground_truth
 )
 
-print('downaveraging')
+#Define neural nets
+model = CorrectorCNN(
+    in_channels=ground_truth.shape[1],
+    hidden_channels=16,
+    key=jax.random.PRNGKey(42),
+)
+neural_net_params, neural_net_static = eqx.partition(model, eqx.is_array)
+
+cnn_mhd_corrector_config = CNNMHDconfig(
+    cnn_mhd_corrector=True, network_static=neural_net_static
+)
+
+cnn_mhd_corrector_params = CNNMHDParams(network_params=neural_net_params)
+
+
 initial_state, config, params, helper_data, registered_variables, _ = blast.randomized_initial_blast_state(num_cells_hr // downsampling_factor)
 
+
 config = finalize_config(config, initial_state.shape)
+
+config = config._replace(
+    cnn_mhd_corrector_config=cnn_mhd_corrector_config
+)
+params = params._replace(
+    cnn_mhd_corrector_params=cnn_mhd_corrector_params
+)
 
 print('time integrating')
 
@@ -84,3 +114,5 @@ final_state, losses, final_full_sim_data = scan_based_training_with_losses(initi
 
 print('finished script lol')
 print(final_full_sim_data.states.shape)
+
+print(losses)

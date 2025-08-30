@@ -37,10 +37,8 @@ create a simulation config tailored to our training, this is:
     1. Fixed timested 
 """    
 def create_config(num_cells, num_snapshots = 80, ):
-    adiabatic_index = 5 / 3
     box_size = 1.0
     fixed_timestep = False
-    dt_max = 0.1
     mhd = True
 
     # setup simulation config

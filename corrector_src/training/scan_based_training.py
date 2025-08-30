@@ -238,6 +238,7 @@ def scan_based_training_with_losses(
             updated_full_sim_data = None
 
         start_idx = chunk_idx * chunk_size
+        jax.debug.print("chunk_idx = {}", start_idx)
         ground_truth_chunk = jax.lax.dynamic_slice_in_dim(
             target_data, start_idx, chunk_size, axis=0
         )
@@ -258,31 +259,3 @@ def scan_based_training_with_losses(
     )
     
     return final_state, losses, final_full_sim_data
-
-# Integration with your existing training
-@jaxtyped(typechecker=typechecker)
-def time_integration_with_intermediate_losses(
-    primitive_state: STATE_TYPE,
-    config: SimulationConfig,
-    params: SimulationParams,
-    helper_data: HelperData,
-    registered_variables: RegisteredVariables,
-    training_config: TrainingConfig,
-    target_data: STATE_TYPE = None,
-    n_look_behind: int = 10,
-    snapshot_callable = None
-) -> Tuple[STATE_TYPE, jnp.ndarray]:
-    
-    if training_config.compute_intermediate_losses and target_data is not None:
-        # Use scan-based approach for training
-        return scan_based_training_with_losses(
-            primitive_state, config, params, helper_data, 
-            registered_variables, training_config, target_data, n_look_behind
-        )
-    else:
-        # Use original time integration for inference
-        final_state = _time_integration(
-            primitive_state, config, params, helper_data, 
-            registered_variables, training_config, snapshot_callable
-        )
-        return final_state, jnp.array([])
