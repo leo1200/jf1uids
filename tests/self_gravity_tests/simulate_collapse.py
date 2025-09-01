@@ -17,6 +17,7 @@ from jf1uids.option_classes.simulation_config import (
     DONOR_ACCOUNTING,
     HLLC_LM,
     RIEMANN_SPLIT,
+    RIEMANN_SPLIT_UNSTABLE,
     BoundarySettings,
     BoundarySettings1D
 )
@@ -49,7 +50,7 @@ from jf1uids.option_classes.simulation_config import (
     UNSPLIT,
 )
 
-self_gravity_version = RIEMANN_SPLIT
+self_gravity_version = RIEMANN_SPLIT_UNSTABLE
 
 # simulation settings
 gamma = 5/3
@@ -153,7 +154,7 @@ def simulate_collapse(num_cells, t_end = 3.0, return_snapshots = True):
 
 def resolution_study_collapse():
 
-    num_cells_list = [32, 64, 128]
+    num_cells_list = [64, 128]
     line_styles = ['-', '--', '-.', ':']
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 5))
@@ -182,7 +183,7 @@ def resolution_study_collapse():
 
 def radial_profile_study():
 
-    num_cells_list = [32, 64, 128]
+    num_cells_list = [64, 128]
 
     for num_cells in num_cells_list:
 

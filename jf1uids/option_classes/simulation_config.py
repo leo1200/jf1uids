@@ -64,6 +64,7 @@ ZAXIS = 3
 SIMPLE_SOURCE_TERM = 0
 DONOR_ACCOUNTING = 1
 RIEMANN_SPLIT = 2
+RIEMANN_SPLIT_UNSTABLE = 3
 
 # ============================================================
 

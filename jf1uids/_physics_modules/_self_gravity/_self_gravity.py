@@ -23,7 +23,7 @@ from jf1uids._riemann_solver._riemann_solver import _riemann_solver
 from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import DONOR_ACCOUNTING, HLLC_LM, LAX_FRIEDRICHS, RIEMANN_SPLIT, SIMPLE_SOURCE_TERM, SPLIT, STATE_TYPE_ALTERED, SimulationConfig
+from jf1uids.option_classes.simulation_config import DONOR_ACCOUNTING, HLLC_LM, LAX_FRIEDRICHS, RIEMANN_SPLIT, RIEMANN_SPLIT_UNSTABLE, SIMPLE_SOURCE_TERM, SPLIT, STATE_TYPE_ALTERED, SimulationConfig
 
 # jf1uids constants
 from jf1uids.option_classes.simulation_config import FIELD_TYPE, HLL, HLLC, OPEN_BOUNDARY, STATE_TYPE
@@ -115,8 +115,8 @@ def _gravitational_source_term_along_axis(
                 )
                 primitive_state_left = primitives_left_interface[axis - 1]
                 primitive_state_right = primitives_right_interface[axis - 1]
-        
-        if config.self_gravity_version == RIEMANN_SPLIT:
+
+        if config.self_gravity_version == RIEMANN_SPLIT or config.self_gravity_version == RIEMANN_SPLIT_UNSTABLE:
 
             # improve code reuse, instead of this copied
             # Riemann solver
@@ -195,17 +195,24 @@ def _gravitational_source_term_along_axis(
             # what cell i accounts for regarding the flux between i-1 and i
             fluxes_i_to_im1 = 0.5 * F_R + jnp.minimum(dissipation_term_star, 0)
 
-            # these are the problematic parts
-            # fluxes_i_to_im1 = jnp.where(S_R <= 0, F_R, fluxes_i_to_im1)
-            # fluxes_i_to_im1 = jnp.where(S_L >= 0, 0, fluxes_i_to_im1)
-
             # what cell i-1 accounts for regarding the flux between i-1 and i
             fluxes_im1 = 0.5 * F_L + jnp.maximum(dissipation_term_star, 0)
 
-            # these are the problematic parts
-            # fluxes_im1 = jnp.where(S_L >= 0, F_L, fluxes_im1)
-            # fluxes_im1 = jnp.where(S_R <= 0, 0, fluxes_im1)
-            
+            if config.self_gravity_version == RIEMANN_SPLIT_UNSTABLE:
+
+                # stable but big spread in specific entropy
+                # fluxes_i_to_im1 = jnp.where(S_R <= 0, F_R, fluxes_i_to_im1)
+                # fluxes_i_to_im1 = jnp.where(S_L >= 0, 0, fluxes_i_to_im1)
+                # fluxes_im1 = jnp.where(S_L >= 0, F_L, fluxes_im1)
+                # fluxes_im1 = jnp.where(S_R <= 0, 0, fluxes_im1)
+
+                # less stable but reduced spread
+
+                fluxes_i_to_im1 = jnp.where(S_R <= 0, F_R / 2, fluxes_i_to_im1)
+                fluxes_i_to_im1 = jnp.where(S_L >= 0, F_L / 2, fluxes_i_to_im1)
+                fluxes_im1 = jnp.where(S_L >= 0, F_L / 2, fluxes_im1)
+                fluxes_im1 = jnp.where(S_R <= 0, F_R / 2, fluxes_im1)
+
             fluxes_i_to_ip1 = jnp.roll(fluxes_im1, shift = -1, axis = axis)
                 
         elif config.self_gravity_version == DONOR_ACCOUNTING:
