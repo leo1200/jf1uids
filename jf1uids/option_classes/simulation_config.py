@@ -149,6 +149,9 @@ class SimulationConfig(NamedTuple):
     riemann_solver: int = HLL
 
     #: Dimensional splitting / unsplit mode.
+    #: Note that the UNSPLIT scheme currently
+    #: interferes with energy conservation in settings
+    #: with self-gravity.
     split: int = UNSPLIT
 
     #: Time integration method.
