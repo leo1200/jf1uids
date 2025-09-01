@@ -48,6 +48,7 @@ def _lax_friedrichs_solver(primitives_left: STATE_TYPE, primitives_right: STATE_
     rho = primitive_state[registered_variables.density_index]
     p = primitive_state[registered_variables.pressure_index]
     c = speed_of_sound(rho, p, gamma)
+    # THE COMMON ALPHA PARAMETER MAKES NO SENSE (?) - LOOK INTO PAPER AGAIN???
     alpha = jnp.max(jnp.abs(u) + c)
 
     fluxes_left = _euler_flux(primitives_left, gamma, config, registered_variables, flux_direction_index)
