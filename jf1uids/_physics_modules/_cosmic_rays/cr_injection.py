@@ -168,8 +168,8 @@ def inject_crs_at_strongest_shock(
     #                  gamma_eff1=gamma_eff1,
     #                  c1=c1)
 
-    # pre-shock mach number
-    M_1_sq = (P2 / P1 - 1) * x_s / (gamma_eff1 * (x_s - 1))
+    # pre-shock mach number, simplest formula
+    # M_1_sq = (P2 / P1 - 1) * x_s / (gamma_eff1 * (x_s - 1))
     # M_1_sq = 100
     # alternatively one might use formula 16 in Dubois et al, 2019
 
@@ -182,7 +182,9 @@ def inject_crs_at_strongest_shock(
     gammat = P2/P1
 
     C = ((gamma2 + 1) * gammat + gamma2 - 1) * (gamma1 - 1)
-    # M_1_sq = 1/gamma_eff2 * (gammat) * C / (C - ((gamma1 + 1) - (gamma1 - 1) * gammat) * (gamma2 - 1))
+
+    # formula 16 in Dubois 2019, in Pfrommer et al 2017 its gammat - 1, I think, weird
+    M_1_sq = 1/gamma_eff2 * (gammat - 1) * C / (C - ((gamma1 + 1) + (gamma1 - 1) * gammat) * (gamma2 - 1))
 
     # M_1_sq = 1 / (2 * gamma_eff1) * (gammat * (gamma_eff1 + 1) + gamma_eff1 - 1)
 

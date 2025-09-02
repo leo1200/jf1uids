@@ -101,18 +101,15 @@ def shock_criteria(
 
     C = ((gamma2 + 1) * gammat + gamma2 - 1) * (gamma1 - 1)
 
-    M1sq = 1/gamma_eff2 * gammat * C / (C - ((gamma1 + 1) - (gamma1 - 1) * gammat) * (gamma2 - 1))
+    # advanced Mach number calculation, formula 16 from Dubois et al, 2019
+    denominator = jnp.where(jnp.abs(C - ((gamma1 + 1) + (gamma1 - 1) * gammat) * (gamma2 - 1)) > 1e-6, (C - ((gamma1 + 1) + (gamma1 - 1) * gammat) * (gamma2 - 1)), 1e-6)
+    M1sq = 1/gamma_eff2 * (gammat - 1) * C / denominator
 
-    x_s = rho2 / rho1
-    M1sq = (P2 / P1 - 1) * x_s / (gamma_eff1 * (x_s - 1))
-
-    # # calculate the pre-shock sound speed
-    # c1 = jnp.sqrt(gamma_eff1 * P1 / rho1)
-
-    # # density ratio
+    # simple Mach number calculation, crashes
+    # the simulation where x_s = 1, better just evaluate
+    # this where the other criterions hold / add a numerical
+    # safeguard
     # x_s = rho2 / rho1
-
-    # # pre-shock mach number
     # M1sq = (P2 / P1 - 1) * x_s / (gamma_eff1 * (x_s - 1))
 
     mach_number_criterion = jnp.zeros_like(converging_flow_criterion, dtype=jnp.bool_)
