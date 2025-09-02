@@ -20,14 +20,14 @@ class CodeUnits:
         #      unit_mass = 1e5 * u.M_sun
         #      unit_velocity = 1 * u.km / u.s
 
-        # sidelength of our simulation box
         self.code_length = u.def_unit('code_length', unit_length)
-
         self.code_mass = u.def_unit('code_mass', unit_mass)
         self.code_velocity = u.def_unit('code_velocity', unit_velocity)
+
         self.code_time = self.code_length / self.code_velocity
         self.code_density = self.code_mass / self.code_length**3
         self.code_pressure = self.code_mass / self.code_length / self.code_time**2
+        self.code_energy = self.code_mass * self.code_velocity**2
 
     def init_from_unit_params(UnitLength_in_cm, UnitMass_in_g, UnitVelocity_in_cm_per_s):
         return CodeUnits(UnitLength_in_cm * u.cm, UnitMass_in_g * u.g, UnitVelocity_in_cm_per_s * u.cm / u.s)

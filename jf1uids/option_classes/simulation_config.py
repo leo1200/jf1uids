@@ -1,7 +1,10 @@
 from types import NoneType
 from typing import NamedTuple, Union
 
+from jf1uids._physics_modules._cnn_mhd_corrector._cnn_mhd_corrector_options import CNNMHDconfig
+from jf1uids._physics_modules._cooling.cooling_options import CoolingConfig
 from jf1uids._physics_modules._cosmic_rays.cosmic_ray_options import CosmicRayConfig
+from jf1uids._physics_modules._neural_net_force._neural_net_force_options import NeuralNetForceConfig
 from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindConfig
 
 from jaxtyping import Array, Float
@@ -15,16 +18,36 @@ BACKWARDS = 1
 # limiter types
 MINMOD = 0
 OSHER = 1
+DOUBLE_MINMOD = 2
+SUPERBEE = 3
+VAN_ALBADA = 4
+VAN_ALBADA_PP = 5
+
+# splitting modes
+UNSPLIT = 0
+SPLIT = 1
 
 # Riemann solvers
 HLL = 0
 HLLC = 1
 HLLC_LM = 2
+LAX_FRIEDRICHS = 3
+HYBRID_HLLC = 4
+AM_HLLC = 5
+
+# time integrators
+RK2_SSP = 0
+MUSCL = 1
 
 # boundary conditions
 OPEN_BOUNDARY = 0
 REFLECTIVE_BOUNDARY = 1
 PERIODIC_BOUNDARY = 2
+MHD_JET_BOUNDARY = 3
+
+GAS_STATE = 0
+VELOCITY_ONLY = 1
+MAGNETIC_FIELD_ONLY = 2
 
 # geometry types
 CARTESIAN = 0
@@ -36,6 +59,12 @@ VARAXIS = 0
 XAXIS = 1
 YAXIS = 2
 ZAXIS = 3
+
+# self-gravity versions
+SIMPLE_SOURCE_TERM = 0
+DONOR_ACCOUNTING = 1
+RIEMANN_SPLIT = 2
+RIEMANN_SPLIT_UNSTABLE = 3
 
 # ============================================================
 
@@ -71,9 +100,11 @@ class BoundarySettings(NamedTuple):
     z: BoundarySettings1D = BoundarySettings1D()
 
 class SimulationConfig(NamedTuple):
-    """Configuration object for the simulation.
+    """
+    Configuration object for the simulation.
     The simulation configuration are parameters defining 
-    the simulation where changes necessitate recompilation."""
+    the simulation where changes necessitate recompilation.
+    """
 
     # Simulation parameters
 
@@ -97,6 +128,7 @@ class SimulationConfig(NamedTuple):
     #: Self gravity switch, currently only
     #: for periodic boundaries.
     self_gravity: bool = False
+    self_gravity_version: int = DONOR_ACCOUNTING
 
     #: The size of the simulation box.
     box_size: float = 1.0
@@ -114,7 +146,16 @@ class SimulationConfig(NamedTuple):
     limiter: int = MINMOD
 
     #: The Riemann solver used
-    riemann_solver: int = HLLC
+    riemann_solver: int = HLL
+
+    #: Dimensional splitting / unsplit mode.
+    #: Note that the UNSPLIT scheme currently
+    #: interferes with energy conservation in settings
+    #: with self-gravity.
+    split: int = UNSPLIT
+
+    #: Time integration method.
+    time_integrator: int = RK2_SSP
 
     # Explanation of the ghost cells
     #                                |---------|
@@ -130,7 +171,7 @@ class SimulationConfig(NamedTuple):
     num_ghost_cells: int = reconstruction_order + 1
 
     #: Grid spacing.
-    grid_spacing: float = box_size / (num_cells - 1)
+    grid_spacing: float = box_size / num_cells
 
     #: Boundary settings for the simulation.
     boundary_settings: Union[NoneType, BoundarySettings1D, BoundarySettings] = None
@@ -141,7 +182,7 @@ class SimulationConfig(NamedTuple):
 
     #: Exactly reach the end time. In adaptive timestepping,
     #: one might otherwise overshoot.
-    exact_end_time: bool = False
+    exact_end_time: bool = True
 
     #: Adds the sources with the current timestep to
     #: a hypothetical state to estimate the actual timestep.
@@ -170,6 +211,10 @@ class SimulationConfig(NamedTuple):
     #: callback(time, state, registered_variables).
     activate_snapshot_callback: bool = False
 
+    #: Return snapshots at specific time points.
+    use_specific_snapshot_timepoints: bool = False
+    specific_snapshot_timepoints: tuple = ()
+
     #: The number of snapshots to return.
     num_snapshots: int = 10
 
@@ -184,10 +229,19 @@ class SimulationConfig(NamedTuple):
     #: Cosmic rays
     cosmic_ray_config: CosmicRayConfig = CosmicRayConfig()
 
+    #: The configuration for the cooling module.
+    cooling_config: CoolingConfig = CoolingConfig()
+
+    #: Configuration of the neural network force module.
+    neural_net_force_config: NeuralNetForceConfig = NeuralNetForceConfig()
+
+    #: Configuration of the CNN MHD corrector module.
+    cnn_mhd_corrector_config: CNNMHDconfig = CNNMHDconfig()
+
 
 def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
     """Finalizes the simulation configuration."""
-    
+
     num_cells = state_shape[-1]
     config = config._replace(num_cells = num_cells)
 
@@ -200,14 +254,34 @@ def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
         if num_cells_x != num_cells_y or num_cells_x != num_cells_z:
             raise ValueError("The number of cells in x, y and z must be equal.")
 
-    config = config._replace(grid_spacing = config.box_size / (config.num_cells - 1))
+    config = config._replace(grid_spacing = config.box_size / config.num_cells)
 
     if config.geometry == SPHERICAL:
 
-        print("For spherical geometry, only HLL is currently supported.")
+        print("For spherical geometry, only HLL is currently supported. Also, only the unsplit mode has been tested.")
+        config = config._replace(grid_spacing = config.box_size / (config.num_cells - 1))
 
-        config = config._replace(riemann_solver = HLL)
+        if config.riemann_solver != HLL:
+            print("Setting HLL Riemann solver for spherical geometry.")
+            config = config._replace(riemann_solver = HLL)
 
+        if config.split != SPLIT:
+            print("Setting unsplit mode for spherical geometry")
+            config = config._replace(split = SPLIT)
+
+        if config.limiter == VAN_ALBADA or config.limiter == VAN_ALBADA_PP:
+            print("Setting minmod limiter for spherical geometry")
+            config = config._replace(limiter = MINMOD)
+
+        if config.time_integrator != MUSCL:
+            print("Setting MUSCL time integrator for spherical geometry")
+            config = config._replace(time_integrator = MUSCL)
+
+    if config.self_gravity == True and (config.limiter != MINMOD):
+        print("Curiously, in self-gravitating systems, the VAN_ALBADA limiters seem to cause crashes.")
+        print("Setting DOUBLE_MINMOD limiter for self-gravity.")
+        config = config._replace(limiter = MINMOD)
+        
     # set boundary conditions if not set
     if config.boundary_settings is None:
 
@@ -224,5 +298,8 @@ def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
     if config.wind_config.stellar_wind:
         print("For stellar wind simulations, we need source term aware timesteps, turning on.")
         config = config._replace(source_term_aware_timestep = True)
+
+    if config.self_gravity and (config.riemann_solver == HLLC or config.riemann_solver == HLLC_LM) and config.riemann_solver != RIEMANN_SPLIT:
+        print("Consider using RIEMANN_SPLIT as the self_gravity_version.")
     
     return config

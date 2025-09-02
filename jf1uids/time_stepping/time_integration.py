@@ -1,4 +1,5 @@
 # general
+from types import NoneType
 import jax
 import jax.numpy as jnp
 from functools import partial
@@ -14,11 +15,13 @@ from typing import Union
 from jax.experimental import checkify
 
 # jf1uids constants
-from jf1uids.option_classes.simulation_config import BACKWARDS, FORWARDS, STATE_TYPE
+from jf1uids._geometry.boundaries import _boundary_handler
+from jf1uids._geometry.geometry import _center_of_volume, _r_hat_alpha
+from jf1uids.option_classes.simulation_config import BACKWARDS, CARTESIAN, CYLINDRICAL, FORWARDS, SPHERICAL, STATE_TYPE
 
 # jf1uids containers
 from jf1uids.option_classes.simulation_config import SimulationConfig
-from jf1uids.data_classes.simulation_helper_data import HelperData
+from jf1uids.data_classes.simulation_helper_data import HelperData, get_helper_data
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_params import SimulationParams
 from jf1uids.data_classes.simulation_snapshot_data import SnapshotData
@@ -36,6 +39,8 @@ from jf1uids.time_stepping._progress_bar import _show_progress
 # timing
 from timeit import default_timer as timer
 
+from jf1uids.time_stepping._utils import _pad, _unpad
+
 @jaxtyped(typechecker=typechecker)
 def time_integration(
     primitive_state: STATE_TYPE,
@@ -43,7 +48,8 @@ def time_integration(
     params: SimulationParams,
     helper_data: HelperData,
     registered_variables: RegisteredVariables,
-    snapshot_callable = None
+    snapshot_callable = None,
+    sharding: Union[NoneType, jax.NamedSharding] = None
 ) -> Union[STATE_TYPE, SnapshotData]:
     
     """Integrate the fluid equations in time. For the options of
@@ -63,19 +69,20 @@ def time_integration(
 
     """
 
+    helper_data_pad = get_helper_data(config, sharding, padded = True)
+
     if config.runtime_debugging:
         
         errors = checkify.user_checks | checkify.index_checks | checkify.float_checks | checkify.nan_checks | checkify.div_checks
         checked_integration = checkify.checkify(_time_integration, errors)
 
-        err, final_state = checked_integration(primitive_state, config, params, helper_data, registered_variables, snapshot_callable)
+        err, final_state = checked_integration(primitive_state, config, params, helper_data, helper_data_pad, registered_variables, snapshot_callable)
         err.throw()
-
-        return final_state
     
     else:
-        return _time_integration(primitive_state, config, params, helper_data, registered_variables, snapshot_callable)
+        final_state = _time_integration(primitive_state, config, params, helper_data, helper_data_pad, registered_variables, snapshot_callable)
 
+    return final_state
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables', 'snapshot_callable'])
@@ -84,11 +91,13 @@ def _time_integration(
     config: SimulationConfig,
     params: SimulationParams,
     helper_data: HelperData,
+    helper_data_pad: HelperData,
     registered_variables: RegisteredVariables,
     snapshot_callable = None
 ) -> Union[STATE_TYPE, SnapshotData]:
     
-    """Time integration.
+    """
+    Time integration.
 
     Args:
         primitive_state: The primitive state array.
@@ -101,9 +110,23 @@ def _time_integration(
         after the time integration of snapshots of the time evolution.
     """
 
+    # we must pad the state with ghost cells
+    # pad the primitive state with two ghost cells on each side
+    # to account for the periodic boundary conditions
+    original_shape = primitive_state.shape
+
+    primitive_state = _pad(primitive_state, config)
+
+    # important for active boundaries influencing the time step criterion
+    # for now only gas state
+    if config.mhd:
+        primitive_state = primitive_state.at[:-3, ...].set(_boundary_handler(primitive_state[:-3, ...], config))
+    else:
+        primitive_state = _boundary_handler(primitive_state, config)
+
     if config.return_snapshots:
         time_points = jnp.zeros(config.num_snapshots)
-        states = jnp.zeros((config.num_snapshots, *primitive_state.shape))
+        states = jnp.zeros((config.num_snapshots, *original_shape))
         total_mass = jnp.zeros(config.num_snapshots)
         total_energy = jnp.zeros(config.num_snapshots)
         internal_energy = jnp.zeros(config.num_snapshots)
@@ -127,17 +150,22 @@ def _time_integration(
         if config.return_snapshots:
             time, state, snapshot_data = carry
 
-            def update_snapshot_data(snapshot_data):
+            def update_snapshot_data(time, state, snapshot_data):
                 time_points = snapshot_data.time_points.at[snapshot_data.current_checkpoint].set(time)
-                states = snapshot_data.states.at[snapshot_data.current_checkpoint].set(state)
-                total_mass = snapshot_data.total_mass.at[snapshot_data.current_checkpoint].set(calculate_total_mass(state, helper_data, config))
-                total_energy = snapshot_data.total_energy.at[snapshot_data.current_checkpoint].set(calculate_total_energy(state, helper_data, params.gamma, params.gravitational_constant, config, registered_variables))
 
-                internal_energy = snapshot_data.internal_energy.at[snapshot_data.current_checkpoint].set(calculate_internal_energy(state, helper_data, params.gamma, config, registered_variables))
-                kinetic_energy = snapshot_data.kinetic_energy.at[snapshot_data.current_checkpoint].set(calculate_kinetic_energy(state, helper_data, config, registered_variables))
+                # get the unpadded state to store in the snapshot
+                unpad_state = _unpad(state, config)
+
+                states = snapshot_data.states.at[snapshot_data.current_checkpoint].set(unpad_state)
+
+                total_mass = snapshot_data.total_mass.at[snapshot_data.current_checkpoint].set(calculate_total_mass(unpad_state, helper_data, config))
+                total_energy = snapshot_data.total_energy.at[snapshot_data.current_checkpoint].set(calculate_total_energy(unpad_state, helper_data, params.gamma, params.gravitational_constant, config, registered_variables))
+
+                internal_energy = snapshot_data.internal_energy.at[snapshot_data.current_checkpoint].set(calculate_internal_energy(unpad_state, helper_data, params.gamma, config, registered_variables))
+                kinetic_energy = snapshot_data.kinetic_energy.at[snapshot_data.current_checkpoint].set(calculate_kinetic_energy(unpad_state, helper_data, config, registered_variables))
 
                 if config.self_gravity:
-                    gravitational_energy = snapshot_data.gravitational_energy.at[snapshot_data.current_checkpoint].set(calculate_gravitational_energy(state, helper_data, params.gravitational_constant, config, registered_variables))
+                    gravitational_energy = snapshot_data.gravitational_energy.at[snapshot_data.current_checkpoint].set(calculate_gravitational_energy(unpad_state, helper_data, params.gravitational_constant, config, registered_variables))
                 else:
                     gravitational_energy = None
 
@@ -145,10 +173,23 @@ def _time_integration(
                 snapshot_data = snapshot_data._replace(time_points = time_points, states = states, current_checkpoint = current_checkpoint, total_mass = total_mass, total_energy = total_energy, internal_energy = internal_energy, kinetic_energy = kinetic_energy, gravitational_energy = gravitational_energy)
                 return snapshot_data
             
-            def dont_update_snapshot_data(snapshot_data):
+            def dont_update_snapshot_data(time, state, snapshot_data):
                 return snapshot_data
 
-            snapshot_data = jax.lax.cond(time >= snapshot_data.current_checkpoint * params.t_end / config.num_snapshots, update_snapshot_data, dont_update_snapshot_data, snapshot_data)
+            if config.use_specific_snapshot_timepoints:
+                snapshot_data = jax.lax.cond(
+                    jnp.abs(time - params.snapshot_timepoints[snapshot_data.current_checkpoint]) < 1e-12,
+                    update_snapshot_data,
+                    dont_update_snapshot_data,
+                    time, state, snapshot_data
+                )
+            else:
+                snapshot_data = jax.lax.cond(
+                    time >= snapshot_data.current_checkpoint * params.t_end / config.num_snapshots,
+                    update_snapshot_data,
+                    dont_update_snapshot_data,
+                    time, state, snapshot_data
+                )
 
             num_iterations = snapshot_data.num_iterations + 1
             snapshot_data = snapshot_data._replace(num_iterations = num_iterations)
@@ -179,13 +220,16 @@ def _time_integration(
         # do not differentiate through the choice of the time step
         if not config.fixed_timestep:
             if config.source_term_aware_timestep:
-                dt = jax.lax.stop_gradient(_source_term_aware_time_step(state, config, params, helper_data, registered_variables, time))
+                dt = jax.lax.stop_gradient(_source_term_aware_time_step(state, config, params, helper_data_pad, registered_variables, time))
             else:
                 dt = jax.lax.stop_gradient(_cfl_time_step(state, config.grid_spacing, params.dt_max, params.gamma, config, registered_variables, params.C_cfl))
         else:
             dt = params.t_end / config.num_timesteps
 
-        if config.exact_end_time:
+        if config.use_specific_snapshot_timepoints:
+            dt = jnp.minimum(dt, params.snapshot_timepoints[snapshot_data.current_checkpoint] - time)
+
+        if config.exact_end_time and not config.use_specific_snapshot_timepoints:
             dt = jnp.minimum(dt, params.t_end - time)
 
         # for now we mainly consider the stellar wind, a constant source term term, 
@@ -193,10 +237,18 @@ def _time_integration(
         # a higher order method (in a split fashion) may be used
 
         # state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables, time)
-        state = _run_physics_modules(state, dt, config, params, helper_data, registered_variables, time + dt)
-        state = _evolve_state(state, dt, params.gamma, params.gravitational_constant, config, helper_data, registered_variables)
+        state = _run_physics_modules(state, dt, config, params, helper_data_pad, registered_variables, time + dt)
+        state = _evolve_state(state, dt, params.gamma, params.gravitational_constant, config, params, helper_data_pad, registered_variables)
 
         time += dt
+
+        if config.use_specific_snapshot_timepoints:
+            snapshot_data = jax.lax.cond(
+                jnp.abs(time - params.t_end) < 1e-12,
+                update_snapshot_data,
+                dont_update_snapshot_data,
+                time, state, snapshot_data
+            )
 
         if config.progress_bar:
             jax.debug.callback(_show_progress, time, params.t_end)
@@ -243,4 +295,8 @@ def _time_integration(
             return state
     else:
         _, state = carry
+
+        # unpad the primitive state if we padded it
+        state = _unpad(state, config)
+
         return state
