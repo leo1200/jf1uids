@@ -47,8 +47,12 @@ def get_helper_data(config: SimulationConfig, sharding: Union[NoneType, NamedSha
     else:
         ngc = 0
 
-    grid_spacing = config.grid_spacing
-    
+    # this should be unified
+    if config.geometry == SPHERICAL:
+        grid_spacing = config.box_size / (config.num_cells - 1)
+    else:
+        grid_spacing = config.box_size / config.num_cells
+
     if config.geometry == SPHERICAL or config.geometry == CYLINDRICAL:
         r = jnp.linspace(grid_spacing / 2 - ngc * grid_spacing, config.box_size + grid_spacing / 2 + ngc * grid_spacing, config.num_cells + 2 * ngc)
         inner_cell_boundaries = r - grid_spacing / 2

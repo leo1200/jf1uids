@@ -79,11 +79,13 @@ def inject_crs_at_strongest_shock(
     # find the strongest shock
     max_shock_idx, left_idx, right_idx = find_shock_zone(
         primitive_state,
+        config,
         registered_variables,
+        helper_data
     )
 
-    # left_idx = max_shock_idx - 2
-    # right_idx = max_shock_idx + 2
+    # # left_idx = max_shock_idx - 2
+    # # right_idx = max_shock_idx + 2
 
     # jax.debug.print("max shock index: {max_shock_idx}, left index: {left_idx}, right index: {right_idx}",
     #                  max_shock_idx=max_shock_idx,
@@ -96,14 +98,14 @@ def inject_crs_at_strongest_shock(
     #     from jf1uids.shock_finder.shock_finder import shock_sensor
     #     _, ax1 = plt.subplots(1, 1, figsize=(10, 5))
 
-    #     shock_index, shock_index_right, shock_index_left = find_shock_zone(final_state, registered_variables)
+    #     shock_index, shock_index_left, shock_index_right = find_shock_zone(final_state, config, registered_variables, helper_data)
 
     #     gas_pressure = final_state[registered_variables.pressure_index] - final_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
     #     cr_pressure = final_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
 
-    #     ax1.plot(helper_data.geometric_centers[shock_index - 15:shock_index + 15], final_state[registered_variables.pressure_index, shock_index - 15:shock_index + 15], "o--", color='black', label='total pressure')
-    #     ax1.plot(helper_data.geometric_centers[shock_index - 15:shock_index + 15], gas_pressure[shock_index - 15:shock_index + 15], "o--", color='red', label='gas pressure')
-    #     ax1.plot(helper_data.geometric_centers[shock_index - 15:shock_index + 15], cr_pressure[shock_index - 15:shock_index + 15], "o--", color='blue', label='cosmic ray pressure')
+    #     ax1.plot(helper_data.geometric_centers[:shock_index_right + 20], final_state[registered_variables.pressure_index, :shock_index_right + 20], "o--", color='black', label='total pressure')
+    #     ax1.plot(helper_data.geometric_centers[:shock_index_right + 20], gas_pressure[:shock_index_right + 20], "o--", color='red', label='gas pressure')
+    #     ax1.plot(helper_data.geometric_centers[:shock_index_right + 20], cr_pressure[:shock_index_right + 20], "o--", color='blue', label='cosmic ray pressure')
 
     #     ax1.axvline(helper_data.geometric_centers[shock_index], color='red', label='cell with max shock sensor')
     #     ax1.axvline(helper_data.geometric_centers[shock_index_right], color='blue', label='right shock boundary')
@@ -213,57 +215,57 @@ def inject_crs_at_strongest_shock(
     DeltaE_CR = f_diss * shock_surface * dt * injection_efficiency
 
     # # get a mask for the shock, if an injection as done in Pfommer et al. 2017 is desired
-    # indices = jnp.arange(num_cells)
-    # shock_zone_mask = (indices >= left_idx) & (indices <= max_shock_idx)
+    indices = jnp.arange(num_cells)
+    shock_zone_mask = (indices >= left_idx) & (indices <= max_shock_idx)
 
-    # cosmic_ray_pressure = primitive_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
-    # gas_pressure = primitive_state[registered_variables.pressure_index] - cosmic_ray_pressure
-    # e_th = gas_pressure / (gamma_gas - 1)
-    # e_cr = cosmic_ray_pressure / (gamma_cr - 1)
-    # E_tot = (e_th + e_cr) * helper_data.cell_volumes
-    # DeltaEtot = jnp.sum(jnp.where(shock_zone_mask, E_tot - E_tot[right_idx], 0))
-    # DeltaE_CR_split = DeltaE_CR * (E_tot - E_tot[right_idx]) / DeltaEtot
-    # DeltaE_CR_split = jnp.where(shock_zone_mask, DeltaE_CR_split, 0)
-
-    # # to be injected cosmic ray pressure
-    # p_cr_injection = primitive_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
-    # # updated cosmic ray pressure
-    # p_cr_injection_new = p_cr_injection + DeltaE_CR_split / helper_data.cell_volumes * (gamma_cr - 1)
-    # # note that we work with n_cr = P_CR ^ (1 / gamma_cr) to describe the cosmic rays
-    # n_cr_injection_new = p_cr_injection_new ** (1/gamma_cr)
-    # primitive_state = primitive_state.at[registered_variables.cosmic_ray_n_index].set(n_cr_injection_new)
-
-    # # we want energy and not pressure conservation, so the total pressure must be adapted
-    # # TODO: check energy conservation thoroughly
-    # delta_p_gas = DeltaE_CR_split / helper_data.cell_volumes * (gamma_gas - 1)
-    # p_gas_new = primitive_state[registered_variables.pressure_index] - p_cr_injection - delta_p_gas
-    # total_pressure_new = p_gas_new + p_cr_injection_new
-
-    # # update the total pressure
-    # primitive_state = primitive_state.at[registered_variables.pressure_index].set(total_pressure_new)
-
-    # inject into a single post-shock cell
-    injection_index = left_idx # + 1
+    cosmic_ray_pressure = primitive_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
+    gas_pressure = primitive_state[registered_variables.pressure_index] - cosmic_ray_pressure
+    e_th = gas_pressure / (gamma_gas - 1)
+    e_cr = cosmic_ray_pressure / (gamma_cr - 1)
+    E_tot = (e_th + e_cr) * helper_data.cell_volumes
+    DeltaEtot = jnp.sum(jnp.where(shock_zone_mask, E_tot - E_tot[right_idx], 0))
+    DeltaE_CR_split = DeltaE_CR * (E_tot - E_tot[right_idx]) / DeltaEtot
+    DeltaE_CR_split = jnp.where(shock_zone_mask, DeltaE_CR_split, 0)
 
     # to be injected cosmic ray pressure
-    p_cr_injection = primitive_state[registered_variables.cosmic_ray_n_index, injection_index] ** gamma_cr
+    p_cr_injection = primitive_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
     # updated cosmic ray pressure
-    p_cr_injection_new = p_cr_injection + DeltaE_CR / helper_data.cell_volumes[injection_index] * (gamma_cr - 1)
+    p_cr_injection_new = p_cr_injection + DeltaE_CR_split / helper_data.cell_volumes * (gamma_cr - 1)
     # note that we work with n_cr = P_CR ^ (1 / gamma_cr) to describe the cosmic rays
     n_cr_injection_new = p_cr_injection_new ** (1/gamma_cr)
-    primitive_state = primitive_state.at[registered_variables.cosmic_ray_n_index, injection_index].set(n_cr_injection_new)
+    primitive_state = primitive_state.at[registered_variables.cosmic_ray_n_index].set(n_cr_injection_new)
 
     # we want energy and not pressure conservation, so the total pressure must be adapted
     # TODO: check energy conservation thoroughly
-    delta_p_gas = DeltaE_CR / helper_data.cell_volumes[injection_index] * (gamma_gas - 1)
-    p_gas_new = primitive_state[registered_variables.pressure_index, injection_index] - p_cr_injection - delta_p_gas
+    delta_p_gas = DeltaE_CR_split / helper_data.cell_volumes * (gamma_gas - 1)
+    p_gas_new = primitive_state[registered_variables.pressure_index] - p_cr_injection - delta_p_gas
     total_pressure_new = p_gas_new + p_cr_injection_new
 
-    # jax.debug.print("old total pressure: {old_pressure}, new total pressure: {new_pressure}",
-    #                  old_pressure=primitive_state[registered_variables.pressure_index],
-    #                  new_pressure=total_pressure_new)
-
     # update the total pressure
-    primitive_state = primitive_state.at[registered_variables.pressure_index, injection_index].set(total_pressure_new)
+    primitive_state = primitive_state.at[registered_variables.pressure_index].set(total_pressure_new)
+
+    # # inject into a single post-shock cell
+    # injection_index = left_idx # + 1
+
+    # # to be injected cosmic ray pressure
+    # p_cr_injection = primitive_state[registered_variables.cosmic_ray_n_index, injection_index] ** gamma_cr
+    # # updated cosmic ray pressure
+    # p_cr_injection_new = p_cr_injection + DeltaE_CR / helper_data.cell_volumes[injection_index] * (gamma_cr - 1)
+    # # note that we work with n_cr = P_CR ^ (1 / gamma_cr) to describe the cosmic rays
+    # n_cr_injection_new = p_cr_injection_new ** (1/gamma_cr)
+    # primitive_state = primitive_state.at[registered_variables.cosmic_ray_n_index, injection_index].set(n_cr_injection_new)
+
+    # # we want energy and not pressure conservation, so the total pressure must be adapted
+    # # TODO: check energy conservation thoroughly
+    # delta_p_gas = DeltaE_CR / helper_data.cell_volumes[injection_index] * (gamma_gas - 1)
+    # p_gas_new = primitive_state[registered_variables.pressure_index, injection_index] - p_cr_injection - delta_p_gas
+    # total_pressure_new = p_gas_new + p_cr_injection_new
+
+    # # jax.debug.print("old total pressure: {old_pressure}, new total pressure: {new_pressure}",
+    # #                  old_pressure=primitive_state[registered_variables.pressure_index],
+    # #                  new_pressure=total_pressure_new)
+
+    # # update the total pressure
+    # primitive_state = primitive_state.at[registered_variables.pressure_index, injection_index].set(total_pressure_new)
 
     return primitive_state

@@ -5,8 +5,9 @@ import jax
 
 # typing
 from typing import Tuple, Union
+from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import FIELD_TYPE, STATE_TYPE, SimulationConfig
+from jf1uids.option_classes.simulation_config import CARTESIAN, FIELD_TYPE, SPHERICAL, STATE_TYPE, SimulationConfig
 from jaxtyping import Array, Int, jaxtyped
 from beartype import beartype as typechecker
 from typing import Union
@@ -14,6 +15,29 @@ from typing import Union
 from jf1uids.option_classes.simulation_params import SimulationParams
 
 # NOTE: currently only works for 1d setups, TODO: generalize
+
+@partial(jax.jit, static_argnames=['config'])
+def _calculate_1d_divergence(
+    field: FIELD_TYPE,
+    config: SimulationConfig,
+    r: FIELD_TYPE
+) -> FIELD_TYPE:
+    # calculate the 1d divergence by a simple
+    # central difference approximation
+    div_field = jnp.zeros_like(field)
+    if config.geometry == CARTESIAN:
+        div_field = div_field.at[1:-1].set((field[2:] - field[:-2]) / (2 * config.grid_spacing))
+    elif config.geometry == SPHERICAL:
+        div_field = jnp.zeros_like(field)
+        # this is not exactly correct, as our field values are
+        # defined at the volumetric not geometric cell centers etc
+        # but should be fine for the shock finder
+        div_field = div_field.at[1:-1].set(
+            (r[2:]**2 * field[2:] - r[:-2]**2 * field[:-2]) / (2 * config.grid_spacing * r[1:-1]**2)
+        )
+    else:
+        raise NotImplementedError("Only Cartesian and Spherical geometry supported for the shock finder.")
+    return div_field
 
 @jax.jit
 def shock_sensor(pressure: FIELD_TYPE) -> FIELD_TYPE:
@@ -37,10 +61,12 @@ def shock_sensor(pressure: FIELD_TYPE) -> FIELD_TYPE:
     return shock_sensors
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['registered_variables'])
+@partial(jax.jit, static_argnames=['registered_variables', 'config'])
 def shock_criteria(
     primitive_state: STATE_TYPE,
+    config: SimulationConfig,
     registered_variables: RegisteredVariables,
+    helper_data: HelperData
 ) -> jnp.ndarray:
     """
     Implement the shock criteria from Pfrommer et al, 2017.
@@ -59,10 +85,8 @@ def shock_criteria(
     # get the cosmic ray pressure
     P_CRs = primitive_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
 
-
     # i) \nabla \cdot \vec{v} < 0
-    div_v = jnp.zeros_like(velocity)
-    div_v = div_v.at[1:-1].set((velocity[2:] - velocity[:-2]) / 2)
+    div_v = _calculate_1d_divergence(velocity, config, helper_data.geometric_centers)
     converging_flow_criterion = div_v < 0
 
     # ii) \nabla T \cdot \nabla \rho > 0
@@ -120,10 +144,12 @@ def shock_criteria(
 
     return converging_flow_criterion & no_spurious_shocks & mach_number_criterion
 
-@partial(jax.jit, static_argnames=['registered_variables'])
+@partial(jax.jit, static_argnames=['registered_variables', 'config'])
 def find_shock_zone(
     primitive_state: STATE_TYPE,
+    config: SimulationConfig,
     registered_variables: RegisteredVariables,
+    helper_data: HelperData
 ) -> Tuple[Union[int, Int[Array, ""]], Union[int, Int[Array, ""]], Union[int, Int[Array, ""]]]:
     """
     Find a numerically broadened shock region based of the strongest shock based
@@ -145,17 +171,16 @@ def find_shock_zone(
     num_cells = pressure.shape[0]
 
     sensors = shock_sensor(pressure)
+    # div_v = _calculate_1d_divergence(primitive_state[registered_variables.velocity_index], config, helper_data.geometric_centers)
 
-    shock_crit = shock_criteria(primitive_state, registered_variables)
+    shock_crit = shock_criteria(primitive_state, config, registered_variables, helper_data)
 
     max_shock_idx = jnp.argmax(jnp.where(shock_crit, sensors, -1))
+    # max_shock_idx = jnp.argmin(jnp.where(shock_crit, div_v, 1))
 
     # cell_idx = jnp.arange(num_cells)
     # left_idx = jnp.min(jnp.where(shock_crit, cell_idx, num_cells))
     # right_idx = jnp.max(jnp.where(shock_crit, cell_idx, -1))
-
-    # bound on the shock sensor
-    bound_val = 0.05 * jnp.max(sensors)
 
     # calculate differences in pressure
     pressure_differences = jnp.zeros_like(pressure)

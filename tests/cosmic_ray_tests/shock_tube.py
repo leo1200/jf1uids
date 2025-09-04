@@ -116,7 +116,7 @@ def shock_tube_test():
 
     # plot of the shock detection
     fig, ax = plt.subplots(figsize=(8, 5))
-    shock_crit = shock_criteria(final_state_acc, registered_variables)
+    shock_crit = shock_criteria(final_state_acc, config, registered_variables, helper_data)
     a = 8.4
     b = 9.0
     mask = jnp.logical_and(r > a, r < b)
@@ -164,7 +164,7 @@ def shock_tube_test():
     axs[2, 1].plot(r, u_final_acc, label='final')
     axs[2, 1].plot(x_full, velocity_full, label='analytic', ls='--')
 
-    _, left_idx, right_idx = find_shock_zone(final_state_acc, registered_variables)
+    _, left_idx, right_idx = find_shock_zone(final_state_acc, config, registered_variables, helper_data)
     a = r[left_idx] - 0.06
     b = r[right_idx] + 0.06
 
@@ -191,8 +191,8 @@ def shock_tube_test():
     plt.savefig('figures/cosmic_ray_shock.svg')
 
     # shock sensor plot
-    shock_index = jnp.argmax(shock_sensor(final_state_acc[registered_variables.pressure_index]))
-    max_shock_index, shock_index_right, shock_index_left = find_shock_zone(final_state_acc, registered_variables)
+    # shock_index = jnp.argmax(shock_sensor(final_state_acc[registered_variables.pressure_index]))
+    shock_index, shock_index_right, shock_index_left = find_shock_zone(final_state_acc, config, registered_variables, helper_data)
     print(shock_index_right, shock_index_left)
     fig, ax1 = plt.subplots(figsize=(8, 5))
     ax1.plot(helper_data.geometric_centers[shock_index - 10:shock_index + 10], final_state_acc[registered_variables.pressure_index, shock_index - 10:shock_index + 10], "o--")

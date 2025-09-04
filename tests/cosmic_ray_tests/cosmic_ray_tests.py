@@ -1,6 +1,8 @@
 # ==== GPU selection ====
 from autocvd import autocvd
 autocvd(num_gpus = 1)
+# import os
+# os.environ["CUDA_VISIBLE_DEVICES"] = "9"
 # =======================
 
 from shock_tube import shock_tube_test

@@ -27,6 +27,11 @@ from jf1uids._physics_modules._cosmic_rays.cosmic_ray_options import CosmicRayPa
 
 import matplotlib.pyplot as plt
 
+# For the exact Sedov-Taylor solution
+from exactpack.solvers.sedov.sedov import Sedov
+
+from jf1uids.shock_finder.shock_finder import shock_criteria
+
 def sedov_cr_test():
 
     config = SimulationConfig(
@@ -34,12 +39,12 @@ def sedov_cr_test():
         
         geometry = SPHERICAL,
         first_order_fallback = True,
-        progress_bar = False,
-        runtime_debugging = True,
+        progress_bar = True,
+        runtime_debugging = False,
 
 
         # ====== RESOLUTION =======
-        num_cells = 5001,
+        num_cells = 801,
         # =========================
 
 
@@ -76,7 +81,7 @@ def sedov_cr_test():
     params = SimulationParams(
         t_end = 0.1,
         cosmic_ray_params = CosmicRayParams(
-            diffusive_shock_acceleration_start_time = 0.00005,
+            diffusive_shock_acceleration_start_time = 0.0001,
             diffusive_shock_acceleration_efficiency = 0.5
         ),
         dt_max = 0.00001
@@ -111,8 +116,8 @@ def sedov_cr_test():
 
     # --- Set Up the Explosion Injection Region ---
 
-    # currently, we take 10 injection cells
-    r_explosion_phys = helper_data.outer_cell_boundaries[9]
+    num_injection_cells = 5
+    r_explosion_phys = helper_data.outer_cell_boundaries[num_injection_cells]
     r_explosion = r_explosion_phys
 
     # Compute the injection volume (spherical volume in code units)
@@ -143,10 +148,12 @@ def sedov_cr_test():
     u_r = jnp.zeros_like(r)
 
     # Gas pressure: high within the explosion region, ambient elsewhere
-    p_gas = jnp.where(r < r_explosion, p_explosion_gas, p_ambient)
+    p_gas = p_ambient * jnp.ones_like(r)
+    p_gas = p_gas.at[:num_injection_cells + 1].set(p_explosion_gas)
 
     # Cosmic ray pressure: similarly high inside the explosion region, ambient outside
-    p_cr = jnp.where(r < r_explosion, p_explosion_cr, p_cr_ambient)
+    p_cr = p_cr_ambient * jnp.ones_like(r)
+    p_cr = p_cr.at[:num_injection_cells + 1].set(p_explosion_cr)
 
     # --- Build the Initial State ---
     initial_state = construct_primitive_state(
@@ -178,17 +185,22 @@ def sedov_cr_test():
 
     fig, ax1 = plt.subplots(1, 1, figsize=(10, 5))
 
-    sensors = shock_sensor(final_state[registered_variables.pressure_index])
-    shock_index, shock_index_left, shock_index_right = find_shock_zone(final_state, registered_variables)
+    debug_state = result.states[1]
+
+    shock_crit = shock_criteria(debug_state, config, registered_variables, helper_data)
+    print(jnp.any(shock_crit))
+
+    # sensors = shock_sensor(final_state[registered_variables.pressure_index])
+    shock_index, shock_index_left, shock_index_right = find_shock_zone(debug_state, config, registered_variables, helper_data)
 
     print("shock_index", shock_index)
     print("shock_index_right", shock_index_right)
     print("shock_index_left", shock_index_left)
 
-    gas_pressure = final_state[registered_variables.pressure_index] - final_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
-    cr_pressure = final_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
+    gas_pressure = debug_state[registered_variables.pressure_index] - debug_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
+    cr_pressure = debug_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
 
-    ax1.plot(helper_data.geometric_centers[shock_index - 15:shock_index + 15], final_state[registered_variables.pressure_index, shock_index - 15:shock_index + 15], "o--", color='black', label='total pressure')
+    ax1.plot(helper_data.geometric_centers[shock_index - 15:shock_index + 15], debug_state[registered_variables.pressure_index, shock_index - 15:shock_index + 15], "o--", color='black', label='total pressure')
     ax1.plot(helper_data.geometric_centers[shock_index - 15:shock_index + 15], gas_pressure[shock_index - 15:shock_index + 15], "o--", color='red', label='gas pressure')
     ax1.plot(helper_data.geometric_centers[shock_index - 15:shock_index + 15], cr_pressure[shock_index - 15:shock_index + 15], "o--", color='blue', label='cosmic ray pressure')
 
@@ -201,15 +213,19 @@ def sedov_cr_test():
     ax1.legend(loc = 'upper right')
 
     ax2 = ax1.twinx()
-    ax2.plot(helper_data.geometric_centers[shock_index - 15:shock_index + 15], shock_sensor(final_state[registered_variables.pressure_index])[shock_index - 15:shock_index + 15], "o--", color='green')
+    ax2.plot(helper_data.geometric_centers[shock_index - 15:shock_index + 15], shock_sensor(debug_state[registered_variables.pressure_index])[shock_index - 15:shock_index + 15], "o--", color='green')
     ax2.set_ylabel('Shock Sensor')
 
-    pressure = final_state[registered_variables.pressure_index]
+    pressure = debug_state[registered_variables.pressure_index]
     pressure_differences = jnp.zeros_like(pressure)
     pressure_differences = pressure_differences.at[1:].set(pressure[:-1] - pressure[1:])
 
     plt.savefig('figures/shock_debug.svg')
 
+    eblast_exact = 1.0 / 1.0  # E_explosion / rho_ambient
+    sedov_solver = Sedov(geometry=3, eblast=eblast_exact, gamma = 7 / 5, omega=0.0)
+    r_exact = jnp.linspace(0.0, 1.0, 500)
+    solution_exact = sedov_solver(r=r_exact, t=params.t_end)
 
     fig, axs = plt.subplots(2, 3, figsize=(15, 5))
 
@@ -219,6 +235,7 @@ def sedov_cr_test():
     axs[0, 0].plot(r[a:b], rho[a:b], label='initial')
     axs[0, 0].set_ylabel('Density')
     axs[1, 0].plot(r[a:b], rho_final[a:b], label='final')
+    axs[1, 0].plot(r_exact, solution_exact['density'], ls='--', lw=2, c='red', label='exact solution for gamma = 7/5')
     axs[1, 0].set_ylabel('Density')
     axs[1, 0].set_xlabel('r in pc')
     axs[0, 0].set_title('Density')
@@ -228,6 +245,7 @@ def sedov_cr_test():
     axs[0, 1].plot(r[a:b], u_r[a:b], label='initial')
     axs[0, 1].set_ylabel('Velocity')
     axs[1, 1].plot(r, u_final, label='final')
+    axs[1, 1].plot(r_exact, solution_exact['velocity'], ls='--', lw=2, c='red', label='exact solution for gamma = 7/5')
     axs[1, 1].set_ylabel('Velocity')
     axs[1, 1].set_xlabel('r in pc')
     axs[0, 1].set_title('Velocity')
@@ -242,6 +260,8 @@ def sedov_cr_test():
         axs[1, 2].plot(r[a:b], p_final[a:b], label='final, total')
         axs[0, 2].plot(r[a:b], p_cr[a:b], label='initial, CRs')
         axs[1, 2].plot(r[a:b], p_cr_final[a:b], label='final, CRs')
+
+    axs[1, 2].plot(r_exact, solution_exact['pressure'], ls='--', lw=2, c='red', label='exact solution for gamma = 7/5')
 
     axs[0, 2].set_ylabel('Pressure')
     axs[1, 2].set_ylabel('Pressure')

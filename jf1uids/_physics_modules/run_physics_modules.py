@@ -56,7 +56,9 @@ def _run_physics_modules(
 
         shock_crit = shock_criteria(
             primitive_state,
-            registered_variables
+            config,
+            registered_variables,
+            helper_data
         )
 
         # injecting cosmic rays only after a certain amount of time

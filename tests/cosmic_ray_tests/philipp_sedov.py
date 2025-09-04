@@ -179,7 +179,7 @@ def philipp_sedov():
         # --- Set Up the Explosion Injection Region ---
         
         # currently, we take Ninj injection cells
-        r_explosion_phys = helper_data.geometric_centers[Ninj-1] * code_units.code_length
+        r_explosion_phys = helper_data.outer_cell_boundaries[Ninj-1] * code_units.code_length
         r_explosion = r_explosion_phys.to(code_units.code_length).value
         
         # Compute the injection volume (spherical volume in code units)
@@ -206,10 +206,10 @@ def philipp_sedov():
         u_r = jnp.zeros_like(r)
         
         # Gas pressure: high within the explosion region, ambient elsewhere
-        p_gas = jnp.where(r < r_explosion, p_explosion_gas, p_ambient)
+        p_gas = jnp.where(r <= r_explosion, p_explosion_gas, p_ambient)
         
         # Cosmic ray pressure: similarly high inside the explosion region, ambient outside
-        p_cr = jnp.where(r < r_explosion, p_explosion_cr, p_cr_ambient)
+        p_cr = jnp.where(r <= r_explosion, p_explosion_cr, p_cr_ambient)
         
         # --- Build the Initial State ---
         initial_state = construct_primitive_state(
@@ -337,7 +337,7 @@ def philipp_sedov():
     def _plot_shock(helper_data, state):
         shock_index = jnp.argmax(shock_sensor(state[registered_variables.pressure_index]))
         
-        shock_index_right, shock_index_left, shock_index_right = find_shock_zone(state, registered_variables)
+        shock_index_right, shock_index_left, shock_index_right = find_shock_zone(state, config, registered_variables, helper_data)
         
         print(shock_index_right, shock_index_left)
         
@@ -373,7 +373,7 @@ def philipp_sedov():
         
         if include_shock:
             shock_index = jnp.argmax(shock_sensor(state1[registered_variables.pressure_index]))
-            shock_index_right, shock_index_left, shock_index_right = find_shock_zone(state1, registered_variables)
+            shock_index_right, shock_index_left, shock_index_right = find_shock_zone(state1, config, registered_variables, helper_data)
             #print(shock_index_right, shock_index_left)
             axs[1,2].axvline(helper_data.geometric_centers[shock_index]*code_length,       color='red',  label='cell with max shock sensor')
             axs[1,2].axvline(helper_data.geometric_centers[shock_index_right]*code_length, color='blue', label='right shock boundary')
