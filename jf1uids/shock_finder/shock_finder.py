@@ -170,17 +170,15 @@ def find_shock_zone(
     pressure = primitive_state[registered_variables.pressure_index]
     num_cells = pressure.shape[0]
 
+    # one can either use the maximum of the shock sensor
     sensors = shock_sensor(pressure)
+    # or the cell with maximum compression, as in Pfrommer et al 2017
     # div_v = _calculate_1d_divergence(primitive_state[registered_variables.velocity_index], config, helper_data.geometric_centers)
 
     shock_crit = shock_criteria(primitive_state, config, registered_variables, helper_data)
 
     max_shock_idx = jnp.argmax(jnp.where(shock_crit, sensors, -1))
     # max_shock_idx = jnp.argmin(jnp.where(shock_crit, div_v, 1))
-
-    # cell_idx = jnp.arange(num_cells)
-    # left_idx = jnp.min(jnp.where(shock_crit, cell_idx, num_cells))
-    # right_idx = jnp.max(jnp.where(shock_crit, cell_idx, -1))
 
     # calculate differences in pressure
     pressure_differences = jnp.zeros_like(pressure)
@@ -191,10 +189,8 @@ def find_shock_zone(
     # to the pressure jump at the max_shock_index
     bound_diff = 0.1 * jnp.abs(pressure_differences[max_shock_idx])
 
-    # left index: closest left index where pressure_difference < bound_diff
-    # right index: closest right index where sensor < bound_val or pressure_difference < bound_diff
-
-    # left first cell from the interface where the pressure either goes down or increases by less than bound_diff
+    # left index: closest left index where |pressure_difference| < bound_diff or switched sign
+    # right index: closest right index where |pressure_difference| < bound_diff or switched sign
     indices = jnp.arange(num_cells)
     left_indices = jnp.where((indices < max_shock_idx) & ((jnp.abs(pressure_differences) < bound_diff) | (pressure_differences > 0)), indices, -1)
     right_indices = jnp.where((indices > max_shock_idx) & ((jnp.abs(pressure_differences) < bound_diff) | (pressure_differences < 0)), indices, num_cells)

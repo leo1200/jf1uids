@@ -28,7 +28,7 @@ def shock_tube_test():
     config = SimulationConfig(
         geometry = CARTESIAN,
         first_order_fallback = False,
-        num_cells = 1001,
+        num_cells = 801,
         box_size = 10.0,
         cosmic_ray_config = CosmicRayConfig(
             cosmic_rays = True,

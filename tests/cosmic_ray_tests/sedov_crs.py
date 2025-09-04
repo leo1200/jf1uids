@@ -39,7 +39,7 @@ def sedov_cr_test():
         
         geometry = SPHERICAL,
         first_order_fallback = True,
-        progress_bar = True,
+        progress_bar = False,
         runtime_debugging = False,
 
 
