@@ -44,7 +44,7 @@ def sedov_cr_test():
 
 
         # ====== RESOLUTION =======
-        num_cells = 801,
+        num_cells = 4001,
         # =========================
 
 
@@ -81,7 +81,7 @@ def sedov_cr_test():
     params = SimulationParams(
         t_end = 0.1,
         cosmic_ray_params = CosmicRayParams(
-            diffusive_shock_acceleration_start_time = 0.0001,
+            diffusive_shock_acceleration_start_time = 0.0,
             diffusive_shock_acceleration_efficiency = 0.5
         ),
         dt_max = 0.00001

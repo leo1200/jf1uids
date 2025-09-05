@@ -182,6 +182,13 @@ def inject_crs_at_strongest_shock(
     DeltaE_CR_split = DeltaE_CR * (E_tot - E_tot[right_idx]) / DeltaEtot
     DeltaE_CR_split = jnp.where(shock_zone_mask, DeltaE_CR_split, 0)
 
+    # DIRTY FIX: the maximum DeltaE_CR_split should be the difference between
+    # the current thermal energy and f_crit * E_tot
+    E_th = e_th * helper_data.cell_volumes
+    f_frac = 0.001
+    max_energy_diff = jnp.maximum(E_th - f_frac * E_tot, 0)
+    DeltaE_CR_split = jnp.minimum(DeltaE_CR_split, max_energy_diff)
+
     # to be injected cosmic ray pressure
     p_cr_injection = primitive_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
     # updated cosmic ray pressure
