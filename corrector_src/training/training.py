@@ -1,4 +1,5 @@
 from autocvd import autocvd
+
 autocvd(num_gpus=1)
 
 
@@ -13,7 +14,11 @@ import numpy as np
 import jax.numpy as jnp
 import jax
 
-from corrector_src.training.scan_based_training import scan_based_training_with_losses
+from corrector_src.training.train_one_sim import (
+    step_based_training_with_losses,
+)
+
+
 from corrector_src.training.training_config import TrainingConfig
 from corrector_src.model._cnn_mhd_corrector import CorrectorCNN
 from corrector_src.model._cnn_mhd_corrector_options import (
@@ -24,17 +29,21 @@ from corrector_src.model._cnn_mhd_corrector_options import (
 from corrector_src.training.loss import mse_loss
 
 import equinox as eqx
+import matplotlib.pyplot as plt
+import os
+
 num_cells_hr = 64
 downsampling_factor = 2
 
-#Load ground truth data (TO BE CHANGED)
-def load_ground_truth(filepath='ground_truth.npy'):
+
+# Load ground truth data (TO BE CHANGED)
+def load_ground_truth(filepath="ground_truth.npy"):
     """
     Load the ground truth array from a saved numpy file.
-    
+
     Args:
         filepath (str): Path to the saved numpy file. Default is 'ground_truth.npy'
-    
+
     Returns:
         jnp.ndarray: The loaded ground truth array as a JAX array
     """
@@ -45,43 +54,53 @@ def load_ground_truth(filepath='ground_truth.npy'):
 
         # Convert to JAX array for compatibility with your existing code
         ground_truth = jnp.array(ground_truth_np)
-        
-        print(f'Shape: {ground_truth.shape}')
-        print(f'Data type: {ground_truth.dtype}')
-        
+
+        print(f"Shape: {ground_truth.shape}")
+        print(f"Data type: {ground_truth.dtype}")
+
         return ground_truth
-        
+
     except FileNotFoundError:
         print(f"Error: File '{filepath}' not found.")
         return None
     except Exception as e:
         print(f"Error loading ground truth: {str(e)}")
         return None
-    
-ground_truth = load_ground_truth('data/ground_truth.npy')
+
+
+ground_truth = load_ground_truth("data/ground_truth.npy")
 if ground_truth is None:
-    initial_state, config, params, helper_data, registered_variables, randomized_variables = blast.randomized_initial_blast_state(num_cells_hr)
+    (
+        initial_state,
+        config,
+        params,
+        helper_data,
+        registered_variables,
+        randomized_variables,
+    ) = blast.randomized_initial_blast_state(num_cells_hr)
 
     config = finalize_config(config, initial_state.shape)
 
-    print('time integrating')
-    final_states_hr = time_integration(initial_state, config, params, helper_data, registered_variables)
+    print("time integrating")
+    final_states_hr = time_integration(
+        initial_state, config, params, helper_data, registered_variables
+    )
 
     ground_truth = final_states_hr.states
 
-    np.save('data/ground_truth.npy', np.array(ground_truth))
+    np.save("data/ground_truth.npy", np.array(ground_truth))
 
-#Training configuration
+# Training configuration
 training_config = TrainingConfig(
-    compute_intermediate_losses = True,
-    n_look_behind = 10 ,
-    loss_function = mse_loss,  
-    loss_weights = None,
-    use_relative_error = False,
-    ground_truth_snapshots = ground_truth
+    compute_intermediate_losses=True,
+    n_look_behind=10,
+    loss_function=mse_loss,
+    loss_weights=None,
+    use_relative_error=False,
+    ground_truth_snapshots=ground_truth,
 )
 
-#Define neural nets
+# Define neural nets
 model = CorrectorCNN(
     in_channels=ground_truth.shape[1],
     hidden_channels=16,
@@ -96,23 +115,36 @@ cnn_mhd_corrector_config = CNNMHDconfig(
 cnn_mhd_corrector_params = CNNMHDParams(network_params=neural_net_params)
 
 
-initial_state, config, params, helper_data, registered_variables, _ = blast.randomized_initial_blast_state(num_cells_hr // downsampling_factor)
+initial_state, config, params, helper_data, registered_variables, _ = (
+    blast.randomized_initial_blast_state(num_cells_hr // downsampling_factor)
+)
 
 
 config = finalize_config(config, initial_state.shape)
 
-config = config._replace(
-    cnn_mhd_corrector_config=cnn_mhd_corrector_config
+config = config._replace(cnn_mhd_corrector_config=cnn_mhd_corrector_config)
+params = params._replace(cnn_mhd_corrector_params=cnn_mhd_corrector_params)
+
+print("time integrating")
+
+losses, network_params, final_full_sim_data = step_based_training_with_losses(
+    initial_state,
+    config,
+    params,
+    helper_data,
+    registered_variables,
+    training_config,
+    ground_truth,
 )
-params = params._replace(
-    cnn_mhd_corrector_params=cnn_mhd_corrector_params
-)
 
-print('time integrating')
+print("finished script lol")
 
-final_state, losses, final_full_sim_data = scan_based_training_with_losses(initial_state, config, params, helper_data, registered_variables, training_config, ground_truth)
-
-print('finished script lol')
-print(final_full_sim_data.states.shape)
-
-print(losses)
+plt.figure()
+plt.plot(losses, label="Train Loss")
+plt.xlabel("Epoch")
+plt.ylabel("Loss")
+plt.title("Losses")
+plt.legend()
+plt.tight_layout()
+plt.savefig(os.path.join("training", "loss_curve.png"))
+plt.close()

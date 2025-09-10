@@ -1,7 +1,7 @@
 # ==== GPU selection ====
-#from autocvd import autocvd
+# from autocvd import autocvd
 
-#autocvd(num_gpus=1)
+# autocvd(num_gpus=1)
 # =======================
 
 # numerics
@@ -39,6 +39,11 @@ from astropy import units as u
 
 import random
 
+import yaml
+
+config_file = yaml.safe_load(open("config.yaml", "r"))
+
+
 def initial_blast_state(num_cells):
     adiabatic_index = 5 / 3
     box_size = 1.0
@@ -57,7 +62,7 @@ def initial_blast_state(num_cells):
         num_cells=num_cells,
         mhd=mhd,
         fixed_timestep=fixed_timestep,
-        differentiation_mode=FORWARDS,
+        differentiation_mode=BACKWARDS,
         riemann_solver=HLL,
         limiter=0,
         return_snapshots=True,
@@ -136,7 +141,8 @@ def initial_blast_state(num_cells):
     )
     return initial_state, config, params, helper_data, registered_variables
 
-def randomized_initial_blast_state(num_cells, randomizers = None):
+
+def randomized_initial_blast_state(num_cells, randomizers=None):
     adiabatic_index = 5 / 3
     box_size = 1.0
     fixed_timestep = True
@@ -147,18 +153,19 @@ def randomized_initial_blast_state(num_cells, randomizers = None):
     config = SimulationConfig(
         runtime_debugging=False,
         first_order_fallback=False,
-        progress_bar=True,
+        progress_bar=False,
         dimensionality=3,
         num_ghost_cells=2,
         box_size=box_size,
         num_cells=num_cells,
         mhd=mhd,
         fixed_timestep=fixed_timestep,
-        differentiation_mode=FORWARDS,
+        differentiation_mode=BACKWARDS,
         riemann_solver=HLL,
         limiter=0,
         return_snapshots=True,
         num_snapshots=80,
+        boundary_settings=BoundarySettings(),
         # boundary_settings=BoundarySettings(
         #    x=BoundarySettings1D(PERIODIC_BOUNDARY, PERIODIC_BOUNDARY),
         #    y=BoundarySettings1D(PERIODIC_BOUNDARY, PERIODIC_BOUNDARY),
@@ -203,7 +210,20 @@ def randomized_initial_blast_state(num_cells, randomizers = None):
 
     r = helper_data.r
     if randomizers is None:
-        randomizers = [random.uniform(0.5, 1.3), random.uniform(0.5, 1.3), random.uniform(0.7, 1.3)]
+        randomizers = [
+            random.uniform(
+                config_file["blast_creation"]["randomizer_1"][0],
+                config_file["blast_creation"]["randomizer_1"][0],
+            ),
+            random.uniform(
+                config_file["blast_creation"]["randomizer_2"][0],
+                config_file["blast_creation"]["randomizer_2"][1],
+            ),
+            random.uniform(
+                config_file["blast_creation"]["randomizer_3"][0],
+                config_file["blast_creation"]["randomizer_3"][1],
+            ),
+        ]
     # Initialize state
     rho = jnp.ones_like(X)
     P = jnp.ones_like(X) * 0.1
