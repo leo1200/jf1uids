@@ -6,10 +6,6 @@ autocvd(num_gpus = 1)
 from jf1uids._physics_modules._cooling._cooling import get_pressure_from_temperature, get_temperature_from_pressure
 from jf1uids._physics_modules._cooling._cooling_tables import schure_cooling
 
-# numerics
-import jax
-jax.config.update("jax_enable_x64", True)
-
 import jax.numpy as jnp
 
 # timing
