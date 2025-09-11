@@ -205,7 +205,11 @@ def power_law_temporal_evolution_function_inverse(
     )
 
 # piecewise power law
-@partial(jax.vmap, in_axes = (0, None, None, None), out_axes = 0)
+@partial(
+    jnp.vectorize,
+    excluded=(1, 2, 3),   # don’t vectorize over tables
+    signature="()->()"     # scalar in, scalar out
+)
 def _evaluate_piecewise_power_law(
     T_in,
     T_table,
@@ -232,7 +236,11 @@ def _evaluate_piecewise_power_law(
         T_in
     )
 
-@partial(jax.vmap, in_axes = (0, None, None, None, None), out_axes = 0)
+@partial(
+    jnp.vectorize,
+    excluded=(1, 2, 3, 4),   # don’t vectorize over tables
+    signature="()->()"     # scalar in, scalar out
+)
 def _piecewise_power_law_temporal_evolution_function(
     T_in,
     T_table,
@@ -264,7 +272,11 @@ def _piecewise_power_law_temporal_evolution_function(
         T_in
     )
 
-@partial(jax.vmap, in_axes = (0, None, None, None, None), out_axes = 0)
+@partial(
+    jnp.vectorize,
+    excluded=(1, 2, 3, 4),   # don’t vectorize over tables
+    signature="()->()"     # scalar in, scalar out
+)
 def _piecewise_power_law_temporal_evolution_function_inverse(
     Y_in,
     T_table,

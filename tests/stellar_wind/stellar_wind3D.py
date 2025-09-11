@@ -25,7 +25,10 @@ from jf1uids.fluid_equations.fluid import construct_primitive_state
 from jf1uids import get_registered_variables
 from jf1uids.option_classes import WindConfig
 
-from jf1uids.option_classes.simulation_config import BACKWARDS, OSHER
+from jf1uids.option_classes.simulation_config import BACKWARDS, HLL, OSHER
+
+from jf1uids._physics_modules._cooling._cooling_tables import schure_cooling
+from jf1uids._physics_modules._cooling.cooling_options import PIECEWISE_POWER_LAW, CoolingConfig, CoolingParams
 
 # units
 from jf1uids import CodeUnits
@@ -55,8 +58,24 @@ num_cells = 128
 stellar_wind = True
 
 # turbulence
-turbulence = False
-wanted_rms = 50 * u.km / u.s
+turbulence = True
+wanted_rms = 10 * u.km / u.s
+
+# cooling
+cooling = False
+
+# mhd
+mhd = False
+
+app_string = ""
+if turbulence:
+    app_string += "_turb"
+if cooling:
+    app_string += "_cooling"
+if mhd:
+    app_string += "_mhd"
+
+print("Appended string for files:", app_string)
 
 fixed_timestep = False
 scale_time = False
@@ -66,7 +85,8 @@ num_timesteps = 2000
 # setup simulation config
 config = SimulationConfig(
     runtime_debugging = False,
-    riemann_solver = HYBRID_HLLC,
+    riemann_solver = HLL,
+    mhd = mhd,
     limiter = DOUBLE_MINMOD,
     first_order_fallback = False,
     progress_bar = True,
@@ -84,6 +104,10 @@ config = SimulationConfig(
     num_timesteps = num_timesteps,
     return_snapshots = True,
     num_snapshots = 80,
+    cooling_config = CoolingConfig(
+        cooling = cooling,
+        cooling_curve_type = PIECEWISE_POWER_LAW
+    )
 )
 
 helper_data = get_helper_data(config)
@@ -103,7 +127,7 @@ code_units = CodeUnits(code_length, code_mass, code_velocity)
 C_CFL = 0.4
 # 2.5
 
-t_final = 1.0 * 1e4 * u.yr
+t_final = 0.9 * 1e4 * u.yr
 t_end = t_final.to(code_units.code_time).value
 
 if scale_time:
@@ -121,12 +145,27 @@ wind_params = WindParams(
     wind_final_velocity = wind_final_velocity.to(code_units.code_velocity).value
 )
 
+# cooling params
+hydrogen_mass_fraction = 0.76
+metal_mass_fraction = 0.02
+reference_temperature = (1e8 * u.K * c.k_B / c.m_p).to(code_units.code_energy / code_units.code_mass).value
+# without a floor temperature, the simulations crash
+floor_temperature = (1e2 * u.K * c.k_B / c.m_p).to(code_units.code_energy / code_units.code_mass).value
+cooling_curve_params = schure_cooling(code_units)
+
+
 params = SimulationParams(
     C_cfl = C_CFL,
     dt_max = dt_max,
     gamma = gamma,
     t_end = t_end,
-    wind_params = wind_params
+    wind_params = wind_params,
+        cooling_params = CoolingParams(
+        hydrogen_mass_fraction = hydrogen_mass_fraction,
+        metal_mass_fraction = metal_mass_fraction,
+        floor_temperature = floor_temperature,
+        cooling_curve_params = cooling_curve_params
+    )
 )
 
 # homogeneous initial state
@@ -171,8 +210,23 @@ if turbulence:
 
 p = jnp.ones((config.num_cells, config.num_cells, config.num_cells)) * p_0.to(code_units.code_pressure).value
 
-# construct primitive state
+if mhd:
+    B_0 = 1 / jnp.sqrt(2)
+    # B_0 = 13.5 * u.microgauss
+    # B_0 = B_0.to(code_units.code_magnetic_field).value
 
+    print("B_0", B_0)
+
+    # magnetic field in x direction
+    B_x = jnp.ones((config.num_cells, config.num_cells, config.num_cells)) * B_0
+    B_y = jnp.zeros((config.num_cells, config.num_cells, config.num_cells))
+    B_z = jnp.zeros((config.num_cells, config.num_cells, config.num_cells))
+else:
+    B_x = None
+    B_y = None
+    B_z = None
+
+# construct primitive state
 initial_state = construct_primitive_state(
     config = config,
     registered_variables=registered_variables,
@@ -180,7 +234,10 @@ initial_state = construct_primitive_state(
     velocity_x = u_x,
     velocity_y = u_y,
     velocity_z = u_z,
-    gas_pressure = p
+    gas_pressure = p,
+    magnetic_field_x = B_x,
+    magnetic_field_y = B_y,
+    magnetic_field_z = B_z
 )
 
 config = finalize_config(config, initial_state.shape)
@@ -212,7 +269,7 @@ ax2.set_title("Velocity")
 ax3.imshow(final_state[4, :, :, z_level].T, origin = "lower", extent = [0, 1, 0, 1], norm = LogNorm())
 ax3.set_title("Pressure")
 
-plt.savefig("figures/slices.png")
+plt.savefig("figures/slices" + app_string + ".png")
 
 def plot_weaver_comparison(axs, final_state, params, helper_data, code_units, rho_0, p_0):
     rho = final_state[registered_variables.density_index].flatten()
@@ -292,4 +349,4 @@ def plot_weaver_comparison(axs, final_state, params, helper_data, code_units, rh
 
 fig, axs = plt.subplots(1, 3, figsize=(15, 5))
 plot_weaver_comparison(axs, final_state, params, helper_data, code_units, rho_0, p_0)
-plt.savefig("figures/profiles.png")
+plt.savefig("figures/profiles" + app_string + ".png")
