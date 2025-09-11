@@ -72,7 +72,7 @@ def _run_physics_modules(
         )
 
     if config.cooling_config.cooling:
-        primitive_state = update_pressure_by_cooling(primitive_state, registered_variables, params, dt)
+        primitive_state = update_pressure_by_cooling(primitive_state, registered_variables, config.cooling_config.cooling_curve_type, params, dt)
 
     if config.neural_net_force_config.neural_net_force:
         primitive_state = _neural_net_force(
