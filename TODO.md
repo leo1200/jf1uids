@@ -1,5 +1,6 @@
 # TODO
 
+- fix mhd units
 - clean helper data
 - implement advanced split for self-gravity
 - check self gravity energy conservation problems in the unsplit schemes

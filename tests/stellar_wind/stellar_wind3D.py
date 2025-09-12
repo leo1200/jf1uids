@@ -59,13 +59,13 @@ stellar_wind = True
 
 # turbulence
 turbulence = True
-wanted_rms = 10 * u.km / u.s
+wanted_rms = 50 * u.km / u.s
 
 # cooling
 cooling = False
 
 # mhd
-mhd = False
+mhd = True
 
 app_string = ""
 if turbulence:
@@ -127,7 +127,7 @@ code_units = CodeUnits(code_length, code_mass, code_velocity)
 C_CFL = 0.4
 # 2.5
 
-t_final = 0.9 * 1e4 * u.yr
+t_final = 1.0 * 1e4 * u.yr
 t_end = t_final.to(code_units.code_time).value
 
 if scale_time:
@@ -184,7 +184,7 @@ x = jnp.linspace(0, config.box_size, config.num_cells)
 y = jnp.linspace(0, config.box_size, config.num_cells)
 z = jnp.linspace(0, config.box_size, config.num_cells)
 
-turbulence_slope = -2
+turbulence_slope = -2.5
 kmin = 2
 kmax = 64
 
@@ -211,9 +211,8 @@ if turbulence:
 p = jnp.ones((config.num_cells, config.num_cells, config.num_cells)) * p_0.to(code_units.code_pressure).value
 
 if mhd:
-    B_0 = 1 / jnp.sqrt(2)
-    # B_0 = 13.5 * u.microgauss
-    # B_0 = B_0.to(code_units.code_magnetic_field).value
+    B_0 = 13.5 * u.microgauss / c.mu0**0.5
+    B_0 = B_0.to(code_units.code_magnetic_field).value
 
     print("B_0", B_0)
 
