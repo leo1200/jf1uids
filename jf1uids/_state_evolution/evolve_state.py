@@ -117,8 +117,8 @@ def _evolve_gas_state_split(
     params: SimulationParams,
     helper_data: HelperData,
     registered_variables: RegisteredVariables,
-    binary_state: Union[None, Float[Array, "14"]] = None
-) -> Union[STATE_TYPE, Tuple[STATE_TYPE, Float[Array, "14"]]]:
+    binary_state: Union[None, Float[Array, "n"]] = None
+) -> Union[STATE_TYPE, Tuple[STATE_TYPE, Float[Array, "n"]]]:
     """
     Evolve the primitive state array.
 
@@ -256,8 +256,8 @@ def _evolve_gas_state_unsplit(
     params: SimulationParams,
     helper_data: HelperData,
     registered_variables: RegisteredVariables,
-    binary_state: Union[None, Float[Array, "14"]] = None
-) -> Union[STATE_TYPE, Tuple[STATE_TYPE, Float[Array, "14"]]]:
+    binary_state: Union[None, Float[Array, "n"]] = None
+) -> Union[STATE_TYPE, Tuple[STATE_TYPE, Float[Array, "n"]]]:
     
     old_primitive_state = primitive_state
     
@@ -325,8 +325,8 @@ def _evolve_state(
     params: SimulationParams,
     helper_data: HelperData,
     registered_variables: RegisteredVariables,
-    binary_state: Union[None, Float[Array, "14"]] = None
-) -> Union[STATE_TYPE, Tuple[STATE_TYPE, Float[Array, "14"]]]:
+    binary_state: Union[None, Float[Array, "n"]] = None
+) -> Union[STATE_TYPE, Tuple[STATE_TYPE, Float[Array, "n"]]]:
     
     if config.binary_config.binary:
         binary_state=binary_state
@@ -334,40 +334,50 @@ def _evolve_state(
         binary_state = None
     
     if config.mhd:
-        if config.binary_config.binary:
-            raise ValueError("MHD is currently not supported in binary simulations.")
-
         if config.dimensionality > 1:
 
             # THIS IS VERY PRELIMINARY; THIS KIND OF SPLITTING SHOULD NOT HAPPEN
             # IN EVERY EVOLVE_STATE CALL
             registered_variables_gas = registered_variables._replace(num_vars = registered_variables.num_vars - 3)
 
-            gas_state = jnp.zeros((registered_variables_gas.num_vars, *primitive_state.shape[1:]), dtype = primitive_state.dtype)
+            # gas_state = jnp.zeros((registered_variables_gas.num_vars, *primitive_state.shape[1:]), dtype = primitive_state.dtype)
             gas_state = primitive_state[:-3, ...]
             magnetic_field = primitive_state[-3:, ...]
 
             # evolve gas state by half a time step
-            # evolved_gas = _evolve_gas_state(gas_state, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
             if config.split == UNSPLIT:
-                evolved_gas = _evolve_gas_state_unsplit(gas_state, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas)
+                gas_res = _evolve_gas_state_unsplit(gas_state, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas, binary_state)
             else:
-                evolved_gas = _evolve_gas_state_split(gas_state, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas)
+                gas_res = _evolve_gas_state_split(gas_state, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas, binary_state)
+            
+            if config.binary_config.binary:
+                evolved_gas, binary_state = gas_res  
+            else:
+                evolved_gas = gas_res
 
             magnetic_field, evolved_gas = magnetic_update(magnetic_field, evolved_gas, config.grid_spacing, dt, registered_variables, config)
 
             # evolve gas state by half a time step
-            # evolved_gas = _evolve_gas_state(evolved_gas, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
             if config.split == UNSPLIT:
-                evolved_gas = _evolve_gas_state_unsplit(evolved_gas, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas)
+                gas_res = _evolve_gas_state_unsplit(evolved_gas, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas, binary_state)
             else:
-                evolved_gas = _evolve_gas_state_split(evolved_gas, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas)
+                gas_res = _evolve_gas_state_split(evolved_gas, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas, binary_state)
 
-            return jnp.concatenate((evolved_gas, magnetic_field), axis = 0)
+            if config.binary_config.binary:
+                evolved_gas, binary_state = gas_res 
+            else:
+                evolved_gas = gas_res 
+
+            combined_primitive = jnp.concatenate((evolved_gas, magnetic_field), axis = 0) 
+
+            if config.binary_config.binary:
+                return combined_primitive, binary_state 
+            else:
+                return combined_primitive 
         else:
             # error
             raise ValueError("MHD currently not supported in 1D.")
-
+        
     else:
         if config.split == UNSPLIT:
             result = _evolve_gas_state_unsplit(primitive_state, dt, gamma, gravitational_constant, config, params, helper_data, registered_variables, binary_state=binary_state)
