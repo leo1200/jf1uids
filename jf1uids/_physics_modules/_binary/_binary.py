@@ -43,43 +43,63 @@ class PointMassPotential:
         dz=(z-z2)
         return -(self.M1*self.M2) / jnp.sqrt(dx**2 + dy**2 + dz**2)
 
-@partial(jit, static_argnums=(2,))
-def rk4_step_full(state, h, potential):
+def acceleration(positions: jnp.ndarray, masses: jnp.ndarray, eps: float = 1e-12):
     """
-    One RK4 step for the full two-body system.
-    state: array [t1,x1,y1,z1,vx1,vy1,vz1, t2,x2,y2,z2,vx2,vy2,vz2]
-    Returns new_state of same shape.
+    Compute accelerations for n bodies due to mutual gravity.
+    positions: shape (n,3)
+    masses: shape (n,)
+    returns: acc shape (n,3) where acc[i] = sum_{j != i} - masses[j] * (r_i - r_j) / |r_i - r_j|^3
+    (G is assumed 1, consistent with original code's unit treatment)
+    """
+            # positions[:, None, :] - positions[None, :, :] -> shape (n,n,3) where diff[i,j] = r_i - r_j
+    diff = positions[:, None, :] - positions[None, :, :]  # (n, n, 3)
+    r2 = jnp.sum(diff ** 2, axis=-1)  # (n, n)
+    # Avoid dividing by zero on the diagonal by adding small eps
+    inv_r3 = jnp.where(r2 > 0, 1.0 / (r2 * jnp.sqrt(r2) + eps), 0.0)  # (n, n)
+    # mass-weighted factor for each pair (broadcast masses[j] over i)
+    mass_factors = masses[None, :]  # (1, n)
+    # acceleration contribution from j on i: - mass_j * diff_ij * inv_r3_ij
+    contrib = - (mass_factors[..., None] * diff) * inv_r3[..., None]  # (n, n, 3)
+    # zero out self-contrib (diagonal) in case numerical nonzero
+    contrib = contrib * (1.0 - jnp.eye(positions.shape[0])[:, :, None])
+    # sum over j
+    acc = jnp.sum(contrib, axis=1)  # (n, 3)
+    return acc
+
+@jit 
+def rk4_step_nbody(state: jnp.ndarray, h: float, masses: jnp.ndarray):
+    """
+    One RK4 step for n-body system.
+    state: array shape (n,7) where each row is [t, x, y, z, vx, vy, vz]
+    masses: array shape (n,)
+    returns: new_state shape (n,7)
     """
     hh = 0.5 * h
     h6 = h / 6.0
 
     def deriv(s):
-        txv1 = s[:7]
-        txv2 = s[7:14]
-        # time derivative
-        dt = 1.0
-        # positions and velocities
-        vel1 = txv1[4:7]
-        vel2 = txv2[4:7]
-        # accelerations
-        acc1 = potential.acceleration(txv1[1:4], txv2[1:4])
-        acc2 = -acc1 * (potential.M1 / potential.M2)
-        return jnp.concatenate([jnp.array([dt]), vel1, acc1,
-                                jnp.array([dt]), vel2, acc2])
+        # s shape (n,7)
+        n = s.shape[0]
+        dt_col = jnp.ones((n, 1), dtype=s.dtype)  # time derivative (1 per body)
+        positions = s[:, 1:4]  # (n,3)
+        velocities = s[:, 4:7]  # (n,3)
+        acc = acceleration(positions, masses)  # (n,3)
+        return jnp.concatenate([dt_col, velocities, acc], axis=1)  # (n,7)
 
     k1 = deriv(state)
     k2 = deriv(state + hh * k1)
     k3 = deriv(state + hh * k2)
-    k4 = deriv(state + h   * k3)
+    k4 = deriv(state + h * k3)
 
-    return state + h6 * (k1 + 2*(k2 + k3) + k4)
+    return state + h6 * (k1 + 2.0 * (k2 + k3) + k4)
+
 
 ### Nearest Grid Point (NGP) particle deposition (might not be good with FFT poisson solver)
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['grid_shape', 'grid_spacing'])
 def _deposit_particles_ngp(
     particle_positions: Float[Array, "n 3"],
-    particle_masses:    Float[Array, "n"],
+    particle_masses:    Union[Float[Array, ""], Float[Array, "n"]],
     grid_shape:         Tuple[int, int, int],
     grid_spacing:       float
 ) -> Float[Array, "nx ny nz"]:
@@ -104,7 +124,7 @@ def _deposit_particles_ngp(
 @partial(jax.jit, static_argnames=('grid_shape', 'grid_spacing'))
 def _deposit_particles_cic(
     particle_positions: Float[jnp.ndarray, "n 3"],
-    particle_masses:    Float[jnp.ndarray, "n"],
+    particle_masses:    Union[Float[Array, ""], Float[Array, "n"]],
     grid_shape:         Tuple[int, int, int],
     grid_spacing:       float
 ) -> Float[jnp.ndarray, "nx ny nz"]:
@@ -154,7 +174,7 @@ def _deposit_particles_cic(
 @partial(jax.jit, static_argnames=('grid_shape', 'grid_spacing'))
 def _deposit_particles_tsc(
     particle_positions: Float[jnp.ndarray, "n 3"],
-    particle_masses:    Float[jnp.ndarray, "n"],
+    particle_masses:    Union[Float[Array, ""], Float[Array, "n"]],
     grid_shape:         Tuple[int, int, int],
     grid_spacing:       float
 ) -> Float[jnp.ndarray, "nx ny nz"]:
@@ -220,27 +240,31 @@ def binary_full(
     gamma: Union[float, Float[Array, ""]],
     gravitational_constant: Union[float, Float[Array, ""]],
     dt: Float[Array, ""],
-    binary_state: Union[None, Float[Array, "14"]] = None
-    ) -> Tuple[STATE_TYPE, Float[Array, "14"]]:  
+    binary_state: Union[None, Float[Array, "n"]] = None
+    ) -> Tuple[STATE_TYPE, Float[Array, "n"]]:  
     
     rho_gas = old_primitive_state[registered_variables.density_index]
-    M1 = params.binary_params.masses[0]
-    M2 = params.binary_params.masses[1]
-    binary_state = binary_state
-    state_flat = binary_state.reshape(-1)            # now shape (14,) (if not already flattened)
-    new_flat   = rk4_step_full(state_flat, dt, PointMassPotential(M1, M2))   
-    pos1 = new_flat[1:4]
-    pos2 = new_flat[8:11]
-    particle_positions = jnp.stack([pos1, pos2], axis=0)
-    particle_masses    = jnp.array([M1, M2])
+    particle_masses = params.binary_params.masses
+    if config.binary_config.central_object_only == False:
+        if binary_state.ndim == 1:
+            n_bodies = particle_masses.size
+            state = binary_state.reshape((n_bodies, 7)) 
+        else:
+            state = binary_state         
+        new_state = rk4_step_nbody(state, dt, particle_masses)  
+        particle_positions = new_state[:, 1:4]
+        new_state = new_state.reshape(-1)
+    elif config.binary_config.central_object_only == True:
+        particle_positions = jnp.zeros((1, config.dimensionality))
+        new_state = jnp.array([0.0,0.0,0.0,0.0,0.0,0.0,0.0])
     grid_shape   = rho_gas.shape
     grid_spacing = config.grid_spacing
-    if config.binary_config.deposit_particles == "ngp":
-        rho_part     = _deposit_particles_ngp(particle_positions, particle_masses, grid_shape, grid_spacing)
-    elif config.binary_config.deposit_particles == "cic":
-        rho_part     = _deposit_particles_cic(particle_positions, particle_masses, grid_shape, grid_spacing)
-    elif config.binary_config.deposit_particles == "tsc":
-        rho_part     = _deposit_particles_tsc(particle_positions, particle_masses, grid_shape, grid_spacing)
+    if config.binary_config.deposit_particles == 0:
+        rho_part = _deposit_particles_ngp(particle_positions, particle_masses, grid_shape, grid_spacing)
+    elif config.binary_config.deposit_particles == 1:
+        rho_part = _deposit_particles_cic(particle_positions, particle_masses, grid_shape, grid_spacing)
+    elif config.binary_config.deposit_particles == 2:
+        rho_part = _deposit_particles_tsc(particle_positions, particle_masses, grid_shape, grid_spacing)
     else:
         raise ValueError(f"Unknown deposit_particles method: {config.binary_config.deposit_particles}")
     rho_tot = rho_gas + rho_part
@@ -271,66 +295,127 @@ def binary_full(
 
     primitive_state = _boundary_handler(primitive_state, config)
 
-    return primitive_state, new_flat 
+    return primitive_state, new_state 
 
-def integrateBinary(orbit1, orbit2, M1, M2, h, T):
-    txv1 = orbit1     
-    txv2 = orbit2  
-    state0 = jnp.concatenate([txv1, txv2])
-    M1 = M1
-    M2 = M2
-    pot = PointMassPotential(M1, M2)
-    h = h
-    T = T
+
+def integrate_nbody(orbits: jnp.ndarray, masses: jnp.ndarray, h: float, T: float, eps: float = 1e-12):
+    """
+    orbits: jnp.array shape (n,7) initial rows [t, x, y, z, vx, vy, vz]
+    masses: jnp.array shape (n,)
+    h: timestep
+    T: total integration time
+    returns: traj_com shape (num_steps, n, 7) positions/velocities in COM frame
+    """
+    state0 = orbits  # (n,7)
     num_steps = int(jnp.ceil(T / h))
+    n = state0.shape[0]
+    totalM = jnp.sum(masses)
 
     @jit
     def run_with_fori_loop(state0):
         def body_fn(i, carry):
-            state, traj = carry
-            new_state = rk4_step_full(state, h, pot)
+            state, traj = carry  # state (n,7), traj (num_steps, n, 7)
+            new_state = rk4_step_nbody(state, h, masses)
             traj = traj.at[i].set(new_state)
             return new_state, traj
 
-        traj = jnp.zeros((num_steps, state0.shape[0]), dtype=state0.dtype)
+        traj = jnp.zeros((num_steps, n, 7), dtype=state0.dtype)
         _, traj = lax.fori_loop(0, num_steps, body_fn, (state0, traj))
-        return traj[-1], traj
-    
+        return traj
+
     t0 = time.perf_counter()
-    final_state, traj = run_with_fori_loop(state0)
+    traj = run_with_fori_loop(state0)
     t1 = time.perf_counter()
-    print(f"RK4 took {t1 - t0:.4f} seconds")
+    print(f"n-body RK4 took {t1 - t0:.4f} seconds")
 
+    # Transform trajectories into center-of-mass frame (positions only; times/vels adjusted)
+    # Compute center of mass position at every timestep: COM(t) = sum_i m_i * pos_i(t) / totalM
+    positions = traj[:, :, 1:4]  # (num_steps, n, 3)
+    # Broadcast masses to multiply across timesteps
+    weighted = positions * masses[None, :, None]  # (num_steps, n, 3)
+    COM = jnp.sum(weighted, axis=1) / totalM  # (num_steps, 3)
+    # Subtract COM from each body's positions for all timesteps
+    positions_com = positions - COM[:, None, :]  # (num_steps, n, 3)
+
+    # Build traj_com by replacing positions with COM-subtracted positions
+    traj_com = traj.at[:, :, 1:4].set(positions_com)
+
+    return traj_com
+
+
+def set_axes_equal(ax):
     """
-    def scan_body(s, _):
-        s_new = rk4_step_full(s, h, pot)
-        return s_new, s_new
-
-    jit_scan = jit(lambda s: lax.scan(scan_body, s, None, length=num_steps))
-    _ = jit_scan(state0)
-    final_state, traj = jit_scan(state0)
+    Make 3D axes have equal scale.
+    Matplotlib 3D doesn't support `ax.set_aspect('equal')` for 3D
     """
-    # trajectories
-    traj = jnp.stack(traj)  
-    traj1 = traj[:, :7]
-    traj2 = traj[:, 7:14]
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
 
-    totalM = M1 + M2
-    # Center-of-mass frame
-    Rx = (M2 * traj2[:,1] + M1 * traj1[:,1]) / totalM
-    Ry = (M2 * traj2[:,2] + M1 * traj1[:,2]) / totalM
-    Rz = (M2 * traj2[:,3] + M1 * traj1[:,3]) / totalM
-    traj1_com = traj1.at[:,1].set(traj1[:,1] - Rx)
-    traj1_com = traj1_com.at[:,2].set(traj1[:,2] - Ry)
-    traj1_com = traj1_com.at[:,3].set(traj1[:,3] - Rz)
-    traj2_com = traj2.at[:,1].set(traj2[:,1] - Rx)
-    traj2_com = traj2_com.at[:,2].set(traj2[:,2] - Ry)
-    traj2_com = traj2_com.at[:,3].set(traj2[:,3] - Rz)
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
 
-    return traj1_com, traj2_com
+    plot_radius = 0.5 * max([x_range, y_range, z_range])
+
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
+
+def plot_3d_trajectories(traj,
+                         elev: float = 30.0,
+                         azim: float = 45.0,
+                         show_initial: bool = True,
+                         figsize=(12, 6),
+                         title="n-body trajectories (3D view)"):
+    """
+    Plot 3D trajectories. Parameters
+    - traj: array-like (num_steps, n, 7) to plot (typically COM-frame)
+    - elev, azim: camera elevation and azimuth (degrees) -> diagonal viewpoint
+    - show_initial: if True mark initial positions with larger markers
+    """
+
+    traj = np.asarray(traj)  # convert JAX arrays if needed
+    num_steps, n, _ = traj.shape
+
+    fig = plt.figure(figsize=figsize)
+
+    def _plot_on_axis(ax, data, subtitle):
+        # data shape: (num_steps, n, 7)
+        for i in range(n):
+            xs = data[:, i, 1]  # x
+            ys = data[:, i, 2]  # y
+            zs = data[:, i, 3]  # z
+            ax.plot(xs, ys, zs, linewidth=1, label=f'body {i}')
+            if show_initial:
+                ax.scatter(xs[0], ys[0], zs[0], s=40)  # initial point
+        ax.set_xlabel("x"); ax.set_ylabel("y"); ax.set_zlabel("z")
+        ax.set_title(subtitle)
+        ax.view_init(elev=elev, azim=azim)
+        
+        ax.legend(loc='upper left', bbox_to_anchor=(1.05, 1.0))
+        set_axes_equal(ax)
+
+  
+    ax = fig.add_subplot(111, projection='3d')
+    _plot_on_axis(ax, traj, title)
+    size = 5
+    ax.set_xlim3d([-size, size])
+    ax.set_ylim3d([-size, size])
+    ax.set_zlim3d([-size, size])
+    plt.savefig("JAX_orbits_3d.png", dpi=300)
+    
+def orbital_velocity(mass, radius):
+    v = jnp.sqrt(mass/radius)
+    return v
+
 
 def quantity_test(orbit1, orbit2, M1, M2, h, T):
-    traj1, traj2 = integrateBinary(orbit1, orbit2, M1, M2, h, T)
+    traj1, traj2 = integrate_nbody(orbit1, orbit2, M1, M2, h, T)
     vx=(traj1[:,4]-traj2[:,4])
     vy=(traj1[:,5]-traj2[:,5])
     x_rel=(traj1[:,1]-traj2[:,1])
@@ -348,34 +433,61 @@ def quantity_test(orbit1, orbit2, M1, M2, h, T):
 
 if __name__ == "__main__":
     jax.config.update('jax_enable_x64', True)
-    orbit1 = jnp.array([0.0,  0.5, 0.0, 0.0, 0.0, 0.5, 0.0])
-    orbit2 = jnp.array([0.0, -0.5, 0.0, 0.0, 0.0,-0.5, 0.0])
-    M1 = 0.5
-    M2 = 0.5
+    from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 (needed for 3D projection)
+    import numpy as np
+
+    orbit1 = jnp.array([0.0, 0.3, 0.0, 0.0, 0.0, 0.6, 0.0])
+    orbit2 = jnp.array([0.0, -0.7, 0.0, 0.0, 0.0,-0.5, 0.0])
+    orbit3 = jnp.array([0.0, 0, 0, -2, 0.5**0.5,-0.0, 0.0])
+    orbit4 = jnp.array([0.0, 0, 2.8, 0.0, (1/2.8)**0.5,-0.0, 0.0])
+    orbit5 = jnp.array([0.0, 0, 0, 1, 0.0,-1, 0.0])
+    masses = jnp.array([0.5, 0.5, 0.001, 0.0003, 0.0002])  # (2,)
+
+    # masses = jnp.array([1, 0.0001, 0.0003, 0.0008, 0.0002])  # (2,)
+    M=masses[0]
+    r1=3.8
+    r2=1
+    r3=1.9
+    r4 =2.7
+    # orbit1 = jnp.array([0.0, 0., 0.0, 0.0, 0.0, 0., 0.0])
+    # orbit2 = jnp.array([0.0, r1, 0.0, 0.0, 0.0,orbital_velocity(M,r1), 0.0])
+    # orbit3 = jnp.array([0.0, 0, r2, 0, orbital_velocity(M,r2) ,-0.0, 0.0])
+    # orbit4 = jnp.array([0.0, 0, -r3, 0.0, -orbital_velocity(M,r3),-0.0, 0.0])
+    # orbit5 = jnp.array([0.0, -r4, 0, 0, 0.0,-orbital_velocity(M,r4), 0.0])
+
+    orbits = jnp.stack([orbit1, orbit2, orbit3, orbit4, orbit5])  # (2,7)
+
     h = 0.0008
-    T = 20
-    traj1_com, traj2_com, dE, dL = quantity_test(orbit1, orbit2, M1, M2, h, T)
-    # traj1_com, traj2_com = integrate(orbit1, orbit2, M1, M2, h, T)
-    Rx = (M2 * traj2_com[0,1] + M1 * traj1_com[0,1]) / (M1 + M2)
-    Ry = (M2 * traj2_com[0,2] + M1 * traj1_com[0,2]) / (M1 + M2)
+    T = 50.0
+
+    traj_com = integrate_nbody(orbits, masses, h, T)  # (num_steps, 2, 7)
+
+    # Plotting (optional; similar to original)
     from matplotlib import pyplot as plt
-    import os
-    save_path = os.path.join(
-    '..','..', '..', 'tests', 'binary', 'RK4_orbits'
-    )
-    plt.plot(traj1_com[:,1],traj1_com[:,2],markersize=.1,linewidth=1) 
-    plt.plot(traj2_com[:,1],traj2_com[:,2],markersize=.1,color="r",linewidth=1) 
-    plt.scatter(Rx, Ry, color='black', s=10)  # Center of mass
-    plt.xlabel('x')
-    plt.ylabel('y')
-    plt.axis('equal')
-    plt.title("Binary Orbits")
-    plt.savefig(save_path+"/JAX_orbits.png", dpi=300)
-    plt.close()
-    # energy / angular momentum errors
-    plt.plot(traj1_com[:,0],dE,label=r'$\Delta E/E_0$')
-    plt.plot(traj1_com[:,0],dL,label=r'$\Delta L/L_0$')
-    plt.xlabel('time')
-    plt.ylabel('Relative Error')
-    plt.legend()
-    plt.savefig(save_path+"/JAX_orbits_errors.png", dpi=300)
+    # plot 2-body result
+
+    plot_2d = True 
+    if plot_2d:
+        plt.plot(traj_com[:, 0, 1], traj_com[:, 0, 2], markersize=.1, linewidth=1)
+        plt.plot(traj_com[:, 1, 1], traj_com[:, 1, 2], markersize=.1, linewidth=1)
+        plt.plot(traj_com[:, 2, 1], traj_com[:, 2, 2], markersize=.1, linewidth=1)
+        plt.plot(traj_com[:, 3, 1], traj_com[:, 3, 2], markersize=.1, linewidth=1)
+        plt.plot(traj_com[:, 4, 1], traj_com[:, 4, 2], markersize=.1, linewidth=1)
+
+        plt.axis('equal')
+        plt.xlim(-4,4)
+        plt.ylim(-4,4)
+        plt.title("n-body (COM frame)")
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.savefig("JAX_orbits_nbody.png", dpi=300)
+        plt.close()
+    else:
+        plot_3d_trajectories(traj_com, elev=35, azim=45)
+
+    # plt.plot(traj_com[:,0],dE,label=r'$\Delta E/E_0$')
+    # plt.plot(traj_com[:,0],dL,label=r'$\Delta L/L_0$')
+    # plt.xlabel('time')
+    # plt.ylabel('Relative Error')
+    # plt.legend()
+    # plt.savefig(save_path+"/JAX_orbits_errors.png", dpi=300)
