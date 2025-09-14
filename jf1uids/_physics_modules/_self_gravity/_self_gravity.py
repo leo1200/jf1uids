@@ -23,7 +23,7 @@ from jf1uids._riemann_solver._riemann_solver import _riemann_solver
 from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import CONSERVATIVE_SOURCE_TERM, LAX_FRIEDRICHS, SIMPLE_SOURCE_TERM, SPLIT, STATE_TYPE_ALTERED, SimulationConfig
+from jf1uids.option_classes.simulation_config import DONOR_ACCOUNTING, HLLC_LM, LAX_FRIEDRICHS, RIEMANN_SPLIT, RIEMANN_SPLIT_UNSTABLE, SIMPLE_SOURCE_TERM, SPLIT, STATE_TYPE_ALTERED, SimulationConfig
 
 # jf1uids constants
 from jf1uids.option_classes.simulation_config import FIELD_TYPE, HLL, HLLC, OPEN_BOUNDARY, STATE_TYPE
@@ -91,10 +91,9 @@ def _gravitational_source_term_along_axis(
         # set energy source
         source_term = source_term.at[registered_variables.pressure_index].set(rho * v_axis * acceleration)
 
-    elif config.self_gravity_version == CONSERVATIVE_SOURCE_TERM:
-        # ===============================================
+    else:
 
-        # better energy source
+        # the other schemes are based on the reconstructed states
         if config.first_order_fallback:
             primitive_state_left = jnp.roll(primitive_state, shift = 1, axis = axis)
             primitive_state_right = primitive_state
@@ -116,33 +115,107 @@ def _gravitational_source_term_along_axis(
                 )
                 primitive_state_left = primitives_left_interface[axis - 1]
                 primitive_state_right = primitives_right_interface[axis - 1]
-        
-        if config.riemann_solver == LAX_FRIEDRICHS:
 
-            # TODO: analogous split for the other solvers
+        if config.self_gravity_version == RIEMANN_SPLIT or config.self_gravity_version == RIEMANN_SPLIT_UNSTABLE:
 
-            conserved_left = conserved_state_from_primitive(primitive_state_left, gamma, config, registered_variables)
-            conserved_right = conserved_state_from_primitive(primitive_state_right, gamma, config, registered_variables)
+            # improve code reuse, instead of this copied
+            # Riemann solver
 
-            # alpha = jnp.max(jnp.maximum(jnp.abs(u_L) + c_L, jnp.abs(u_R) + c_R))
-            u = primitive_state[axis]
-            rho = primitive_state[registered_variables.density_index]
-            p = primitive_state[registered_variables.pressure_index]
-            c = speed_of_sound(rho, p, gamma)
-            alpha = jnp.max(jnp.abs(u) + c)
+            if not (config.riemann_solver == HLLC or config.riemann_solver == HLLC_LM):
+                raise NotImplementedError("The RIEMANN_SPLIT gravity scheme is currently only implemented for HLLC and HLLC_LM.")
 
-            fluxes_left = _euler_flux(primitive_state_left, gamma, config, registered_variables, axis)
-            fluxes_right = _euler_flux(primitive_state_right, gamma, config, registered_variables, axis)
+            rho_L = primitive_state_left[registered_variables.density_index]
+            u_L = primitive_state_left[axis]
 
-            # fluxes = 0.5 * (fluxes_left + fluxes_right) - 0.5 * alpha * (conserved_right - conserved_left)
+            rho_R = primitive_state_right[registered_variables.density_index]
+            u_R = primitive_state_right[axis]
+
+            p_L = primitive_state_left[registered_variables.pressure_index]
+            p_R = primitive_state_right[registered_variables.pressure_index]
+
+            # calculate the sound speeds
+            c_L = speed_of_sound(rho_L, p_L, gamma)
+            c_R = speed_of_sound(rho_R, p_R, gamma)
+
+            # get the left and right states and fluxes
+            F_L = _euler_flux(primitive_state_left, gamma, config, registered_variables, axis)
+            F_R = _euler_flux(primitive_state_right, gamma, config, registered_variables, axis)
+
+            # Roe average of the velocity
+            u_hat = (jnp.sqrt(rho_L) * u_L + jnp.sqrt(rho_R) * u_R) / (jnp.sqrt(rho_L) + jnp.sqrt(rho_R))
+
+            # Roe average of the sound speed
+            c_hat_squared = (c_L ** 2 * jnp.sqrt(rho_L) + c_R ** 2 * jnp.sqrt(rho_R)) / (jnp.sqrt(rho_L) + jnp.sqrt(rho_R)) + 0.5 * (jnp.sqrt(rho_L) * jnp.sqrt(rho_R) / (jnp.sqrt(rho_L) + jnp.sqrt(rho_R)) ** 2) * (u_R - u_L) ** 2
+            c_hat = jnp.sqrt(c_hat_squared)
+
+            # Einfeldt estimates of maximum left and right signal speeds
+            S_L = jnp.minimum(u_L - c_L, u_hat - c_hat)
+            S_R = jnp.maximum(u_R + c_R, u_hat + c_hat)
+
+            # contact wave signal speed
+            S_star = (p_R - p_L + rho_L * u_L * (S_L - u_L) - rho_R * u_R * (S_R - u_R)) / (rho_L * (S_L - u_L) - rho_R * (S_R - u_R))
+
+            # intermediate states
+            U_L = conserved_state_from_primitive(primitive_state_left, gamma, config, registered_variables)
+            U_R = conserved_state_from_primitive(primitive_state_right, gamma, config, registered_variables)
+
+            U_star_L = U_L.at[axis].set(rho_L * S_star)
+            U_star_L = U_star_L.at[registered_variables.pressure_index].add((S_star - u_L) * (rho_L * S_star + p_L / (S_L - u_L)))
+            U_star_L = U_star_L * (S_L - u_L) / (S_L - S_star)
+
+            U_star_R = U_R.at[axis].set(rho_R * S_star)
+            U_star_R = U_star_R.at[registered_variables.pressure_index].add((S_star - u_R) * (rho_R * S_star + p_R / (S_R - u_R)))
+            U_star_R = U_star_R * (S_R - u_R) / (S_R - S_star)
+
+            # HLLC-LM adaptation
+            # following
+            # https://doi.org/10.1016/j.jcp.2020.109762
+            if config.riemann_solver == HLLC_LM:
+                Ma_limit = 0.1
+                Ma_local = jnp.maximum(jnp.abs(u_L / c_L), jnp.abs(u_R / c_R))
+                phi = jnp.sin(jnp.minimum(1, Ma_local / Ma_limit) * jnp.pi / 2)
+                S_Llm = S_L * phi
+                S_Rlm = S_R * phi
+
+            if config.riemann_solver == HLLC_LM:
+                S_Lstar = S_Llm
+                S_Rstar = S_Rlm
+            else:
+                S_Lstar = S_L
+                S_Rstar = S_R
+
+            bulk_flux_star = 0.5 * (F_L + F_R)
+            dissipation_term_star = 0.5 * (S_Lstar * (U_star_L - U_L) + jnp.abs(S_star) * (U_star_L - U_star_R) + S_Rstar * (U_star_R - U_R))
+
+            F_star = bulk_flux_star + dissipation_term_star
+
+            fluxes = jnp.where(S_L >= 0, F_L, F_star)
+            fluxes = jnp.where(S_R <= 0, F_R, fluxes)
 
             # what cell i accounts for regarding the flux between i-1 and i
-            fluxes_i_to_im1 = 0.5 * fluxes_right + jnp.minimum(- 0.5 * alpha * (conserved_right - conserved_left), 0)
+            fluxes_i_to_im1 = 0.5 * F_R + jnp.minimum(dissipation_term_star, 0)
 
             # what cell i-1 accounts for regarding the flux between i-1 and i
-            fluxes_im1 = 0.5 * fluxes_left + jnp.maximum(- 0.5 * alpha * (conserved_right - conserved_left), 0)
+            fluxes_im1 = 0.5 * F_L + jnp.maximum(dissipation_term_star, 0)
+
+            if config.self_gravity_version == RIEMANN_SPLIT_UNSTABLE:
+
+                # stable but big spread in specific entropy
+                # fluxes_i_to_im1 = jnp.where(S_R <= 0, F_R, fluxes_i_to_im1)
+                # fluxes_i_to_im1 = jnp.where(S_L >= 0, 0, fluxes_i_to_im1)
+                # fluxes_im1 = jnp.where(S_L >= 0, F_L, fluxes_im1)
+                # fluxes_im1 = jnp.where(S_R <= 0, 0, fluxes_im1)
+
+                # less stable but reduced spread
+
+                fluxes_i_to_im1 = jnp.where(S_R <= 0, F_R / 2, fluxes_i_to_im1)
+                fluxes_i_to_im1 = jnp.where(S_L >= 0, F_L / 2, fluxes_i_to_im1)
+                fluxes_im1 = jnp.where(S_L >= 0, F_L / 2, fluxes_im1)
+                fluxes_im1 = jnp.where(S_R <= 0, F_R / 2, fluxes_im1)
+
             fluxes_i_to_ip1 = jnp.roll(fluxes_im1, shift = -1, axis = axis)
-        else:
+                
+        elif config.self_gravity_version == DONOR_ACCOUNTING:
         
             # at index i, the fluxes array contains the flux from i-1 to i
             fluxes = _riemann_solver(primitive_state_left, primitive_state_right, primitive_state, gamma, config, registered_variables, axis)
@@ -155,8 +228,6 @@ def _gravitational_source_term_along_axis(
         fluxes_acc = fluxes_i_to_im1 * acc_backward + fluxes_i_to_ip1 * acc_forward
 
         source_term = source_term.at[registered_variables.pressure_index].set(fluxes_acc[0])
-
-        # ===============================================
 
     return source_term
 

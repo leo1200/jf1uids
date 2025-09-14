@@ -29,6 +29,9 @@ class CodeUnits:
         self.code_pressure = self.code_mass / self.code_length / self.code_time**2
         self.code_energy = self.code_mass * self.code_velocity**2
 
+        # B / sqrt(\mu_0) has units of sqrt(pressure)
+        self.code_magnetic_field = self.code_pressure ** 0.5
+
     def init_from_unit_params(UnitLength_in_cm, UnitMass_in_g, UnitVelocity_in_cm_per_s):
         return CodeUnits(UnitLength_in_cm * u.cm, UnitMass_in_g * u.g, UnitVelocity_in_cm_per_s * u.cm / u.s)
     

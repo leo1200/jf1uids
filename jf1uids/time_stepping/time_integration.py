@@ -1,4 +1,5 @@
 # general
+from types import NoneType
 import jax
 import jax.numpy as jnp
 from functools import partial
@@ -20,7 +21,7 @@ from jf1uids.option_classes.simulation_config import BACKWARDS, CARTESIAN, CYLIN
 
 # jf1uids containers
 from jf1uids.option_classes.simulation_config import SimulationConfig
-from jf1uids.data_classes.simulation_helper_data import HelperData
+from jf1uids.data_classes.simulation_helper_data import HelperData, get_helper_data
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_params import SimulationParams
 from jf1uids.data_classes.simulation_snapshot_data import SnapshotData
@@ -38,6 +39,8 @@ from jf1uids.time_stepping._progress_bar import _show_progress
 # timing
 from timeit import default_timer as timer
 
+from jf1uids.time_stepping._utils import _pad, _unpad
+
 @jaxtyped(typechecker=typechecker)
 def time_integration(
     primitive_state: STATE_TYPE,
@@ -46,6 +49,7 @@ def time_integration(
     helper_data: HelperData,
     registered_variables: RegisteredVariables,
     snapshot_callable = None,
+    sharding: Union[NoneType, jax.NamedSharding] = None
 ) -> Union[STATE_TYPE, SnapshotData]:
     
     """Integrate the fluid equations in time. For the options of
@@ -64,19 +68,21 @@ def time_integration(
         integration of snapshots of the time evolution.
 
     """
+
+    helper_data_pad = get_helper_data(config, sharding, padded = True)
+
     if config.runtime_debugging:
         
         errors = checkify.user_checks | checkify.index_checks | checkify.float_checks | checkify.nan_checks | checkify.div_checks
         checked_integration = checkify.checkify(_time_integration, errors)
 
-        err, final_state = checked_integration(primitive_state, config, params, helper_data, registered_variables, snapshot_callable)
+        err, final_state = checked_integration(primitive_state, config, params, helper_data, helper_data_pad, registered_variables, snapshot_callable)
         err.throw()
-
-        return final_state
     
     else:
-        return _time_integration(primitive_state, config, params, helper_data, registered_variables, snapshot_callable)
+        final_state = _time_integration(primitive_state, config, params, helper_data, helper_data_pad, registered_variables, snapshot_callable)
 
+    return final_state
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables', 'snapshot_callable'])
@@ -85,11 +91,13 @@ def _time_integration(
     config: SimulationConfig,
     params: SimulationParams,
     helper_data: HelperData,
+    helper_data_pad: HelperData,
     registered_variables: RegisteredVariables,
     snapshot_callable = None,
 ) -> Union[STATE_TYPE, SnapshotData]:
     
-    """Time integration.
+    """
+    Time integration.
 
     Args:
         primitive_state: The primitive state array.
@@ -106,65 +114,8 @@ def _time_integration(
     # pad the primitive state with two ghost cells on each side
     # to account for the periodic boundary conditions
     original_shape = primitive_state.shape
-    grid_spacing = config.grid_spacing
 
-    if config.dimensionality == 1:
-        primitive_state = jnp.pad(primitive_state, ((0, 0), (2, 2)), mode='edge')
-
-    elif config.dimensionality == 2:
-        primitive_state = jnp.pad(primitive_state, ((0, 0), (2, 2), (2, 2)), mode='edge')
-
-    elif config.dimensionality == 3:
-        primitive_state = jnp.pad(primitive_state, ((0, 0), (2, 2), (2, 2), (2, 2)), mode='edge')
-
-    # ========================= bad code below ===========================
-    # here we pad the helper data, but this should be one unified thing,
-    # also this new helper data created here will not be sharded correctly
-    # in case of sharding so we will need to rethink this
-
-    # we also need to pad the helper data, we will for now only
-    # cover spherically and cylindrically symmetric cases
-    if config.geometry == SPHERICAL or config.geometry == CYLINDRICAL:
-        grid_spacing = config.grid_spacing
-        r = jnp.linspace(grid_spacing / 2 - 2 * grid_spacing, config.box_size + grid_spacing / 2 + 2 * grid_spacing, config.num_cells + 4)
-        inner_cell_boundaries = r - grid_spacing / 2
-        outer_cell_boundaries = r + grid_spacing / 2
-        volumetric_centers = _center_of_volume(r, grid_spacing, config.geometry)
-        r_hat = _r_hat_alpha(r, grid_spacing, config.geometry)
-        cell_volumes = 2 * config.geometry * jnp.pi * grid_spacing * r_hat
-        helper_data_pad = HelperData(geometric_centers = r, volumetric_centers = volumetric_centers, r_hat_alpha = r_hat, cell_volumes = cell_volumes, inner_cell_boundaries = inner_cell_boundaries, outer_cell_boundaries = outer_cell_boundaries)
-    else:
-        if config.dimensionality > 1:
-            x = jnp.linspace(grid_spacing / 2 - 2 * grid_spacing, config.box_size - grid_spacing / 2 + 2 * grid_spacing, config.num_cells + 4)
-            y = jnp.linspace(grid_spacing / 2 - 2 * grid_spacing, config.box_size - grid_spacing / 2 + 2 * grid_spacing, config.num_cells + 4)
-
-            if config.dimensionality == 3:
-                z = jnp.linspace(grid_spacing / 2 - 2 * grid_spacing, config.box_size - grid_spacing / 2 + 2 * grid_spacing, config.num_cells + 4)
-                geometric_centers = jnp.meshgrid(x, y, z)
-            else:
-                geometric_centers = jnp.meshgrid(x, y)
-
-            # calculate the distances from the cell centers to the box center
-            box_center = jnp.zeros(config.dimensionality) + config.box_size / 2
-
-            geometric_centers = jnp.array(geometric_centers)
-
-            geometric_centers = jnp.moveaxis(geometric_centers, 0, -1)
-
-            volumetric_centers = geometric_centers
-
-            r = jnp.linalg.norm(geometric_centers - box_center, axis = -1)
-
-            helper_data_pad = HelperData(geometric_centers = geometric_centers, volumetric_centers = volumetric_centers, r = r)
-        else:
-            r = jnp.linspace(grid_spacing / 2 - 2 * grid_spacing, config.box_size - grid_spacing / 2 + 2 * grid_spacing, config.num_cells + 4)
-            r_hat = grid_spacing * jnp.ones_like(r) # not really
-            cell_volumes = grid_spacing * jnp.ones_like(r)
-            inner_cell_boundaries = r - grid_spacing / 2
-            outer_cell_boundaries = r + grid_spacing / 2
-            helper_data_pad = HelperData(geometric_centers = r, r_hat_alpha = r_hat, cell_volumes = cell_volumes, inner_cell_boundaries = inner_cell_boundaries, outer_cell_boundaries = outer_cell_boundaries, volumetric_centers = r)
-
-    # ========================= bad code above ===========================
+    primitive_state = _pad(primitive_state, config)
 
     # important for active boundaries influencing the time step criterion
     # for now only gas state
@@ -211,15 +162,7 @@ def _time_integration(
                 time_points = snapshot_data.time_points.at[snapshot_data.current_checkpoint].set(time)
 
                 # get the unpadded state to store in the snapshot
-                if config.dimensionality == 1:
-                    unpad_state = jax.lax.slice_in_dim(state, 2, state.shape[1] - 2, axis = 1)
-                elif config.dimensionality == 2:
-                    unpad_state = jax.lax.slice_in_dim(state, 2, state.shape[1] - 2, axis = 1)
-                    unpad_state = jax.lax.slice_in_dim(unpad_state, 2, unpad_state.shape[2] - 2, axis = 2)
-                elif config.dimensionality == 3:
-                    unpad_state = jax.lax.slice_in_dim(state, 2, state.shape[1] - 2, axis = 1)
-                    unpad_state = jax.lax.slice_in_dim(unpad_state, 2, unpad_state.shape[2] - 2, axis = 2)
-                    unpad_state = jax.lax.slice_in_dim(unpad_state, 2, unpad_state.shape[3] - 2, axis = 3)
+                unpad_state = _unpad(state, config)
 
                 states = snapshot_data.states.at[snapshot_data.current_checkpoint].set(unpad_state)
 
@@ -413,14 +356,6 @@ def _time_integration(
     ###############################
 
         # unpad the primitive state if we padded it
-        if config.dimensionality == 1:
-            state = jax.lax.slice_in_dim(state, 2, state.shape[1] - 2, axis = 1)
-        elif config.dimensionality == 2:
-            state = jax.lax.slice_in_dim(state, 2, state.shape[1] - 2, axis = 1)
-            state = jax.lax.slice_in_dim(state, 2, state.shape[2] - 2, axis = 2)
-        elif config.dimensionality == 3:
-            state = jax.lax.slice_in_dim(state, 2, state.shape[1] - 2, axis = 1)
-            state = jax.lax.slice_in_dim(state, 2, state.shape[2] - 2, axis = 2)
-            state = jax.lax.slice_in_dim(state, 2, state.shape[3] - 2, axis = 3)
-            
+        state = _unpad(state, config)
+
         return state

@@ -47,10 +47,17 @@ def construct_primitive_state(
     in 3D SET X, Y AND Z COMPONENTS
     
     Args:
-        rho: The density of the fluid.
-        u: The velocity of the fluid.
-        p: The pressure of the fluid.
+        config: The simulation configuration.
         registered_variables: The indices of the variables in the state array.
+        density: The density of the fluid.
+        velocity_x: The x-component of the velocity of the fluid.
+        velocity_y: The y-component of the velocity of the fluid.
+        velocity_z: The z-component of the velocity of the fluid.
+        magnetic_field_x: The x-component of the magnetic field in B / sqrt(\mu_0).
+        magnetic_field_y: The y-component of the magnetic field in B / sqrt(\mu_0).
+        magnetic_field_z: The z-component of the magnetic field in B / sqrt(\mu_0).
+        gas_pressure: The thermal pressure of the fluid.
+        cosmic_ray_pressure: The cosmic ray pressure of the fluid.
         
     Returns:
         The state array.

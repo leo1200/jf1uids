@@ -63,7 +63,9 @@ ZAXIS = 3
 
 # self-gravity versions
 SIMPLE_SOURCE_TERM = 0
-CONSERVATIVE_SOURCE_TERM = 1
+DONOR_ACCOUNTING = 1
+RIEMANN_SPLIT = 2
+RIEMANN_SPLIT_UNSTABLE = 3
 
 # ============================================================
 
@@ -127,7 +129,7 @@ class SimulationConfig(NamedTuple):
     #: Self gravity switch, currently only
     #: for periodic boundaries.
     self_gravity: bool = False
-    self_gravity_version: int = CONSERVATIVE_SOURCE_TERM
+    self_gravity_version: int = DONOR_ACCOUNTING
 
     #: The size of the simulation box.
     box_size: float = 1.0
@@ -148,6 +150,9 @@ class SimulationConfig(NamedTuple):
     riemann_solver: int = HLL
 
     #: Dimensional splitting / unsplit mode.
+    #: Note that the UNSPLIT scheme currently
+    #: interferes with energy conservation in settings
+    #: with self-gravity.
     split: int = UNSPLIT
 
     #: Time integration method.
@@ -297,5 +302,8 @@ def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
     if config.wind_config.stellar_wind:
         print("For stellar wind simulations, we need source term aware timesteps, turning on.")
         config = config._replace(source_term_aware_timestep = True)
+
+    if config.self_gravity and (config.riemann_solver == HLLC or config.riemann_solver == HLLC_LM) and config.riemann_solver != RIEMANN_SPLIT:
+        print("Consider using RIEMANN_SPLIT as the self_gravity_version.")
     
     return config
