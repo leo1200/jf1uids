@@ -1,0 +1,12 @@
+Physical mass:  40.0 solMass
+Physical orb sep:  5.0 AU
+Physical mass loss rate:  1.0001530656720604e-06 solMass / yr
+Physical mass loss rate2:  1.0001530656720603e-05 solMass / yr
+p0 1.8671196567389573e-19
+rho0 2.412766959704025e-18
+Total disc mass: 2.750e-19
+M_disc/M_star:  1.375112e-16
+M_disc_inner/M_star:  1.375112e-16
+
+
+(see colliding wind binary paper). ISM, different M dot.

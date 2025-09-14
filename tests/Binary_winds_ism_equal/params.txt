@@ -1,0 +1,10 @@
+Physical vel:  2000.0 km / s
+Physical mass:  40.0 solMass
+Physical orb sep:  5.0 AU
+Physical mass loss rate:  1.0001530656720604e-06 solMass / yr
+p0 2.4894928756519432e-17
+rho0 1.2063834798520125e-16
+Total disc mass: 1.375e-17
+M_disc/M_star:  6.87556e-15
+
+H II region (denser/hotter than ISM)
