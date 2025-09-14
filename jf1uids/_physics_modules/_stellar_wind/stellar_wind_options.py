@@ -1,4 +1,5 @@
 from typing import NamedTuple
+import jax.numpy as jnp
 
 # wind injection schemes
 MEO = 0 # momentum and energy overwrite
@@ -10,10 +11,12 @@ class WindConfig(NamedTuple):
     num_injection_cells: int = 10
     wind_injection_scheme: int = EI
     trace_wind_density: bool = False
+    real_wind_params: bool = False
 
 class WindParams(NamedTuple):
-    wind_mass_loss_rate: float = 0.0
-    wind_final_velocity: float = 0.0
-
+    wind_mass_loss_rates: jnp.array = None
+    wind_final_velocities: jnp.array = None
+    wind_injection_positions: jnp.array = jnp.array([[0.0, 0.0, 0.0]])
+    real_params: jnp.array = None
     # only necesarry for the MEO injection scheme
     pressure_floor: float = 100000.0
