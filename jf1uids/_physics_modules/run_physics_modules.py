@@ -25,7 +25,8 @@ def _run_physics_modules(
     params: SimulationParams,
     helper_data: HelperData,
     registered_variables: RegisteredVariables,
-    current_time: Union[float, Float[Array, ""]]
+    current_time: Union[float, Float[Array, ""]],
+    binary_state: Union[None, Float[Array, "n"]] = None
 ) -> STATE_TYPE:
     """Run all the physics modules. The physics modules are switched on/off and
     configured in the simulation configuration. Parameters for the physics modules
@@ -45,7 +46,7 @@ def _run_physics_modules(
     
     # stellar wind
     if config.wind_config.stellar_wind:
-        primitive_state = _wind_injection(primitive_state, dt, config, params, helper_data, registered_variables)
+        primitive_state = _wind_injection(primitive_state, dt, config, params, helper_data, registered_variables, current_time, binary_state)
 
         # we might want to run the boundary handler after all physics modules have completed
         # primitive_state = _boundary_handler(primitive_state, config.left_boundary, config.right_boundary)
