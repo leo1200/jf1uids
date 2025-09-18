@@ -1,11 +1,20 @@
-# ==== GPU selection ====
-from autocvd import autocvd
-autocvd(num_gpus = 1)
-# =======================
+multi_gpu = True
+
+if multi_gpu:
+    # ==== GPU selection ====
+    from autocvd import autocvd
+    autocvd(num_gpus = 4)
+    # =======================
+else:
+    # ==== GPU selection ====
+    from autocvd import autocvd
+    autocvd(num_gpus = 1)
+    # =======================
 
 # numerics
 import jax
 import jax.numpy as jnp
+from jax.sharding import PartitionSpec as P
 
 # timing
 from timeit import default_timer as timer
@@ -25,7 +34,7 @@ from jf1uids.fluid_equations.fluid import construct_primitive_state
 from jf1uids import get_registered_variables
 from jf1uids.option_classes import WindConfig
 
-from jf1uids.option_classes.simulation_config import BACKWARDS, HLL, OSHER
+from jf1uids.option_classes.simulation_config import BACKWARDS, HLL, MINMOD, OSHER, VARAXIS, XAXIS, YAXIS, ZAXIS
 
 from jf1uids._physics_modules._cooling._cooling_tables import schure_cooling
 from jf1uids._physics_modules._cooling.cooling_options import PIECEWISE_POWER_LAW, CoolingConfig, CoolingParams
@@ -52,13 +61,13 @@ gamma = 5/3
 
 # spatial domain
 box_size = 1.0
-num_cells = 128
+num_cells = 512
 
 # activate stellar wind
 stellar_wind = True
 
 # turbulence
-turbulence = True
+turbulence = False
 wanted_rms = 50 * u.km / u.s
 
 # cooling
@@ -102,15 +111,13 @@ config = SimulationConfig(
     fixed_timestep = fixed_timestep,
     differentiation_mode = FORWARDS,
     num_timesteps = num_timesteps,
-    return_snapshots = True,
-    num_snapshots = 80,
+    return_snapshots = False,
+    num_snapshots = 5,
     cooling_config = CoolingConfig(
         cooling = cooling,
         cooling_curve_type = PIECEWISE_POWER_LAW
     )
 )
-
-helper_data = get_helper_data(config)
 
 registered_variables = get_registered_variables(config)
 
@@ -189,11 +196,11 @@ kmin = 2
 kmax = 64
 
 if turbulence:
-    ux = create_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, seed = 1)
-    uy = create_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, seed = 2)
-    uz = create_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, seed = 3)
-
-    # ux, uy, uz = create_incompressible_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, seed = 1)
+    key = jax.random.PRNGKey(42)
+    key, sk1, sk2, sk3 = jax.random.split(key, 4)
+    ux = create_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, key=sk1)
+    uy = create_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, key=sk2)
+    uz = create_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, key=sk3)
 
     a = num_cells // 2 - 10
     b = num_cells // 2 + 10
@@ -239,10 +246,25 @@ initial_state = construct_primitive_state(
     magnetic_field_z = B_z
 )
 
+if multi_gpu:
+    split = (1, 2, 2, 1)
+    sharding_mesh = jax.make_mesh(split, (VARAXIS, XAXIS, YAXIS, ZAXIS))
+    named_sharding = jax.NamedSharding(sharding_mesh, P(VARAXIS, XAXIS, YAXIS, ZAXIS))
+    initial_state = jax.device_put(initial_state, named_sharding)
+    helper_data = get_helper_data(config)
+else:
+    helper_data = get_helper_data(config)
+    named_sharding = None
+
+
 config = finalize_config(config, initial_state.shape)
 
-result = time_integration(initial_state, config, params, helper_data, registered_variables)
-final_state = result.states[-1]
+result = time_integration(initial_state, config, params, helper_data, registered_variables, sharding = named_sharding)
+
+if config.return_snapshots:
+    final_state = result.states[-1]
+else:
+    final_state = result
 
 from matplotlib.colors import LogNorm
 

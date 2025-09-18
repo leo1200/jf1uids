@@ -28,7 +28,7 @@ def setup_ics(num_cells, num_injection_cells=2):
     config = SimulationConfig(
         runtime_debugging = False,
         first_order_fallback = True,
-        progress_bar = False,
+        progress_bar = True,
         dimensionality = 3,
         box_size = 1.0, 
         num_cells = num_cells,
@@ -205,7 +205,7 @@ def plot_scaling_results(plot_sharded = True):
 
 
 
-make_scaling_plots(sharding = True,  num_cells_list = [32, 64, 96, 128, 196])
-make_scaling_plots(sharding = False, num_cells_list = [32, 64, 96, 128, 196])
+make_scaling_plots(sharding = True,  num_cells_list = [512])
+# make_scaling_plots(sharding = False, num_cells_list = [32, 64, 96, 128, 196, 256, 512])
 
-plot_scaling_results(plot_sharded = True)
+# plot_scaling_results(plot_sharded = True)
