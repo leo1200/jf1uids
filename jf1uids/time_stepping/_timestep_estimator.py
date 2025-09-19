@@ -21,6 +21,11 @@ from jf1uids.fluid_equations.fluid import speed_of_sound
 from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import gas_pressure_from_primitives_with_crs, speed_of_sound_crs
 from jf1uids._physics_modules.run_physics_modules import _run_physics_modules
 
+# better use same as in the riemann solver??
+# now these wave speeds are calculated without
+# the reconstruction - for the purely spatial
+# reconstruction, we do not need to know
+# the time step a priori
 
 # TODO: merge duplicate code in this and hll.py
 @jaxtyped(typechecker=typechecker)
@@ -103,6 +108,7 @@ def _cfl_time_step(
     """
 
     if config.split == UNSPLIT:
+        
         rho = primitive_state[registered_variables.density_index]
         p = primitive_state[registered_variables.pressure_index]
         c = speed_of_sound(rho, p, gamma)

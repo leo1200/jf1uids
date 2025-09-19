@@ -3,7 +3,7 @@ multi_gpu = True
 if multi_gpu:
     # ==== GPU selection ====
     from autocvd import autocvd
-    autocvd(num_gpus = 4)
+    autocvd(num_gpus = 8)
     # =======================
 else:
     # ==== GPU selection ====
@@ -34,7 +34,7 @@ from jf1uids.fluid_equations.fluid import construct_primitive_state
 from jf1uids import get_registered_variables
 from jf1uids.option_classes import WindConfig
 
-from jf1uids.option_classes.simulation_config import BACKWARDS, HLL, MINMOD, OSHER, VARAXIS, XAXIS, YAXIS, ZAXIS
+from jf1uids.option_classes.simulation_config import BACKWARDS, HLL, HLLC, MINMOD, OSHER, VARAXIS, XAXIS, YAXIS, ZAXIS
 
 from jf1uids._physics_modules._cooling._cooling_tables import schure_cooling
 from jf1uids._physics_modules._cooling.cooling_options import PIECEWISE_POWER_LAW, CoolingConfig, CoolingParams
@@ -61,20 +61,20 @@ gamma = 5/3
 
 # spatial domain
 box_size = 1.0
-num_cells = 512
+num_cells = 196
 
 # activate stellar wind
 stellar_wind = True
 
 # turbulence
-turbulence = False
+turbulence = True
 wanted_rms = 50 * u.km / u.s
 
 # cooling
 cooling = False
 
 # mhd
-mhd = True
+mhd = False
 
 app_string = ""
 if turbulence:
@@ -121,8 +121,6 @@ config = SimulationConfig(
 
 registered_variables = get_registered_variables(config)
 
-
-from jf1uids.initial_condition_generation.turb import create_incompressible_turb_field
 from jf1uids.option_classes.simulation_config import finalize_config
 
 code_length = 3 * u.parsec
@@ -191,16 +189,28 @@ x = jnp.linspace(0, config.box_size, config.num_cells)
 y = jnp.linspace(0, config.box_size, config.num_cells)
 z = jnp.linspace(0, config.box_size, config.num_cells)
 
-turbulence_slope = -2.5
-kmin = 2
-kmax = 64
+turbulence_slope = -2.0
+kmin = 2.0
+kmax = int(0.6 * num_cells / 2)
+
+if multi_gpu:
+
+    # mesh with variable axis
+    split = (1, 2, 2, 2)
+    sharding_mesh = jax.make_mesh(split, (VARAXIS, XAXIS, YAXIS, ZAXIS))
+    named_sharding = jax.NamedSharding(sharding_mesh, P(VARAXIS, XAXIS, YAXIS, ZAXIS))
+
+    # mesh no variable axis
+    split = (2, 2, 2)
+    sharding_mesh_no_var = jax.make_mesh(split, (XAXIS, YAXIS, ZAXIS))
+    named_sharding_no_var = jax.NamedSharding(sharding_mesh_no_var, P(XAXIS, YAXIS, ZAXIS))
 
 if turbulence:
     key = jax.random.PRNGKey(42)
     key, sk1, sk2, sk3 = jax.random.split(key, 4)
-    ux = create_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, key=sk1)
-    uy = create_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, key=sk2)
-    uz = create_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, key=sk3)
+    ux = create_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, key=sk1, sharding=named_sharding_no_var if multi_gpu else None)
+    uy = create_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, key=sk2, sharding=named_sharding_no_var if multi_gpu else None)
+    uz = create_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, key=sk3, sharding=named_sharding_no_var if multi_gpu else None)
 
     a = num_cells // 2 - 10
     b = num_cells // 2 + 10
@@ -247,11 +257,8 @@ initial_state = construct_primitive_state(
 )
 
 if multi_gpu:
-    split = (1, 2, 2, 1)
-    sharding_mesh = jax.make_mesh(split, (VARAXIS, XAXIS, YAXIS, ZAXIS))
-    named_sharding = jax.NamedSharding(sharding_mesh, P(VARAXIS, XAXIS, YAXIS, ZAXIS))
     initial_state = jax.device_put(initial_state, named_sharding)
-    helper_data = get_helper_data(config)
+    helper_data = get_helper_data(config, sharding = named_sharding)
 else:
     helper_data = get_helper_data(config)
     named_sharding = None

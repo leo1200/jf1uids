@@ -25,7 +25,7 @@ from jf1uids.fluid_equations.fluid import construct_primitive_state, get_absolut
 from jf1uids import get_registered_variables
 from jf1uids.option_classes import WindConfig
 
-from jf1uids.option_classes.simulation_config import BACKWARDS, HLL, OSHER, PERIODIC_BOUNDARY, BoundarySettings, BoundarySettings1D
+from jf1uids.option_classes.simulation_config import BACKWARDS, HLL, HYBRID_HLLC, OSHER, PERIODIC_BOUNDARY, BoundarySettings, BoundarySettings1D
 
 # units
 from jf1uids import CodeUnits
@@ -58,7 +58,7 @@ def run_turbulent_simulation(stellar_wind = True, turbulence = True, t_final = 2
 
     # spatial domain
     box_size = 3.0
-    num_cells = 512
+    num_cells = 128
 
     wanted_rms = 50 * u.km / u.s
 
@@ -82,7 +82,7 @@ def run_turbulent_simulation(stellar_wind = True, turbulence = True, t_final = 2
             BoundarySettings1D(left_boundary = PERIODIC_BOUNDARY, right_boundary = PERIODIC_BOUNDARY),
             BoundarySettings1D(left_boundary = PERIODIC_BOUNDARY, right_boundary = PERIODIC_BOUNDARY)
         ),
-        riemann_solver = HLL,
+        riemann_solver = HYBRID_HLLC,
     )
 
     helper_data = get_helper_data(config)
@@ -94,7 +94,7 @@ def run_turbulent_simulation(stellar_wind = True, turbulence = True, t_final = 2
     code_units = CodeUnits(code_length, code_mass, code_velocity)
 
     # time domain
-    C_CFL = 0.1
+    C_CFL = 0.4
 
     t_end = t_final.to(code_units.code_time).value
 
@@ -125,14 +125,18 @@ def run_turbulent_simulation(stellar_wind = True, turbulence = True, t_final = 2
     u_y = jnp.zeros((config.num_cells, config.num_cells, config.num_cells))
     u_z = jnp.zeros((config.num_cells, config.num_cells, config.num_cells))
 
-    turbulence_slope = -2
+    turbulence_slope = -2.0
     kmin = 2
-    kmax = 256
+    kmax = int(0.6 * (num_cells // 2))
 
     if turbulence:
-        ux = create_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, seed = 1)
-        uy = create_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, seed = 2)
-        uz = create_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, seed = 3)
+
+        key = jax.random.PRNGKey(42)
+        key, sk1, sk2, sk3 = jax.random.split(key, 4)
+
+        ux = create_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, key = sk1)
+        uy = create_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, key = sk2)
+        uz = create_turb_field(config.num_cells, 1, turbulence_slope, kmin, kmax, key = sk3)
 
         rms_vel = jnp.sqrt(jnp.mean(ux**2 + uy**2 + uz**2))
 
@@ -201,6 +205,7 @@ axs[0, 0].set_xscale("log")
 axs[0, 0].set_yscale("log")
 axs[0, 0].set_xlabel("k")
 axs[0, 0].set_ylabel("P(k)")
+axs[0, 0].set_ylim(1e-6, 1e-1)
 axs[0, 0].set_title("initial energy power spectrum")
 axs[0, 0].legend()
 

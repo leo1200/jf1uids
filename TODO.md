@@ -1,8 +1,7 @@
 # TODO
 
-- fix mhd units
+- only first step source term aware
 - clean helper data
-- implement advanced split for self-gravity
 - check self gravity energy conservation problems in the unsplit schemes
 - go through all code and notebooks and clean
 - write simple unit tests
