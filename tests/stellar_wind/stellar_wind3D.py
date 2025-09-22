@@ -61,7 +61,7 @@ gamma = 5/3
 
 # spatial domain
 box_size = 1.0
-num_cells = 64
+num_cells = 128
 
 # activate stellar wind
 stellar_wind = True

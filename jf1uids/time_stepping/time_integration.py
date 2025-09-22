@@ -125,7 +125,7 @@ def _time_integration(
     helper_data_pad: Union[HelperData, NoneType],
     helper_data: Union[HelperData, NoneType],
     snapshot_callable = None
-) -> Union[STATE_TYPE, SnapshotData]:
+) -> Union[SimulationState, SnapshotData]:
     
     """
     Time integration.
