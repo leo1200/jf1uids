@@ -1,3 +1,5 @@
+from flax import struct
+
 import jax.numpy as jnp
 
 from types import NoneType
@@ -5,7 +7,8 @@ from typing import NamedTuple, Union
 
 from jf1uids.option_classes.simulation_config import STATE_TYPE
 
-class SimulationState(NamedTuple):
+@struct.dataclass
+class SimulationState:
     """
     The simulation state.
     """

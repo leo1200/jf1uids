@@ -147,19 +147,19 @@ def _time_integration(
     # to account for the periodic boundary conditions
     original_shape = state.gas_state.shape
 
-    state = state._replace(
+    state = state.replace(
         gas_state = _pad(state.gas_state, config)
     )
 
     if config.mhd:
-        state = state._replace(
+        state = state.replace(
             magnetic_field_state = _pad(state.magnetic_field_state, config)
         )
 
     # important for active boundaries influencing 
     # the time step criterion, for now we only
     # adapt the gas state
-    state = state._replace(
+    state = state.replace(
         gas_state = _boundary_handler(state.gas_state, config)
     )
 
@@ -384,7 +384,7 @@ def _time_integration(
         # a higher order method (in a split fashion) may be used
         # e.g dt/2 physics modules -> dt hydro -> dt/2 physics modules
 
-        state = state._replace(gas_state = 
+        state = state.replace(gas_state = 
             _run_physics_modules(
                 state.gas_state,
                 dt,
@@ -469,11 +469,11 @@ def _time_integration(
         _, state = carry
 
         # unpad the primitive state if we padded it
-        state = state._replace(
+        state = state.replace(
             gas_state = _unpad(state.gas_state, config)
         )
         if config.mhd:
-            state = state._replace(
+            state = state.replace(
                 magnetic_field_state = _unpad(state.magnetic_field_state, config)
             )
 

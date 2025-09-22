@@ -323,7 +323,7 @@ def _evolve_state(
             else:
                 evolved_gas = _evolve_gas_state_split(evolved_gas, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables)
 
-            return state._replace(gas_state = evolved_gas, magnetic_field_state = magnetic_field)
+            return state.replace(gas_state = evolved_gas, magnetic_field_state = magnetic_field)
         else:
             # error
             raise ValueError("MHD currently not supported in 1D.")
@@ -331,7 +331,7 @@ def _evolve_state(
     else:
         # for now only use pp for gas only
         if config.split == UNSPLIT:
-            return state._replace(gas_state = _evolve_gas_state_unsplit(state.gas_state, dt, gamma, gravitational_constant, config, params, helper_data, registered_variables))
+            return state.replace(gas_state = _evolve_gas_state_unsplit(state.gas_state, dt, gamma, gravitational_constant, config, params, helper_data, registered_variables))
         else:
             # evolve the gas state
-            return state._replace(gas_state = _evolve_gas_state_split(state.gas_state, dt, gamma, gravitational_constant, config, params, helper_data, registered_variables))
+            return state.replace(gas_state = _evolve_gas_state_split(state.gas_state, dt, gamma, gravitational_constant, config, params, helper_data, registered_variables))

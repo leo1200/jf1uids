@@ -258,12 +258,12 @@ initial_state = construct_state(
 
 if multi_gpu:
     if config.mhd:
-        initial_state = initial_state._replace(
+        initial_state = initial_state.replace(
             gas_state = jax.device_put(initial_state.gas_state, named_sharding),
             magnetic_field_state = jax.device_put(initial_state.magnetic_field_state, named_sharding)
         )
     else:
-        initial_state = initial_state._replace(
+        initial_state = initial_state.replace(
             gas_state = jax.device_put(initial_state.gas_state, named_sharding)
         )
 
