@@ -9,6 +9,7 @@ from beartype import beartype as typechecker
 from typing import Union
 
 from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import total_energy_from_primitives_with_crs, total_pressure_from_conserved_with_crs
+from jf1uids.data_classes.simulation_state import SimulationState
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import FIELD_TYPE, STATE_TYPE, SimulationConfig
 from jf1uids.option_classes.simulation_params import SimulationParams
@@ -24,7 +25,7 @@ from jf1uids.option_classes.simulation_params import SimulationParams
 # ======= Create the primitive state ========
 
 @jaxtyped(typechecker=typechecker)
-def construct_primitive_state(
+def construct_state(
 
     config: SimulationConfig,
     registered_variables: RegisteredVariables,
@@ -39,7 +40,7 @@ def construct_primitive_state(
     gas_pressure: Union[FIELD_TYPE, NoneType] = None,
     cosmic_ray_pressure: Union[FIELD_TYPE, NoneType] = None,
 
-) -> STATE_TYPE:
+) -> SimulationState:
 
     """Stack the primitive variables into the state array.
 
@@ -63,38 +64,41 @@ def construct_primitive_state(
         The state array.
     """
 
-    state = jnp.zeros((registered_variables.num_vars, *density.shape))
-    state = state.at[registered_variables.density_index].set(density)
+    gas_state = jnp.zeros((registered_variables.num_vars, *density.shape))
+    gas_state = gas_state.at[registered_variables.density_index].set(density)
+
+    if config.mhd:
+        magnetic_field_state = jnp.zeros((3, *density.shape))
 
     if config.dimensionality == 1:
-        state = state.at[registered_variables.velocity_index].set(velocity_x)
+        gas_state = gas_state.at[registered_variables.velocity_index].set(velocity_x)
     elif config.dimensionality == 2:
-        state = state.at[registered_variables.velocity_index.x].set(velocity_x)
-        state = state.at[registered_variables.velocity_index.y].set(velocity_y)
+        gas_state = gas_state.at[registered_variables.velocity_index.x].set(velocity_x)
+        gas_state = gas_state.at[registered_variables.velocity_index.y].set(velocity_y)
     elif config.dimensionality == 3:
-        state = state.at[registered_variables.velocity_index.x].set(velocity_x)
-        state = state.at[registered_variables.velocity_index.y].set(velocity_y)
-        state = state.at[registered_variables.velocity_index.z].set(velocity_z)
+        gas_state = gas_state.at[registered_variables.velocity_index.x].set(velocity_x)
+        gas_state = gas_state.at[registered_variables.velocity_index.y].set(velocity_y)
+        gas_state = gas_state.at[registered_variables.velocity_index.z].set(velocity_z)
 
     if config.mhd:
         if config.dimensionality == 1:
-            state = state.at[registered_variables.magnetic_index].set(magnetic_field_x)
+            magnetic_field_state = magnetic_field_state.at[registered_variables.magnetic_index].set(magnetic_field_x)
         elif config.dimensionality >= 2:
-            state = state.at[registered_variables.magnetic_index.x].set(magnetic_field_x)
-            state = state.at[registered_variables.magnetic_index.y].set(magnetic_field_y)
-            state = state.at[registered_variables.magnetic_index.z].set(magnetic_field_z)
+            magnetic_field_state = magnetic_field_state.at[registered_variables.magnetic_index.x].set(magnetic_field_x)
+            magnetic_field_state = magnetic_field_state.at[registered_variables.magnetic_index.y].set(magnetic_field_y)
+            magnetic_field_state = magnetic_field_state.at[registered_variables.magnetic_index.z].set(magnetic_field_z)
 
-    state = state.at[registered_variables.pressure_index].set(gas_pressure)
+    gas_state = gas_state.at[registered_variables.pressure_index].set(gas_pressure)
 
     if registered_variables.cosmic_ray_n_active:
 
         # TODO: get from params
         gamma_cr = 4/3
 
-        state = state.at[registered_variables.pressure_index].set(gas_pressure + cosmic_ray_pressure)
-        state = state.at[registered_variables.cosmic_ray_n_index].set(cosmic_ray_pressure ** (1/gamma_cr))
+        gas_state = gas_state.at[registered_variables.pressure_index].set(gas_pressure + cosmic_ray_pressure)
+        gas_state = gas_state.at[registered_variables.cosmic_ray_n_index].set(cosmic_ray_pressure ** (1/gamma_cr))
 
-    return state
+    return SimulationState(gas_state = gas_state, magnetic_field_state = magnetic_field_state if config.mhd else None)
 
 
 @jaxtyped(typechecker=typechecker)

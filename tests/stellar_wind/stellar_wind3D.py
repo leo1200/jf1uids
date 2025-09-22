@@ -3,7 +3,7 @@ multi_gpu = True
 if multi_gpu:
     # ==== GPU selection ====
     from autocvd import autocvd
-    autocvd(num_gpus = 8)
+    autocvd(num_gpus = 4)
     # =======================
 else:
     # ==== GPU selection ====
@@ -29,7 +29,7 @@ from jf1uids import SimulationConfig
 from jf1uids import get_helper_data
 from jf1uids import SimulationParams
 from jf1uids import time_integration
-from jf1uids.fluid_equations.fluid import construct_primitive_state
+from jf1uids.fluid_equations.fluid import construct_state
 
 from jf1uids import get_registered_variables
 from jf1uids.option_classes import WindConfig
@@ -61,7 +61,7 @@ gamma = 5/3
 
 # spatial domain
 box_size = 1.0
-num_cells = 196
+num_cells = 64
 
 # activate stellar wind
 stellar_wind = True
@@ -74,7 +74,7 @@ wanted_rms = 50 * u.km / u.s
 cooling = False
 
 # mhd
-mhd = False
+mhd = True
 
 app_string = ""
 if turbulence:
@@ -196,12 +196,12 @@ kmax = int(0.6 * num_cells / 2)
 if multi_gpu:
 
     # mesh with variable axis
-    split = (1, 2, 2, 2)
+    split = (1, 2, 2, 1)
     sharding_mesh = jax.make_mesh(split, (VARAXIS, XAXIS, YAXIS, ZAXIS))
     named_sharding = jax.NamedSharding(sharding_mesh, P(VARAXIS, XAXIS, YAXIS, ZAXIS))
 
     # mesh no variable axis
-    split = (2, 2, 2)
+    split = (2, 2, 1)
     sharding_mesh_no_var = jax.make_mesh(split, (XAXIS, YAXIS, ZAXIS))
     named_sharding_no_var = jax.NamedSharding(sharding_mesh_no_var, P(XAXIS, YAXIS, ZAXIS))
 
@@ -243,7 +243,7 @@ else:
     B_z = None
 
 # construct primitive state
-initial_state = construct_primitive_state(
+initial_state = construct_state(
     config = config,
     registered_variables=registered_variables,
     density = rho,
@@ -257,21 +257,30 @@ initial_state = construct_primitive_state(
 )
 
 if multi_gpu:
-    initial_state = jax.device_put(initial_state, named_sharding)
+    if config.mhd:
+        initial_state = initial_state._replace(
+            gas_state = jax.device_put(initial_state.gas_state, named_sharding),
+            magnetic_field_state = jax.device_put(initial_state.magnetic_field_state, named_sharding)
+        )
+    else:
+        initial_state = initial_state._replace(
+            gas_state = jax.device_put(initial_state.gas_state, named_sharding)
+        )
+
     helper_data = get_helper_data(config, sharding = named_sharding)
 else:
     helper_data = get_helper_data(config)
     named_sharding = None
 
 
-config = finalize_config(config, initial_state.shape)
+config = finalize_config(config, initial_state.gas_state.shape)
 
-result = time_integration(initial_state, config, params, helper_data, registered_variables, sharding = named_sharding)
+result = time_integration(initial_state, config, params, registered_variables, sharding = named_sharding)
 
 if config.return_snapshots:
     final_state = result.states[-1]
 else:
-    final_state = result
+    final_state = result.gas_state
 
 from matplotlib.colors import LogNorm
 

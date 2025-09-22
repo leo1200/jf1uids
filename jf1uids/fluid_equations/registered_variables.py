@@ -79,13 +79,9 @@ def get_registered_variables(config: SimulationConfig) -> RegisteredVariables:
         # TODO: unified MHD approach in 1D/2D/3D
         # magnetic field index
         if config.mhd:
-            # TODO: better indexing
-            registered_variables = registered_variables._replace(pressure_index = 3)
-            registered_variables = registered_variables._replace(magnetic_index = StaticIntVector(4, 5, 6))
-            registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 3)
-        else:
-            # update the pressure index
-            registered_variables = registered_variables._replace(pressure_index = registered_variables.num_vars - 1)
+            registered_variables = registered_variables._replace(magnetic_index = StaticIntVector(0,1,2))
+
+        registered_variables = registered_variables._replace(pressure_index = registered_variables.num_vars - 1)
 
     if config.dimensionality == 3:
         
@@ -100,8 +96,7 @@ def get_registered_variables(config: SimulationConfig) -> RegisteredVariables:
 
         # update the magnetic field index
         if config.mhd:
-            registered_variables = registered_variables._replace(magnetic_index = StaticIntVector(4, 5, 6))
-            registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 3)
+            registered_variables = registered_variables._replace(magnetic_index = StaticIntVector(0, 1, 2))
 
     if config.wind_config.trace_wind_density:
         registered_variables = registered_variables._replace(wind_density_index = registered_variables.num_vars)

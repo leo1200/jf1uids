@@ -17,6 +17,7 @@ from jf1uids._physics_modules._mhd._magnetic_field_update import magnetic_update
 from jf1uids._physics_modules._self_gravity._self_gravity import _apply_self_gravity
 from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.data_classes.simulation_helper_data import HelperData
+from jf1uids.data_classes.simulation_state import SimulationState
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import CARTESIAN, HLL, HLLC, LAX_FRIEDRICHS, RK2_SSP, SPHERICAL, STATE_TYPE, UNSPLIT, SimulationConfig
 
@@ -290,7 +291,7 @@ def _evolve_gas_state_unsplit(
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
 def _evolve_state(
-    primitive_state: STATE_TYPE,
+    state: SimulationState,
     dt: Float[Array, ""],
     gamma: Union[float, Float[Array, ""]],
     gravitational_constant: Union[float, Float[Array, ""]],
@@ -298,37 +299,31 @@ def _evolve_state(
     params: SimulationParams,
     helper_data: HelperData,
     registered_variables: RegisteredVariables
-) -> STATE_TYPE:
+) -> SimulationState:
     
     if config.mhd:
 
         if config.dimensionality > 1:
 
-            # THIS IS VERY PRELIMINARY; THIS KIND OF SPLITTING SHOULD NOT HAPPEN
-            # IN EVERY EVOLVE_STATE CALL
-            registered_variables_gas = registered_variables._replace(num_vars = registered_variables.num_vars - 3)
-
-            gas_state = jnp.zeros((registered_variables_gas.num_vars, *primitive_state.shape[1:]), dtype = primitive_state.dtype)
-            gas_state = primitive_state[:-3, ...]
-            magnetic_field = primitive_state[-3:, ...]
+            gas_state = state.gas_state
+            magnetic_field = state.magnetic_field_state
 
             # evolve gas state by half a time step
             # evolved_gas = _evolve_gas_state(gas_state, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
             if config.split == UNSPLIT:
-                evolved_gas = _evolve_gas_state_unsplit(gas_state, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas)
+                evolved_gas = _evolve_gas_state_unsplit(gas_state, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables)
             else:
-                evolved_gas = _evolve_gas_state_split(gas_state, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas)
+                evolved_gas = _evolve_gas_state_split(gas_state, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables)
 
             magnetic_field, evolved_gas = magnetic_update(magnetic_field, evolved_gas, config.grid_spacing, dt, registered_variables, config)
 
             # evolve gas state by half a time step
-            # evolved_gas = _evolve_gas_state(evolved_gas, dt / 2, gamma, gravitational_constant, config, helper_data, registered_variables_gas)
             if config.split == UNSPLIT:
-                evolved_gas = _evolve_gas_state_unsplit(evolved_gas, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas)
+                evolved_gas = _evolve_gas_state_unsplit(evolved_gas, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables)
             else:
-                evolved_gas = _evolve_gas_state_split(evolved_gas, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables_gas)
+                evolved_gas = _evolve_gas_state_split(evolved_gas, dt / 2, gamma, gravitational_constant, config, params, helper_data, registered_variables)
 
-            return jnp.concatenate((evolved_gas, magnetic_field), axis = 0)
+            return state._replace(gas_state = evolved_gas, magnetic_field_state = magnetic_field)
         else:
             # error
             raise ValueError("MHD currently not supported in 1D.")
@@ -336,7 +331,7 @@ def _evolve_state(
     else:
         # for now only use pp for gas only
         if config.split == UNSPLIT:
-            return _evolve_gas_state_unsplit(primitive_state, dt, gamma, gravitational_constant, config, params, helper_data, registered_variables)
+            return state._replace(gas_state = _evolve_gas_state_unsplit(state.gas_state, dt, gamma, gravitational_constant, config, params, helper_data, registered_variables))
         else:
             # evolve the gas state
-            return _evolve_gas_state_split(primitive_state, dt, gamma, gravitational_constant, config, params, helper_data, registered_variables)
+            return state._replace(gas_state = _evolve_gas_state_split(state.gas_state, dt, gamma, gravitational_constant, config, params, helper_data, registered_variables))

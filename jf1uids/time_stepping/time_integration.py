@@ -17,6 +17,7 @@ from jax.experimental import checkify
 
 # jf1uids constants
 from jf1uids._geometry.boundaries import _boundary_handler
+from jf1uids.data_classes.simulation_state import SimulationState
 from jf1uids.option_classes.simulation_config import BACKWARDS, FORWARDS, STATE_TYPE
 
 # jf1uids containers
@@ -44,13 +45,13 @@ from jf1uids.time_stepping._utils import _pad, _unpad
 
 @jaxtyped(typechecker=typechecker)
 def time_integration(
-    primitive_state: STATE_TYPE,
+    state: SimulationState,
     config: SimulationConfig,
     params: SimulationParams,
     registered_variables: RegisteredVariables,
     snapshot_callable = None,
     sharding: Union[NoneType, jax.NamedSharding] = None
-) -> Union[STATE_TYPE, SnapshotData]:
+) -> Union[SimulationState, SnapshotData]:
     
     """
     Integrate the fluid equations in time. For the options of
@@ -90,7 +91,7 @@ def time_integration(
         checked_integration = checkify.checkify(_time_integration, errors)
 
         err, final_state = checked_integration(
-            primitive_state,
+            state,
             config,
             params,
             registered_variables,
@@ -103,7 +104,7 @@ def time_integration(
     
     else:
         final_state = _time_integration(
-            primitive_state,
+            state,
             config,
             params,
             registered_variables,
@@ -117,7 +118,7 @@ def time_integration(
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables', 'snapshot_callable'])
 def _time_integration(
-    primitive_state: STATE_TYPE,
+    state: SimulationState,
     config: SimulationConfig,
     params: SimulationParams,
     registered_variables: RegisteredVariables,
@@ -144,19 +145,23 @@ def _time_integration(
     # we must pad the state with ghost cells
     # pad the primitive state with two ghost cells on each side
     # to account for the periodic boundary conditions
-    original_shape = primitive_state.shape
+    original_shape = state.gas_state.shape
 
-    primitive_state = _pad(primitive_state, config)
+    state = state._replace(
+        gas_state = _pad(state.gas_state, config)
+    )
+
+    if config.mhd:
+        state = state._replace(
+            magnetic_field_state = _pad(state.magnetic_field_state, config)
+        )
 
     # important for active boundaries influencing 
     # the time step criterion, for now we only
     # adapt the gas state
-    if config.mhd:
-        primitive_state = primitive_state.at[:-3, ...].set(
-            _boundary_handler(primitive_state[:-3, ...], config)
-        )
-    else:
-        primitive_state = _boundary_handler(primitive_state, config)
+    state = state._replace(
+        gas_state = _boundary_handler(state.gas_state, config)
+    )
 
     if config.return_snapshots:
 
@@ -201,12 +206,16 @@ def _time_integration(
             time, state, snapshot_data = carry
 
             def update_snapshot_data(time, state, snapshot_data):
+
+                # unpack the state
+                gas_state = state.gas_state
+
                 time_points = snapshot_data.time_points.at[snapshot_data.current_checkpoint].set(time)
 
                 # get the unpadded state to store in the snapshot
-                unpad_state = _unpad(state, config)
+                unpad_gas_state = _unpad(gas_state, config)
 
-                states = snapshot_data.states.at[snapshot_data.current_checkpoint].set(unpad_state)
+                states = snapshot_data.states.at[snapshot_data.current_checkpoint].set(unpad_gas_state)
 
                 if config.calculate_summary_statistics:
 
@@ -214,7 +223,7 @@ def _time_integration(
                     total_mass = snapshot_data.total_mass.at[
                         snapshot_data.current_checkpoint
                     ].set(
-                        calculate_total_mass(unpad_state, helper_data, config)
+                        calculate_total_mass(unpad_gas_state, helper_data, config)
                     )
 
                     # calculate the total energy
@@ -222,7 +231,7 @@ def _time_integration(
                         snapshot_data.current_checkpoint
                     ].set(
                         calculate_total_energy(
-                            unpad_state,
+                            unpad_gas_state,
                             helper_data,
                             params.gamma,
                             params.gravitational_constant,
@@ -236,7 +245,7 @@ def _time_integration(
                         snapshot_data.current_checkpoint
                     ].set(
                         calculate_internal_energy(
-                            unpad_state,
+                            unpad_gas_state,
                             helper_data,
                             params.gamma,
                             config,
@@ -249,7 +258,7 @@ def _time_integration(
                         snapshot_data.current_checkpoint
                     ].set(
                         calculate_kinetic_energy(
-                            unpad_state,
+                            unpad_gas_state,
                             helper_data,
                             config,
                             registered_variables
@@ -262,7 +271,7 @@ def _time_integration(
                             snapshot_data.current_checkpoint
                         ].set(
                             calculate_gravitational_energy(
-                                unpad_state,
+                                unpad_gas_state,
                                 helper_data,
                                 params.gravitational_constant,
                                 config,
@@ -335,12 +344,13 @@ def _time_integration(
         else:
             time, state = carry
 
+
         # do not differentiate through the choice of the time step
         if not config.fixed_timestep:
             if config.source_term_aware_timestep:
                 dt = jax.lax.stop_gradient(
                     _source_term_aware_time_step(
-                        state,
+                        state.gas_state,
                         config,
                         params,
                         helper_data_pad,
@@ -351,7 +361,7 @@ def _time_integration(
             else:
                 dt = jax.lax.stop_gradient(
                     _cfl_time_step(
-                        state,
+                        state.gas_state,
                         config.grid_spacing,
                         params.dt_max,
                         params.gamma,
@@ -374,14 +384,16 @@ def _time_integration(
         # a higher order method (in a split fashion) may be used
         # e.g dt/2 physics modules -> dt hydro -> dt/2 physics modules
 
-        state = _run_physics_modules(
-            state,
-            dt,
-            config,
-            params,
-            helper_data_pad,
-            registered_variables,
-            time + dt
+        state = state._replace(gas_state = 
+            _run_physics_modules(
+                state.gas_state,
+                dt,
+                config,
+                params,
+                helper_data_pad,
+                registered_variables,
+                time + dt
+            )
         )
 
         state = _evolve_state(
@@ -426,9 +438,9 @@ def _time_integration(
         return t < params.t_end
     
     if config.return_snapshots or config.activate_snapshot_callback:
-        carry = (0.0, primitive_state, snapshot_data)
+        carry = (0.0, state, snapshot_data)
     else:
-        carry = (0.0, primitive_state)
+        carry = (0.0, state)
     
     if not config.fixed_timestep:
         if config.differentiation_mode == BACKWARDS:
@@ -457,6 +469,12 @@ def _time_integration(
         _, state = carry
 
         # unpad the primitive state if we padded it
-        state = _unpad(state, config)
+        state = state._replace(
+            gas_state = _unpad(state.gas_state, config)
+        )
+        if config.mhd:
+            state = state._replace(
+                magnetic_field_state = _unpad(state.magnetic_field_state, config)
+            )
 
         return state
