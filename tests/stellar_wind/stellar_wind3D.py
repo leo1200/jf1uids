@@ -1,4 +1,4 @@
-multi_gpu = True
+multi_gpu = False
 
 if multi_gpu:
     # ==== GPU selection ====
@@ -34,7 +34,7 @@ from jf1uids.fluid_equations.fluid import construct_primitive_state
 from jf1uids import get_registered_variables
 from jf1uids.option_classes import WindConfig
 
-from jf1uids.option_classes.simulation_config import BACKWARDS, HLL, HLLC, MINMOD, OSHER, VARAXIS, XAXIS, YAXIS, ZAXIS
+from jf1uids.option_classes.simulation_config import BACKWARDS, DONOR_ACCOUNTING, HLL, HLLC, MINMOD, OSHER, PERIODIC_BOUNDARY, SIMPLE_SOURCE_TERM, VARAXIS, XAXIS, YAXIS, ZAXIS, BoundarySettings, BoundarySettings1D
 
 from jf1uids._physics_modules._cooling._cooling_tables import schure_cooling
 from jf1uids._physics_modules._cooling.cooling_options import PIECEWISE_POWER_LAW, CoolingConfig, CoolingParams
@@ -61,7 +61,7 @@ gamma = 5/3
 
 # spatial domain
 box_size = 1.0
-num_cells = 196
+num_cells = 96
 
 # activate stellar wind
 stellar_wind = True
@@ -74,7 +74,7 @@ wanted_rms = 50 * u.km / u.s
 cooling = False
 
 # mhd
-mhd = False
+mhd = True
 
 app_string = ""
 if turbulence:
@@ -112,11 +112,28 @@ config = SimulationConfig(
     differentiation_mode = FORWARDS,
     num_timesteps = num_timesteps,
     return_snapshots = False,
+    return_statistics = True,
+    self_gravity = True,
+    self_gravity_version = SIMPLE_SOURCE_TERM,
     num_snapshots = 5,
     cooling_config = CoolingConfig(
         cooling = cooling,
         cooling_curve_type = PIECEWISE_POWER_LAW
-    )
+    ),
+    boundary_settings =  BoundarySettings(
+        BoundarySettings1D(
+            left_boundary = PERIODIC_BOUNDARY,
+            right_boundary = PERIODIC_BOUNDARY
+        ),
+        BoundarySettings1D(
+            left_boundary = PERIODIC_BOUNDARY,
+            right_boundary = PERIODIC_BOUNDARY
+        ),
+        BoundarySettings1D(
+            left_boundary = PERIODIC_BOUNDARY,
+            right_boundary = PERIODIC_BOUNDARY
+        )
+    ),
 )
 
 registered_variables = get_registered_variables(config)
@@ -158,6 +175,8 @@ reference_temperature = (1e8 * u.K * c.k_B / c.m_p).to(code_units.code_energy / 
 floor_temperature = (1e2 * u.K * c.k_B / c.m_p).to(code_units.code_energy / code_units.code_mass).value
 cooling_curve_params = schure_cooling(code_units)
 
+gravitational_constant = (c.G).to(code_units.code_length**3 / (code_units.code_mass * code_units.code_time**2)).value
+
 
 params = SimulationParams(
     C_cfl = C_CFL,
@@ -170,7 +189,8 @@ params = SimulationParams(
         metal_mass_fraction = metal_mass_fraction,
         floor_temperature = floor_temperature,
         cooling_curve_params = cooling_curve_params
-    )
+    ),
+    gravitational_constant = gravitational_constant
 )
 
 # homogeneous initial state
@@ -191,7 +211,7 @@ z = jnp.linspace(0, config.box_size, config.num_cells)
 
 turbulence_slope = -2.0
 kmin = 2.0
-kmax = int(0.6 * num_cells / 2)
+kmax = int(0.2 * num_cells / 2)
 
 if multi_gpu:
 
@@ -268,10 +288,14 @@ config = finalize_config(config, initial_state.shape)
 
 result = time_integration(initial_state, config, params, helper_data, registered_variables, sharding = named_sharding)
 
-if config.return_snapshots:
-    final_state = result.states[-1]
-else:
-    final_state = result
+# if config.return_snapshots:
+#     final_state = result.states[-1]
+# else:
+#     final_state = result
+
+final_state = result.final_state
+
+print(result.num_iterations, "iterations")
 
 from matplotlib.colors import LogNorm
 
@@ -297,7 +321,7 @@ ax2.set_title("Velocity")
 ax3.imshow(final_state[4, :, :, z_level].T, origin = "lower", extent = [0, 1, 0, 1], norm = LogNorm())
 ax3.set_title("Pressure")
 
-plt.savefig("figures/slices" + app_string + ".png")
+plt.savefig("figures/slices" + app_string + ".png", dpi = 1000)
 
 def plot_weaver_comparison(axs, final_state, params, helper_data, code_units, rho_0, p_0):
     rho = final_state[registered_variables.density_index].flatten()

@@ -35,6 +35,29 @@ def calculate_internal_energy(state, helper_data, gamma, config, registered_vari
         return jnp.sum(internal_energy * helper_data.cell_volumes)
     else:
         return jnp.sum(internal_energy * config.grid_spacing**config.dimensionality)
+    
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def calculate_radial_momentum(state, helper_data, config, registered_variables):
+
+    rho = state[registered_variables.density_index]
+    box_center = jnp.zeros(config.dimensionality) + config.box_size / 2
+    geometric_centers = helper_data.geometric_centers
+    r_hat = (geometric_centers - box_center) / jnp.linalg.norm(geometric_centers - box_center, axis = -1, keepdims=True)
+    
+    if config.dimensionality == 1:
+        u = state[registered_variables.velocity_index]
+    else:
+        u = state[registered_variables.velocity_index.x:registered_variables.velocity_index.x + config.dimensionality]
+    
+    u_radial = jnp.sum(jnp.moveaxis(u, 0, -1) * r_hat, axis = -1)
+
+    radial_momentum = rho * u_radial
+
+    if config.dimensionality == 1:
+        return jnp.sum(radial_momentum * helper_data.cell_volumes)
+    else:
+        return jnp.sum(radial_momentum * config.grid_spacing**config.dimensionality)
 
 
 @jaxtyped(typechecker=typechecker)

@@ -206,6 +206,12 @@ class SimulationConfig(NamedTuple):
     #: instead of only the final fluid state.
     return_snapshots: bool = False
 
+    #: Return statistics of the simulation
+    #: as part of the snapshot data.
+    #: When return_snapshots is False,
+    #: statistics are still returned.
+    return_statistics: bool = False
+
     #: Call a user given function on the snapshot data,
     #: e.g. for saving or plotting. Must have signature
     #: callback(time, state, registered_variables).
