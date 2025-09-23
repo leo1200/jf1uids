@@ -8,7 +8,7 @@ packages = [{include = "jf1uids"}]
 
 [tool.poetry.dependencies]
 python = ">=3.9"
-jax = ">=0.4.0"
+jax = ">=0.5.3"
 scipy = ">=1.0.0"
 astropy = ">=6.0.0"
 numpy = ">=1.0.0"

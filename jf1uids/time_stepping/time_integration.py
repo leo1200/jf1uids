@@ -357,6 +357,8 @@ def _time_integration(
                         params.gamma,
                         config,
                         registered_variables,
+                        params,
+                        helper_data_pad,
                         params.C_cfl
                     )
                 )

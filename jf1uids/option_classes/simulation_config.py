@@ -66,6 +66,10 @@ DONOR_ACCOUNTING = 1
 RIEMANN_SPLIT = 2
 RIEMANN_SPLIT_UNSTABLE = 3
 
+# timestep estimators
+WITHOUT_RECONSTRUCTION = 0
+WITH_RECONSTRUCTION = 1
+
 # ============================================================
 
 # ===================== type definitions =====================
@@ -156,6 +160,9 @@ class SimulationConfig(NamedTuple):
 
     #: Time integration method.
     time_integrator: int = RK2_SSP
+
+    #: Timestep estimator.
+    timestep_estimator: int = WITHOUT_RECONSTRUCTION
 
     # Explanation of the ghost cells
     #                                |---------|

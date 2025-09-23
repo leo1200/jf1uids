@@ -1,9 +1,9 @@
-multi_gpu = True
+multi_gpu = False
 
 if multi_gpu:
     # ==== GPU selection ====
     from autocvd import autocvd
-    autocvd(num_gpus = 8)
+    autocvd(num_gpus = 2)
     # =======================
 else:
     # ==== GPU selection ====
@@ -34,7 +34,7 @@ from jf1uids.fluid_equations.fluid import construct_primitive_state
 from jf1uids import get_registered_variables
 from jf1uids.option_classes import WindConfig
 
-from jf1uids.option_classes.simulation_config import BACKWARDS, HLL, HLLC, MINMOD, OSHER, VARAXIS, XAXIS, YAXIS, ZAXIS
+from jf1uids.option_classes.simulation_config import BACKWARDS, HLL, HLLC, MINMOD, OSHER, VARAXIS, WITH_RECONSTRUCTION, WITHOUT_RECONSTRUCTION, XAXIS, YAXIS, ZAXIS
 
 from jf1uids._physics_modules._cooling._cooling_tables import schure_cooling
 from jf1uids._physics_modules._cooling.cooling_options import PIECEWISE_POWER_LAW, CoolingConfig, CoolingParams
@@ -61,10 +61,10 @@ gamma = 5/3
 
 # spatial domain
 box_size = 1.0
-num_cells = 196
+num_cells = 128
 
 # activate stellar wind
-stellar_wind = True
+stellar_wind = False
 
 # turbulence
 turbulence = True
@@ -74,7 +74,7 @@ wanted_rms = 50 * u.km / u.s
 cooling = False
 
 # mhd
-mhd = False
+mhd = True
 
 app_string = ""
 if turbulence:
@@ -98,6 +98,7 @@ config = SimulationConfig(
     mhd = mhd,
     limiter = DOUBLE_MINMOD,
     first_order_fallback = False,
+    timestep_estimator = WITHOUT_RECONSTRUCTION,
     progress_bar = True,
     dimensionality = 3,
     num_ghost_cells = 2,
@@ -191,17 +192,17 @@ z = jnp.linspace(0, config.box_size, config.num_cells)
 
 turbulence_slope = -2.0
 kmin = 2.0
-kmax = int(0.6 * num_cells / 2)
+kmax = int(0.4 * num_cells / 2)
 
 if multi_gpu:
 
     # mesh with variable axis
-    split = (1, 2, 2, 2)
+    split = (1, 2, 2, 1)
     sharding_mesh = jax.make_mesh(split, (VARAXIS, XAXIS, YAXIS, ZAXIS))
     named_sharding = jax.NamedSharding(sharding_mesh, P(VARAXIS, XAXIS, YAXIS, ZAXIS))
 
     # mesh no variable axis
-    split = (2, 2, 2)
+    split = (2, 2, 1)
     sharding_mesh_no_var = jax.make_mesh(split, (XAXIS, YAXIS, ZAXIS))
     named_sharding_no_var = jax.NamedSharding(sharding_mesh_no_var, P(XAXIS, YAXIS, ZAXIS))
 
@@ -266,7 +267,7 @@ else:
 
 config = finalize_config(config, initial_state.shape)
 
-result = time_integration(initial_state, config, params, helper_data, registered_variables, sharding = named_sharding)
+result = time_integration(initial_state, config, params, registered_variables, sharding = named_sharding)
 
 if config.return_snapshots:
     final_state = result.states[-1]

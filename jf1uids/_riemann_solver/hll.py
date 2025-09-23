@@ -16,7 +16,47 @@ from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 # fluid stuff
 from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, get_absolute_velocity, speed_of_sound
 from jf1uids.fluid_equations.euler import _euler_flux
-from jf1uids.option_classes.simulation_config import AM_HLLC, HLLC_LM, HYBRID_HLLC, STATE_TYPE, SimulationConfig
+from jf1uids.option_classes.simulation_config import AM_HLLC, HLL, HLLC, HLLC_LM, HYBRID_HLLC, STATE_TYPE, SimulationConfig
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'registered_variables', 'flux_direction_index'])
+def _get_wave_speeds(primitives_left: STATE_TYPE, primitives_right: STATE_TYPE, gamma: Union[float, Float[Array, ""]], config: SimulationConfig, registered_variables: RegisteredVariables, flux_direction_index: int):
+    
+    rho_L = primitives_left[registered_variables.density_index]
+    u_L = primitives_left[flux_direction_index]
+
+    rho_R = primitives_right[registered_variables.density_index]
+    u_R = primitives_right[flux_direction_index]
+
+    p_L = primitives_left[registered_variables.pressure_index]
+    p_R = primitives_right[registered_variables.pressure_index]
+
+    # calculate the sound speeds
+    if not config.cosmic_ray_config.cosmic_rays:
+        c_L = speed_of_sound(rho_L, p_L, gamma)
+        c_R = speed_of_sound(rho_R, p_R, gamma)
+    else:
+        c_L = speed_of_sound_crs(primitives_left, registered_variables)
+        c_R = speed_of_sound_crs(primitives_right, registered_variables)
+
+    if config.riemann_solver == HLL:
+        S_R = jnp.maximum(jnp.maximum(u_L + c_L, u_R + c_R), 0)
+        S_L = jnp.minimum(jnp.minimum(u_L - c_L, u_R - c_R), 0)
+    elif config.riemann_solver == HLLC or config.riemann_solver == HLLC_LM or config.riemann_solver == AM_HLLC or config.riemann_solver == HYBRID_HLLC:
+        # Roe average of the velocity
+        u_hat = (jnp.sqrt(rho_L) * u_L + jnp.sqrt(rho_R) * u_R) / (jnp.sqrt(rho_L) + jnp.sqrt(rho_R))
+
+        # Roe average of the sound speed
+        c_hat_squared = (c_L ** 2 * jnp.sqrt(rho_L) + c_R ** 2 * jnp.sqrt(rho_R)) / (jnp.sqrt(rho_L) + jnp.sqrt(rho_R)) + 0.5 * (jnp.sqrt(rho_L) * jnp.sqrt(rho_R) / (jnp.sqrt(rho_L) + jnp.sqrt(rho_R)) ** 2) * (u_R - u_L) ** 2
+        c_hat = jnp.sqrt(c_hat_squared)
+
+        # Einfeldt estimates of maximum left and right signal speeds
+        S_L = jnp.minimum(u_L - c_L, u_hat - c_hat)
+        S_R = jnp.maximum(u_R + c_R, u_hat + c_hat)
+    else:
+        raise ValueError("Riemann solver not supported for wave speed calculation.")
+    
+    return S_L, S_R
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables', 'flux_direction_index'])
