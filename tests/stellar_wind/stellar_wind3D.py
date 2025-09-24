@@ -1,9 +1,9 @@
-multi_gpu = False
+multi_gpu = True
 
 if multi_gpu:
     # ==== GPU selection ====
     from autocvd import autocvd
-    autocvd(num_gpus = 8)
+    autocvd(num_gpus = 2)
     # =======================
 else:
     # ==== GPU selection ====
@@ -61,7 +61,7 @@ gamma = 5/3
 
 # spatial domain
 box_size = 1.0
-num_cells = 96
+num_cells = 256
 
 # activate stellar wind
 stellar_wind = True
@@ -112,28 +112,28 @@ config = SimulationConfig(
     differentiation_mode = FORWARDS,
     num_timesteps = num_timesteps,
     return_snapshots = False,
-    return_statistics = True,
-    self_gravity = True,
+    return_statistics = False,
+    # self_gravity = True,
     self_gravity_version = SIMPLE_SOURCE_TERM,
     num_snapshots = 5,
     cooling_config = CoolingConfig(
         cooling = cooling,
         cooling_curve_type = PIECEWISE_POWER_LAW
     ),
-    boundary_settings =  BoundarySettings(
-        BoundarySettings1D(
-            left_boundary = PERIODIC_BOUNDARY,
-            right_boundary = PERIODIC_BOUNDARY
-        ),
-        BoundarySettings1D(
-            left_boundary = PERIODIC_BOUNDARY,
-            right_boundary = PERIODIC_BOUNDARY
-        ),
-        BoundarySettings1D(
-            left_boundary = PERIODIC_BOUNDARY,
-            right_boundary = PERIODIC_BOUNDARY
-        )
-    ),
+    # boundary_settings =  BoundarySettings(
+    #     BoundarySettings1D(
+    #         left_boundary = PERIODIC_BOUNDARY,
+    #         right_boundary = PERIODIC_BOUNDARY
+    #     ),
+    #     BoundarySettings1D(
+    #         left_boundary = PERIODIC_BOUNDARY,
+    #         right_boundary = PERIODIC_BOUNDARY
+    #     ),
+    #     BoundarySettings1D(
+    #         left_boundary = PERIODIC_BOUNDARY,
+    #         right_boundary = PERIODIC_BOUNDARY
+    #     )
+    # ),
 )
 
 registered_variables = get_registered_variables(config)
@@ -199,16 +199,6 @@ p_0 = 3e4 * u.K / u.cm**3 * c.k_B
 
 print(p_0.to(code_units.code_pressure).value)
 
-rho = jnp.ones((config.num_cells, config.num_cells, config.num_cells)) * rho_0.to(code_units.code_density).value
-
-u_x = jnp.zeros((config.num_cells, config.num_cells, config.num_cells))
-u_y = jnp.zeros((config.num_cells, config.num_cells, config.num_cells))
-u_z = jnp.zeros((config.num_cells, config.num_cells, config.num_cells))
-
-x = jnp.linspace(0, config.box_size, config.num_cells)
-y = jnp.linspace(0, config.box_size, config.num_cells)
-z = jnp.linspace(0, config.box_size, config.num_cells)
-
 turbulence_slope = -2.0
 kmin = 2.0
 kmax = int(0.2 * num_cells / 2)
@@ -216,14 +206,36 @@ kmax = int(0.2 * num_cells / 2)
 if multi_gpu:
 
     # mesh with variable axis
-    split = (1, 2, 2, 2)
+    split = (1, 1, 1, 2)
     sharding_mesh = jax.make_mesh(split, (VARAXIS, XAXIS, YAXIS, ZAXIS))
     named_sharding = jax.NamedSharding(sharding_mesh, P(VARAXIS, XAXIS, YAXIS, ZAXIS))
 
     # mesh no variable axis
-    split = (2, 2, 2)
+    split = (1, 1, 2)
     sharding_mesh_no_var = jax.make_mesh(split, (XAXIS, YAXIS, ZAXIS))
     named_sharding_no_var = jax.NamedSharding(sharding_mesh_no_var, P(XAXIS, YAXIS, ZAXIS))
+
+
+rho = jnp.ones((config.num_cells, config.num_cells, config.num_cells)) * rho_0.to(code_units.code_density).value
+if multi_gpu:
+    rho = jax.device_put(rho, named_sharding_no_var)
+
+u_x = jnp.zeros((config.num_cells, config.num_cells, config.num_cells))
+if multi_gpu:
+    u_x = jax.device_put(u_x, named_sharding_no_var)
+
+u_y = jnp.zeros((config.num_cells, config.num_cells, config.num_cells))
+if multi_gpu:
+    u_y = jax.device_put(u_y, named_sharding_no_var)
+
+u_z = jnp.zeros((config.num_cells, config.num_cells, config.num_cells))
+if multi_gpu:
+    u_z = jax.device_put(u_z, named_sharding_no_var)
+
+x = jnp.linspace(0, config.box_size, config.num_cells)
+y = jnp.linspace(0, config.box_size, config.num_cells)
+z = jnp.linspace(0, config.box_size, config.num_cells)
+
 
 if turbulence:
     key = jax.random.PRNGKey(42)
@@ -255,8 +267,16 @@ if mhd:
 
     # magnetic field in x direction
     B_x = jnp.ones((config.num_cells, config.num_cells, config.num_cells)) * B_0
+    if multi_gpu:
+        B_x = jax.device_put(B_x, named_sharding_no_var)
+
     B_y = jnp.zeros((config.num_cells, config.num_cells, config.num_cells))
+    if multi_gpu:
+        B_y = jax.device_put(B_y, named_sharding_no_var)
+    
     B_z = jnp.zeros((config.num_cells, config.num_cells, config.num_cells))
+    if multi_gpu:
+        B_z = jax.device_put(B_z, named_sharding_no_var)
 else:
     B_x = None
     B_y = None
@@ -273,7 +293,8 @@ initial_state = construct_primitive_state(
     gas_pressure = p,
     magnetic_field_x = B_x,
     magnetic_field_y = B_y,
-    magnetic_field_z = B_z
+    magnetic_field_z = B_z,
+    sharding = named_sharding if multi_gpu else None,
 )
 
 if multi_gpu:

@@ -1,3 +1,4 @@
+from functools import partial
 from types import NoneType
 from typing import NamedTuple, Union
 from jax import NamedSharding
@@ -39,6 +40,7 @@ class HelperData(NamedTuple):
     outer_cell_boundaries: jnp.ndarray = None
 
 
+@partial(jax.jit, static_argnames = ('config', 'sharding', 'padded'))
 def get_helper_data(config: SimulationConfig, sharding: Union[NoneType, NamedSharding] = None, padded: bool = False) -> HelperData:
     """Generate the helper data for the simulation from the configuration."""
 
@@ -68,17 +70,15 @@ def get_helper_data(config: SimulationConfig, sharding: Union[NoneType, NamedSha
 
             if config.dimensionality == 3:
                 z = jnp.linspace(grid_spacing / 2 - ngc * grid_spacing, config.box_size - grid_spacing / 2 + ngc * grid_spacing, config.num_cells + 2 * ngc)
-                geometric_centers = jnp.meshgrid(x, y, z)
+                if sharding is not None:
+                    geometric_centers = jax.lax.with_sharding_constraint(jnp.array(jnp.meshgrid(x, y, z)), sharding)
+                else:
+                    geometric_centers = jnp.array(jnp.meshgrid(x, y, z))
             else:
-                geometric_centers = jnp.meshgrid(x, y)
+                geometric_centers = jnp.array(jnp.meshgrid(x, y))
 
             # calculate the distances from the cell centers to the box center
             box_center = jnp.zeros(config.dimensionality) + config.box_size / 2
-
-            geometric_centers = jnp.array(geometric_centers)
-
-            if sharding is not None:
-                geometric_centers = jax.device_put(geometric_centers, sharding)
 
             geometric_centers = jnp.moveaxis(geometric_centers, 0, -1)
 
