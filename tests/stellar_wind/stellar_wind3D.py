@@ -1,9 +1,12 @@
+import os
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
+
 multi_gpu = True
 
 if multi_gpu:
     # ==== GPU selection ====
     from autocvd import autocvd
-    autocvd(num_gpus = 2)
+    autocvd(num_gpus = 8)
     # =======================
 else:
     # ==== GPU selection ====
@@ -22,6 +25,8 @@ from timeit import default_timer as timer
 # plotting
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
+
+from jf1uids.data_classes.simulation_helper_data import HelperData
 
 # fluids
 from jf1uids import WindParams
@@ -61,13 +66,13 @@ gamma = 5/3
 
 # spatial domain
 box_size = 1.0
-num_cells = 256
+num_cells = 412
 
 # activate stellar wind
 stellar_wind = True
 
 # turbulence
-turbulence = True
+turbulence = False
 wanted_rms = 50 * u.km / u.s
 
 # cooling
@@ -206,12 +211,12 @@ kmax = int(0.2 * num_cells / 2)
 if multi_gpu:
 
     # mesh with variable axis
-    split = (1, 1, 1, 2)
+    split = (1, 2, 2, 2)
     sharding_mesh = jax.make_mesh(split, (VARAXIS, XAXIS, YAXIS, ZAXIS))
     named_sharding = jax.NamedSharding(sharding_mesh, P(VARAXIS, XAXIS, YAXIS, ZAXIS))
 
     # mesh no variable axis
-    split = (1, 1, 2)
+    split = (2, 2, 2)
     sharding_mesh_no_var = jax.make_mesh(split, (XAXIS, YAXIS, ZAXIS))
     named_sharding_no_var = jax.NamedSharding(sharding_mesh_no_var, P(XAXIS, YAXIS, ZAXIS))
 
@@ -307,14 +312,16 @@ else:
 
 config = finalize_config(config, initial_state.shape)
 
-result = time_integration(initial_state, config, params, helper_data, registered_variables, sharding = named_sharding)
+result = time_integration(initial_state, config, params, HelperData(), registered_variables, sharding = named_sharding)
 
 # if config.return_snapshots:
 #     final_state = result.states[-1]
 # else:
 #     final_state = result
 
-final_state = result.final_state
+# final_state = result.final_state
+
+final_state = result
 
 print(result.num_iterations, "iterations")
 
