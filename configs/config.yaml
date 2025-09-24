@@ -1,0 +1,16 @@
+defaults:
+  - _self_
+  - training: basic_training
+  - data: on_the_fly
+  - models: cnn
+
+experiment:
+  name: "n_look_behind_works"
+
+hydra:
+  job:
+    chdir: true
+  run:
+    dir: experiments/${experiment.name}/${now:%Y-%m-%d}_${now:%H-%M-%S}_${training.n_look_behind}
+  sweep:
+    dir: experiments/${experiment.name}/multirun/${now:%Y-%m-%d}_${now:%H-%M-%S}_nlook_${training.n_look_behind}

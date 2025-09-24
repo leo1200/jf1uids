@@ -26,54 +26,54 @@ class CorrectorCNN(eqx.Module):
     """
     A simple CNN that maps an input of shape (C, H, W) to an output of the same shape.
     """
+
     layers: eqx.nn.Sequential
 
-    def __init__(
-        self,
-        in_channels: int,
-        hidden_channels: int,
-        *,
-        key: PRNGKeyArray
-    ):
+    def __init__(self, in_channels: int, hidden_channels: int, *, key: PRNGKeyArray):
         # We need a key for each convolutional layer
         key1, key2, key3 = jax.random.split(key, 3)
 
         # A simple 3-layer CNN.
         # Note the use of padding=1 with kernel_size=3 to keep the
         # spatial dimensions (height and width) the same.
-        self.layers = eqx.nn.Sequential([
-            eqx.nn.Conv3d(in_channels, hidden_channels, 3, padding=1, key=key1),
-            eqx.nn.Lambda(jax.nn.relu),
-            eqx.nn.Conv3d(hidden_channels, hidden_channels, 3, padding=1, key=key2),
-            eqx.nn.Lambda(jax.nn.relu),
-            eqx.nn.Conv3d(hidden_channels, in_channels, 3, padding=1, key=key3),
-        ])
+        self.layers = eqx.nn.Sequential(
+            [
+                eqx.nn.Conv3d(in_channels, hidden_channels, 3, padding=1, key=key1),
+                eqx.nn.Lambda(jax.nn.relu),
+                eqx.nn.Conv3d(hidden_channels, hidden_channels, 3, padding=1, key=key2),
+                eqx.nn.Lambda(jax.nn.relu),
+                eqx.nn.Conv3d(
+                    hidden_channels, in_channels, 3, padding=1, key=key3, use_bias=False
+                ),
+            ]
+        )
+
     def __call__(self, x: Float[Array, "num_vars h w"]) -> Float[Array, "num_vars h w"]:
         """
         The forward pass of the model.
         """
         # Pass the input through the network to get the correction term
-        correction = x
-        for layer in self.layers:
-            correction = layer(correction)
-
+        correction = self.layers(x)
         # Add the learned correction to the original input
         return correction
-    
+
+
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['registered_variables', 'config'])
+@partial(jax.jit, static_argnames=["registered_variables", "config"])
 def _cnn_mhd_corrector(
-     primitive_state: STATE_TYPE,
-     config: SimulationConfig,
-     registered_variables: RegisteredVariables,
-     params: SimulationParams,
-     time_step: Float[Array, ""],
+    primitive_state: STATE_TYPE,
+    config: SimulationConfig,
+    registered_variables: RegisteredVariables,
+    params: SimulationParams,
+    time_step: Float[Array, ""],
 ):
+    scale_factor = 1e-2
     neural_net_params = params.cnn_mhd_corrector_params.network_params
     neural_net_static = config.cnn_mhd_corrector_config.network_static
     model = eqx.combine(neural_net_params, neural_net_static)
 
     correction = model(primitive_state)
+    correction = jnp.tanh(correction) * scale_factor
 
     # to not add divergence errors, we learn a correction for the electric field
     # - and the divergence of a curl is zero

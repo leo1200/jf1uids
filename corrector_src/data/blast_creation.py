@@ -40,8 +40,13 @@ from astropy import units as u
 import random
 
 import yaml
+import os
 
-config_file = yaml.safe_load(open("config.yaml", "r"))
+config_path = os.path.join(os.path.dirname(__file__), "..", "config.yaml")
+config_path = os.path.abspath(config_path)
+
+with open(config_path, "r") as f:
+    config_file = yaml.safe_load(f)
 
 
 def initial_blast_state(num_cells):
@@ -164,8 +169,9 @@ def randomized_initial_blast_state(num_cells, randomizers=None):
         riemann_solver=HLL,
         limiter=0,
         return_snapshots=True,
-        num_snapshots=80,
+        num_snapshots=config_file["blast_creation"]["num_snapshots"],
         boundary_settings=BoundarySettings(),
+        num_checkpoints=config_file["blast_creation"]["num_checkpoints"],
         # boundary_settings=BoundarySettings(
         #    x=BoundarySettings1D(PERIODIC_BOUNDARY, PERIODIC_BOUNDARY),
         #    y=BoundarySettings1D(PERIODIC_BOUNDARY, PERIODIC_BOUNDARY),

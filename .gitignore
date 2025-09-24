@@ -190,4 +190,9 @@ cython_debug/
 .venv
 /poetry.toml
 
+/corrector_src/data/ground_truth_50.npy
+/corrector_src/data/ground_truth_80.npy
 /corrector_src/data/ground_truth.npy
+
+
+/corrector_src/depracated

@@ -1,0 +1,2 @@
+- training.n_look_behind=10
+- training.epochs=300

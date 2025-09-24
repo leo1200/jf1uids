@@ -1,0 +1,7 @@
+hr_res : 64
+downscaling_factor : 2
+randomizer_1: [0.5, 1.5]
+randomizer_2: [0.5, 1.5]
+randomizer_3: [0.5, 1.5]
+num_snapshots: 50
+num_checkpoints: 50

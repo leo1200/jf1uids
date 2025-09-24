@@ -2,10 +2,13 @@ blast_creation:
   randomizer_1: [0.5, 1.5]
   randomizer_2: [0.5, 1.5]
   randomizer_3: [0.5, 1.5]
+  num_snapshots: 50
+  num_checkpoints: 50
 
 training:
   hr_res : 64
   downscaling_factor : 2
-  epochs : 2
-  hidden_channels: 16
-  n_look_behind : 6
+  epochs : 50
+  hidden_channels: 8
+  n_look_behind : 10
+  learning_rate: 1e-5

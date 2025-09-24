@@ -78,6 +78,7 @@ def _cnn_mhd_corrector(
 ):
     neural_net_params = params.cnn_mhd_corrector_params.network_params
     neural_net_static = config.cnn_mhd_corrector_config.network_static
+
     model = eqx.combine(neural_net_params, neural_net_static)
 
     correction = model(primitive_state)
