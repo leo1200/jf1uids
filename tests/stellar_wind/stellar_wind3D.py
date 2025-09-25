@@ -117,28 +117,28 @@ config = SimulationConfig(
     differentiation_mode = FORWARDS,
     num_timesteps = num_timesteps,
     return_snapshots = False,
-    return_statistics = False,
-    # self_gravity = True,
+    return_statistics = True,
+    self_gravity = True,
     self_gravity_version = SIMPLE_SOURCE_TERM,
     num_snapshots = 5,
     cooling_config = CoolingConfig(
         cooling = cooling,
         cooling_curve_type = PIECEWISE_POWER_LAW
     ),
-    # boundary_settings =  BoundarySettings(
-    #     BoundarySettings1D(
-    #         left_boundary = PERIODIC_BOUNDARY,
-    #         right_boundary = PERIODIC_BOUNDARY
-    #     ),
-    #     BoundarySettings1D(
-    #         left_boundary = PERIODIC_BOUNDARY,
-    #         right_boundary = PERIODIC_BOUNDARY
-    #     ),
-    #     BoundarySettings1D(
-    #         left_boundary = PERIODIC_BOUNDARY,
-    #         right_boundary = PERIODIC_BOUNDARY
-    #     )
-    # ),
+    boundary_settings =  BoundarySettings(
+        BoundarySettings1D(
+            left_boundary = PERIODIC_BOUNDARY,
+            right_boundary = PERIODIC_BOUNDARY
+        ),
+        BoundarySettings1D(
+            left_boundary = PERIODIC_BOUNDARY,
+            right_boundary = PERIODIC_BOUNDARY
+        ),
+        BoundarySettings1D(
+            left_boundary = PERIODIC_BOUNDARY,
+            right_boundary = PERIODIC_BOUNDARY
+        )
+    ),
 )
 
 registered_variables = get_registered_variables(config)
@@ -154,7 +154,7 @@ code_units = CodeUnits(code_length, code_mass, code_velocity)
 C_CFL = 0.4
 # 2.5
 
-t_final = 1.0 * 1e4 * u.yr
+t_final = 0.01 * 1e4 * u.yr
 t_end = t_final.to(code_units.code_time).value
 
 if scale_time:
@@ -312,16 +312,16 @@ else:
 
 config = finalize_config(config, initial_state.shape)
 
-result = time_integration(initial_state, config, params, HelperData(), registered_variables, sharding = named_sharding)
+result = time_integration(initial_state, config, params, helper_data, registered_variables, sharding = named_sharding)
 
 # if config.return_snapshots:
 #     final_state = result.states[-1]
 # else:
 #     final_state = result
 
-# final_state = result.final_state
+final_state = result.final_state
 
-final_state = result
+# final_state = result
 
 print(result.num_iterations, "iterations")
 

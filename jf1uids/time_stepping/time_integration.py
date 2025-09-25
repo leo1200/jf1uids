@@ -81,19 +81,18 @@ def time_integration(
     
     else:
 
-        compiled_step = _time_integration.lower(primitive_state, config, params, helper_data, helper_data_pad, registered_variables, snapshot_callable).compile()
-        compiled_stats = compiled_step.memory_analysis()
-        
-        if compiled_stats is not None:
-            # Calculate total memory usage including temporary storage, arguments, and outputs
-            # Subtract alias size to avoid double-counting memory shared between different components
-            total = compiled_stats.temp_size_in_bytes + compiled_stats.argument_size_in_bytes \
-                + compiled_stats.output_size_in_bytes - compiled_stats.alias_size_in_bytes
-            print("=== Compiled time integration memory usage PER DEVICE ===")
-            print(f"Temp size: {compiled_stats.temp_size_in_bytes / (1024**2):.2f} MB")
-            print(f"Argument size: {compiled_stats.argument_size_in_bytes / (1024**2):.2f} MB")
-            print(f"Total size: {total/(1024**2):.2f} MB")
-
+        if config.memory_analysis:
+            compiled_step = _time_integration.lower(primitive_state, config, params, helper_data, helper_data_pad, registered_variables, snapshot_callable).compile()
+            compiled_stats = compiled_step.memory_analysis()
+            if compiled_stats is not None:
+                # Calculate total memory usage including temporary storage, arguments, and outputs
+                # Subtract alias size to avoid double-counting memory shared between different components
+                total = compiled_stats.temp_size_in_bytes + compiled_stats.argument_size_in_bytes \
+                    + compiled_stats.output_size_in_bytes - compiled_stats.alias_size_in_bytes
+                print("=== Compiled time integration memory usage PER DEVICE ===")
+                print(f"Temp size: {compiled_stats.temp_size_in_bytes / (1024**2):.2f} MB")
+                print(f"Argument size: {compiled_stats.argument_size_in_bytes / (1024**2):.2f} MB")
+                print(f"Total size: {total/(1024**2):.2f} MB")
 
         final_state = _time_integration(primitive_state, config, params, helper_data, helper_data_pad, registered_variables, snapshot_callable)
 

@@ -113,6 +113,10 @@ class SimulationConfig(NamedTuple):
     #: Significantly reduces performance.
     runtime_debugging: bool = False
 
+    #: Memory analysis of the main time integration
+    #: function
+    memory_analysis: bool = False
+
     #: Activate progress bar
     progress_bar: bool = False
 
