@@ -21,7 +21,7 @@ from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import CARTESIAN, HLL, HLLC, LAX_FRIEDRICHS, RK2_SSP, SPHERICAL, STATE_TYPE, UNSPLIT, SimulationConfig
 
 from jf1uids._geometry.geometric_terms import _pressure_nozzling_source
-from jf1uids._state_evolution.reconstruction import _reconstruct_at_interface_split, _reconstruct_at_interface_unsplit
+from jf1uids._state_evolution.reconstruction import _reconstruct_at_interface_split, _reconstruct_at_interface_unsplit, _reconstruct_at_interface_unsplit_single
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.fluid_equations.fluid import primitive_state_from_conserved, conserved_state_from_primitive
 from jf1uids._riemann_solver._lax_friedrichs import _lax_friedrichs_solver
@@ -193,25 +193,32 @@ def _evolve_gas_state_unsplit_inner(
     primitive_state = _boundary_handler(primitive_state, config)
     conservative_states = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
 
-    # get left and right states along all dimensions
-    # so dimensionality x state_shape
-    primitives_left_interface, primitives_right_interface = _reconstruct_at_interface_unsplit(
-        primitive_state,
-        dt,
-        gamma,
-        config,
-        params,
-        helper_data,
-        registered_variables
-    )
+    # # get left and right states along all dimensions
+    # # so dimensionality x state_shape
+    # primitives_left_interface, primitives_right_interface = _reconstruct_at_interface_unsplit(
+    #     primitive_state,
+    #     dt,
+    #     gamma,
+    #     config,
+    #     params,
+    #     helper_data,
+    #     registered_variables
+    # )
 
     for axis in range(1, config.dimensionality + 1):
         primitive_state = _boundary_handler(primitive_state, config)
 
+        primitives_left_interface, primitives_right_interface = _reconstruct_at_interface_unsplit_single(
+            primitive_state,
+            config,
+            helper_data,
+            axis
+        )
+
         # get the fluxes at the interfaces
         fluxes = _riemann_solver(
-            primitives_left_interface[axis - 1],
-            primitives_right_interface[axis - 1],
+            primitives_left_interface,
+            primitives_right_interface,
             primitive_state,
             gamma,
             config,

@@ -131,6 +131,8 @@ def _reconstruct_at_interface_unsplit(
     """
     Unsplit reconstruction.
     """
+
+    # this is very memory inefficient!!!
     
     # limited gradients: dimensionality x state_shape
     limited_gradients = jnp.zeros((config.dimensionality,) + primitive_state.shape)
@@ -254,3 +256,33 @@ def _reconstruct_at_interface_unsplit(
         primitives_right_interface = primitives_right_interface.at[axis - 1].set(p_right_interface)
 
     return primitives_left_interface, primitives_right_interface
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'axis'])
+def _reconstruct_at_interface_unsplit_single(
+    primitive_state: STATE_TYPE,
+    config: SimulationConfig,
+    helper_data: HelperData,
+    axis: int
+):
+    """
+    Unsplit reconstruction.
+    """
+
+    limited_gradients = _calculate_limited_gradients(primitive_state, config, helper_data, axis = axis)
+    differences = limited_gradients * config.grid_spacing / 2
+
+    # i-1/2R, ...
+    primitives_left_center = primitive_state - differences # left of the cell center but the right of the interface
+    # i+1/2L, ...
+    primitives_right_center = primitive_state + differences # right of the cell center but the left of the interface
+
+    # primitives left at i is the left state at the interface
+    # between i-1 and i so the right extrapolation from the cell i-1
+    p_left_interface = jnp.roll(primitives_right_center, shift = 1, axis = axis)
+
+    # primitives right at i is the right state at the interface
+    # between i-1 and i so the left extrapolation from the cell i
+    p_right_interface = primitives_left_center
+
+    return p_left_interface, p_right_interface
