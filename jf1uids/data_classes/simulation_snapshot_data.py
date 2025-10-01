@@ -1,6 +1,7 @@
 from typing import NamedTuple
 import jax.numpy as jnp
 
+
 class SnapshotData(NamedTuple):
     """Return format for the time integration, when snapshots are requested."""
 

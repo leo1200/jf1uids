@@ -1,5 +1,8 @@
 # TODO
 
+- cooling corrector check generalization beyond max training time point
+- statistics options -> return_snapshots with such options
+- measurement tools for effective viscosity
 - only first step source term aware
 - reconstruction at interface unsplit is memory inefficient
 - double helper data inefficient

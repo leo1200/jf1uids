@@ -1,13 +1,12 @@
+from types import NoneType
 from typing import NamedTuple
 from typing import Union
 import jax.numpy as jnp
+from jaxtyping import PyTree
 
 SIMPLE_POWER_LAW = 1
 PIECEWISE_POWER_LAW = 2
-
-class CoolingConfig(NamedTuple):
-    cooling: bool = False
-    cooling_curve_type: int = SIMPLE_POWER_LAW
+NEURAL_NET_COOLING = 3
 
 class SimplePowerLawParams(NamedTuple):
     factor: float = 1.0
@@ -21,7 +20,24 @@ class PiecewisePowerLawParams(NamedTuple):
     Y_table: jnp.ndarray = jnp.array([])
     reference_temperature: float = 1e8
 
-COOLING_CURVE_TYPE = Union[SimplePowerLawParams, PiecewisePowerLawParams]
+class CoolingNetConfig(NamedTuple):
+    network_static: Union[PyTree, NoneType] = None
+
+class CoolingNetParams(NamedTuple):
+    network_params: Union[PyTree, NoneType] = None
+
+COOLING_CURVE_TYPE = Union[SimplePowerLawParams, PiecewisePowerLawParams, CoolingNetParams]
+
+class CoolingCurveConfig(NamedTuple):
+    cooling_curve_type: int = SIMPLE_POWER_LAW
+    
+    #: In case of neural the cooling the network architecture
+    cooling_net_config: CoolingNetConfig = CoolingNetConfig()
+
+
+class CoolingConfig(NamedTuple):
+    cooling: bool = False
+    cooling_curve_config: CoolingCurveConfig = CoolingCurveConfig()
 
 class CoolingParams(NamedTuple):
     # NOTE: CURRENTLY ONLY POWER LAW COOLING

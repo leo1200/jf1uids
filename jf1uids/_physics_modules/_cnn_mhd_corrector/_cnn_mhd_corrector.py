@@ -41,7 +41,7 @@ class CorrectorCNN(eqx.Module):
         # A simple 3-layer CNN.
         # Note the use of padding=1 with kernel_size=3 to keep the
         # spatial dimensions (height and width) the same.
-        self.layers = [
+        self.layers = (
             # Layer 1: Expand channels from NUM_VARS to HIDDEN_CHANNELS
             eqx.nn.Conv2d(in_channels, hidden_channels, kernel_size=3, padding=1, key=key1),
             jax.nn.relu,
@@ -53,7 +53,7 @@ class CorrectorCNN(eqx.Module):
             # Layer 3: Contract channels back to the original NUM_VARS
             # No activation function here, as we want to predict a raw correction value.
             eqx.nn.Conv2d(hidden_channels, in_channels, kernel_size=3, padding=1, key=key3),
-        ]
+        )
 
     def __call__(self, x: Float[Array, "num_vars h w"]) -> Float[Array, "num_vars h w"]:
         """

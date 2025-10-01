@@ -16,7 +16,6 @@ from jax.experimental import checkify
 
 # jf1uids constants
 from jf1uids._geometry.boundaries import _boundary_handler
-from jf1uids._geometry.geometry import _center_of_volume, _r_hat_alpha
 from jf1uids.option_classes.simulation_config import BACKWARDS, CARTESIAN, CYLINDRICAL, FORWARDS, SPHERICAL, STATE_TYPE
 
 # jf1uids containers
@@ -52,7 +51,8 @@ def time_integration(
     sharding: Union[NoneType, jax.NamedSharding] = None
 ) -> Union[STATE_TYPE, SnapshotData]:
     
-    """Integrate the fluid equations in time. For the options of
+    """
+    Integrate the fluid equations in time. For the options of
     the time integration see the simulation configuration and
     the simulation parameters.
 
@@ -89,10 +89,11 @@ def time_integration(
                 # Subtract alias size to avoid double-counting memory shared between different components
                 total = compiled_stats.temp_size_in_bytes + compiled_stats.argument_size_in_bytes \
                     + compiled_stats.output_size_in_bytes - compiled_stats.alias_size_in_bytes
-                print("=== Compiled time integration memory usage PER DEVICE ===")
+                print("=== Compiled memory usage PER DEVICE ===")
                 print(f"Temp size: {compiled_stats.temp_size_in_bytes / (1024**2):.2f} MB")
                 print(f"Argument size: {compiled_stats.argument_size_in_bytes / (1024**2):.2f} MB")
                 print(f"Total size: {total/(1024**2):.2f} MB")
+                print("========================================")
 
         final_state = _time_integration(primitive_state, config, params, helper_data, helper_data_pad, registered_variables, snapshot_callable)
 
@@ -138,25 +139,17 @@ def _time_integration(
     else:
         primitive_state = _boundary_handler(primitive_state, config)
 
-    if config.return_snapshots or config.return_statistics:
+    if config.return_snapshots:
         time_points = jnp.zeros(config.num_snapshots)
 
-        if config.return_snapshots:
-            states = jnp.zeros((config.num_snapshots, *original_shape))
-        else:
-            states = None
+        states = jnp.zeros((config.num_snapshots, *original_shape)) if config.snapshot_settings.return_states else None
+        total_mass = jnp.zeros(config.num_snapshots) if config.snapshot_settings.return_total_mass else None
+        total_energy = jnp.zeros(config.num_snapshots) if config.snapshot_settings.return_total_energy else None
+        internal_energy = jnp.zeros(config.num_snapshots) if config.snapshot_settings.return_internal_energy else None
+        kinetic_energy = jnp.zeros(config.num_snapshots) if config.snapshot_settings.return_kinetic_energy else None
+        radial_momentum = jnp.zeros(config.num_snapshots) if config.snapshot_settings.return_radial_momentum else None
 
-        if config.return_statistics:
-            total_mass = jnp.zeros(config.num_snapshots)
-            total_energy = jnp.zeros(config.num_snapshots)
-            internal_energy = jnp.zeros(config.num_snapshots)
-            kinetic_energy = jnp.zeros(config.num_snapshots)
-            radial_momentum = jnp.zeros(config.num_snapshots)
-
-        if config.self_gravity:
-            gravitational_energy = jnp.zeros(config.num_snapshots)
-        else:
-            gravitational_energy = None
+        gravitational_energy = jnp.zeros(config.num_snapshots) if config.snapshot_settings.return_gravitational_energy and config.self_gravity else None
 
         current_checkpoint = 0
 
@@ -168,40 +161,48 @@ def _time_integration(
 
     def update_step(carry):
 
-        if config.return_snapshots or config.return_statistics:
+        if config.return_snapshots:
             time, state, snapshot_data = carry
 
             def update_snapshot_data(time, state, snapshot_data):
                 time_points = snapshot_data.time_points.at[snapshot_data.current_checkpoint].set(time)
 
-                if config.return_snapshots:
-                    # get the unpadded state to store in the snapshot
-                    unpad_state = _unpad(state, config)
+                unpad_state = _unpad(state, config)
+
+                if config.snapshot_settings.return_states:
                     states = snapshot_data.states.at[snapshot_data.current_checkpoint].set(unpad_state)
                 else:
                     states = None
 
-                if config.return_statistics:
-                    unpad_state = _unpad(state, config)
+                if config.snapshot_settings.return_total_mass:
                     total_mass = snapshot_data.total_mass.at[snapshot_data.current_checkpoint].set(calculate_total_mass(unpad_state, helper_data, config))
-                    total_energy = snapshot_data.total_energy.at[snapshot_data.current_checkpoint].set(calculate_total_energy(unpad_state, helper_data, params.gamma, params.gravitational_constant, config, registered_variables))
-
-                    internal_energy = snapshot_data.internal_energy.at[snapshot_data.current_checkpoint].set(calculate_internal_energy(unpad_state, helper_data, params.gamma, config, registered_variables))
-                    kinetic_energy = snapshot_data.kinetic_energy.at[snapshot_data.current_checkpoint].set(calculate_kinetic_energy(unpad_state, helper_data, config, registered_variables))
-
-                    radial_momentum = snapshot_data.radial_momentum.at[snapshot_data.current_checkpoint].set(calculate_radial_momentum(unpad_state, helper_data, config, registered_variables))
-
-                    if config.self_gravity:
-                        gravitational_energy = snapshot_data.gravitational_energy.at[snapshot_data.current_checkpoint].set(calculate_gravitational_energy(unpad_state, helper_data, params.gravitational_constant, config, registered_variables))
-                    else:
-                        gravitational_energy = None
                 else:
                     total_mass = None
+
+                if config.snapshot_settings.return_total_energy:
+                    total_energy = snapshot_data.total_energy.at[snapshot_data.current_checkpoint].set(calculate_total_energy(unpad_state, helper_data, params.gamma, params.gravitational_constant, config, registered_variables))
+                else:
                     total_energy = None
+
+                if config.snapshot_settings.return_internal_energy:
+                    internal_energy = snapshot_data.internal_energy.at[snapshot_data.current_checkpoint].set(calculate_internal_energy(unpad_state, helper_data, params.gamma, config, registered_variables))
+                else:
                     internal_energy = None
+
+                if config.snapshot_settings.return_kinetic_energy:
+                    kinetic_energy = snapshot_data.kinetic_energy.at[snapshot_data.current_checkpoint].set(calculate_kinetic_energy(unpad_state, helper_data, config, registered_variables))
+                else:
                     kinetic_energy = None
-                    gravitational_energy = None
+
+                if config.snapshot_settings.return_radial_momentum:
+                    radial_momentum = snapshot_data.radial_momentum.at[snapshot_data.current_checkpoint].set(calculate_radial_momentum(unpad_state, helper_data, config, registered_variables))
+                else:
                     radial_momentum = None
+
+                if config.self_gravity and config.snapshot_settings.return_gravitational_energy:
+                    gravitational_energy = snapshot_data.gravitational_energy.at[snapshot_data.current_checkpoint].set(calculate_gravitational_energy(unpad_state, helper_data, params.gravitational_constant, config, registered_variables))
+                else:
+                    gravitational_energy = None
 
                 current_checkpoint = snapshot_data.current_checkpoint + 1
                 snapshot_data = snapshot_data._replace(time_points = time_points, states = states, current_checkpoint = current_checkpoint, total_mass = total_mass, total_energy = total_energy, internal_energy = internal_energy, kinetic_energy = kinetic_energy, gravitational_energy = gravitational_energy, radial_momentum = radial_momentum)
@@ -249,8 +250,6 @@ def _time_integration(
         else:
             time, state = carry
 
-        # dt = _cfl_time_step(state, config.grid_spacing, params.dt_max, params.gamma, params.C_cfl)
-
         # do not differentiate through the choice of the time step
         if not config.fixed_timestep:
             if config.source_term_aware_timestep:
@@ -260,7 +259,7 @@ def _time_integration(
         else:
             dt = params.t_end / config.num_timesteps
 
-        if config.use_specific_snapshot_timepoints:
+        if config.use_specific_snapshot_timepoints and config.return_snapshots:
             dt = jnp.minimum(dt, params.snapshot_timepoints[snapshot_data.current_checkpoint] - time)
 
         if config.exact_end_time and not config.use_specific_snapshot_timepoints:
@@ -276,7 +275,7 @@ def _time_integration(
 
         time += dt
 
-        if config.use_specific_snapshot_timepoints:
+        if config.use_specific_snapshot_timepoints and config.return_snapshots:
             snapshot_data = jax.lax.cond(
                 jnp.abs(time - params.t_end) < 1e-12,
                 update_snapshot_data,
@@ -287,7 +286,7 @@ def _time_integration(
         if config.progress_bar:
             jax.debug.callback(_show_progress, time, params.t_end)
 
-        if config.return_snapshots or config.return_statistics or config.activate_snapshot_callback:
+        if config.return_snapshots or config.activate_snapshot_callback:
             carry = (time, state, snapshot_data)
         else:
             carry = (time, state)
@@ -298,13 +297,13 @@ def _time_integration(
         return update_step(carry)
     
     def condition(carry):
-        if config.return_snapshots or config.return_statistics or config.activate_snapshot_callback:
+        if config.return_snapshots or config.activate_snapshot_callback:
             t, _, _ = carry
         else:
             t, _ = carry
         return t < params.t_end
     
-    if config.return_snapshots or config.return_statistics or config.activate_snapshot_callback:
+    if config.return_snapshots or config.activate_snapshot_callback:
         carry = (0.0, primitive_state, snapshot_data)
     else:
         carry = (0.0, primitive_state)
@@ -320,11 +319,12 @@ def _time_integration(
         carry = jax.lax.fori_loop(0, config.num_timesteps, update_step_for, carry)
 
 
-    if config.return_snapshots or config.return_statistics or config.activate_snapshot_callback:
+    if config.return_snapshots or config.activate_snapshot_callback:
         _, state, snapshot_data = carry
 
-        if config.return_snapshots or config.return_statistics:
-            snapshot_data = snapshot_data._replace(final_state = _unpad(state, config))
+        if config.return_snapshots:
+            if config.snapshot_settings.return_final_state:
+                snapshot_data = snapshot_data._replace(final_state = _unpad(state, config))
             return snapshot_data
         else:
             return state

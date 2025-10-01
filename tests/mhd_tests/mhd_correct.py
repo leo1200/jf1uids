@@ -48,12 +48,14 @@ from tqdm import tqdm
 import numpy as np
 import os
 
+# THIS IS THE NEWER ONE
+
 # ===================================================
 # =============== ↓ simulation setup ↓ ==============
 # ===================================================
 
-snapshot_timepoints_train = jnp.array([0.0, 0.05, 0.1, 0.15, 0.2])
-snapshot_timepoints = jnp.linspace(0.0, 0.2, 50)
+snapshot_timepoints_train = jnp.array([0.05, 0.1, 0.15, 0.2])
+snapshot_timepoints_eval = jnp.linspace(0.0, 0.2, 50)
 
 # baseline config
 baseline_config = SimulationConfig(
@@ -68,7 +70,7 @@ baseline_config = SimulationConfig(
     exact_end_time = True,
     return_snapshots = True,
     use_specific_snapshot_timepoints = True,
-    num_snapshots = len(snapshot_timepoints),
+    num_snapshots = len(snapshot_timepoints_train),
 )
 
 # common variable registry
@@ -78,7 +80,7 @@ registered_variables = get_registered_variables(baseline_config)
 params = SimulationParams(
     t_end = 0.2,
     C_cfl = 0.1,
-    snapshot_timepoints = snapshot_timepoints
+    snapshot_timepoints = snapshot_timepoints_train
 )
 
 def get_blast_setup(num_cells):
@@ -273,15 +275,15 @@ def train_step(network_params_arrays, opt_state):
 # ===================================================
 # ================== ↓ Training Loop ↓ ==============
 # ===================================================
-# print("Starting training with optax...")
-# num_steps = 2000
-# losses = []
+print("Starting training with optax...")
+num_steps = 2000
+losses = []
 
-# # This variable will hold the trained parameters and be updated in the loop
-# trained_params = neural_net_params
+# This variable will hold the trained parameters and be updated in the loop
+trained_params = neural_net_params
 
-# # Timing
-# start_time = timer()
+# Timing
+start_time = timer()
 
 # # The main training loop
 # pbar = tqdm(range(num_steps))
@@ -295,11 +297,11 @@ def train_step(network_params_arrays, opt_state):
 #         best_params = trained_params
 #     pbar.set_description(f"Step {step+1}/{num_steps} | Loss: {loss:.2e}")
 
-# # After training, use the best parameters found
+# After training, use the best parameters found
 # trained_params = best_params
 
-# end_time = timer()
-# print(f"Training finished in {end_time - start_time:.2f} seconds.")
+end_time = timer()
+print(f"Training finished in {end_time - start_time:.2f} seconds.")
 
 # # # save the trained parameters using pickle
 import pickle
@@ -315,7 +317,7 @@ with open(output_path, "rb") as f:
 
 # save the losses as npz
 losses_output_path = os.path.join(output_dir, "cnn_mhd_corrector_losses.npz")
-# np.savez(losses_output_path, losses=losses)
+np.savez(losses_output_path, losses=losses)
 # load the losses
 losses = np.load(losses_output_path)['losses']
 
@@ -323,18 +325,52 @@ losses = np.load(losses_output_path)['losses']
 # ================== ↑ Training Loop ↑ ==============
 # ===================================================
 
-# run the low resolution simulation with the trained CNN corrector
-result_low_res_cnn = time_integration(
+# low res without correction
+result_low_res = time_integration(
     initial_state_low_res,
-    config_low_res_cnn,
-    params_low_res_cnn._replace(
-        cnn_mhd_corrector_params = params_low_res_cnn.cnn_mhd_corrector_params._replace(
-            network_params = trained_params
-        )
+    config_low_res._replace(
+        num_snapshots = len(snapshot_timepoints_eval),
+        use_specific_snapshot_timepoints = True,
+    ),
+    params._replace(
+        snapshot_timepoints = snapshot_timepoints_eval
     ),
     helper_data_low_res,
     registered_variables
 )
+
+# run the low resolution simulation with the trained CNN corrector
+result_low_res_cnn = time_integration(
+    initial_state_low_res,
+    config_low_res_cnn._replace(
+        num_snapshots = len(snapshot_timepoints_eval),
+        use_specific_snapshot_timepoints = True,
+    ),
+    params_low_res_cnn._replace(
+        cnn_mhd_corrector_params = params_low_res_cnn.cnn_mhd_corrector_params._replace(
+            network_params = trained_params
+        ),
+        snapshot_timepoints = snapshot_timepoints_eval
+    ),
+    helper_data_low_res,
+    registered_variables
+)
+
+# get the high res downsampled states at the eval timepoints
+result_high_res = time_integration(
+    initial_state_high_res,
+    config_high_res._replace(
+        num_snapshots = len(snapshot_timepoints_eval),
+        use_specific_snapshot_timepoints = True,
+    ),
+    params._replace(
+        snapshot_timepoints = snapshot_timepoints_eval
+    ),
+    helper_data_high_res,
+    registered_variables
+)
+states_high_res_downsampled = jax.vmap(downaverage_state, in_axes=(0, None), out_axes=0)(result_high_res.states, (num_cells_low_res, num_cells_low_res))
+
 
 mse_trained = jnp.mean((states_high_res_downsampled - result_low_res_cnn.states) ** 2, axis=(1, 2, 3))
 # Create a figure with GridSpec: 2 rows, 3 columns
@@ -348,48 +384,48 @@ for i in range(3):
 
 # Plot Low Res (No Correction)
 im0 = axs[0].imshow(result_low_res.states[-1, 0, :, :], extent=(0, config_low_res.box_size, 0, config_low_res.box_size),
-                    origin='lower', cmap='viridis')
-axs[0].set_title("Low Res (No Correction) (t = {:.2f})".format(result_low_res.time_points[-1]))
+                    origin='lower', cmap='viridis', rasterized=True)
+axs[0].set_title("low res (no correction) (t = {:.2f})".format(result_low_res.time_points[-1]))
 axs[0].set_xlabel("x")
 axs[0].set_ylabel("y")
 cbar = fig.colorbar(im0, ax=axs[0], fraction=0.046, pad=0.04)
-cbar.set_label("Density")
+cbar.set_label("density")
 
 # Plot Low Res (With CNN Correction)
 im1 = axs[1].imshow(result_low_res_cnn.states[-1, 0, :, :], extent=(0, config_low_res.box_size, 0, config_low_res.box_size),
-                    origin='lower', cmap='viridis')
-axs[1].set_title("Low Res (With CNN Correction) (t = {:.2f})".format(result_low_res_cnn.time_points[-1]))
+                    origin='lower', cmap='viridis', rasterized=True)
+axs[1].set_title("low res (with CNN correction) (t = {:.2f})".format(result_low_res_cnn.time_points[-1]))
 axs[1].set_xlabel("x")
 cbar = fig.colorbar(im1, ax=axs[1], fraction=0.046, pad=0.04)
-cbar.set_label("Density")
+cbar.set_label("density")
 
 # Plot High Res (Downsampled)
 im2 = axs[2].imshow(states_high_res_downsampled[-1, 0, :, :], extent=(0, config_low_res.box_size, 0, config_low_res.box_size),
-                    origin='lower', cmap='viridis')
-axs[2].set_title("High Res (Downsampled) (t = {:.2f})".format(result_high_res.time_points[-1]))
+                    origin='lower', cmap='viridis', rasterized=True)
+axs[2].set_title("high res (downsampled) (t = {:.2f})".format(result_high_res.time_points[-1]))
 axs[2].set_xlabel("x")
 cbar = fig.colorbar(im2, ax=axs[2], fraction=0.046, pad=0.04)
-cbar.set_label("Density")
+cbar.set_label("density")
 
 # --- Bottom row: MSE over time across all columns ---
 ax_mse = fig.add_subplot(gs[1, :])
-time_array = snapshot_timepoints
+time_array = snapshot_timepoints_eval
 mse_uncorrected = jnp.mean((states_high_res_downsampled - result_low_res.states) ** 2, axis=(1, 2, 3))
 mse_corrected = mse_trained
 
-ax_mse.plot(time_array, mse_uncorrected, label='No Correction')
-ax_mse.plot(time_array, mse_corrected, label='CNN Corrected')
+ax_mse.plot(time_array, mse_uncorrected, label='no correction')
+ax_mse.plot(time_array, mse_corrected, label='CNN corrected')
 # Mark the training timepoints as vertical lines (only label the first one for legend)
 for i, t in enumerate(snapshot_timepoints_train):
-    label = "Training Timepoints" if i == 0 else None
+    label = "training timepoints" if i == 0 else None
     ax_mse.axvline(t, color='gray', linestyle='--', alpha=0.5, label=label)
-ax_mse.set_xlabel("Time")
+ax_mse.set_xlabel("time")
 ax_mse.set_ylabel("MSE")
-ax_mse.set_title("Mean Squared Error Over Time")
+ax_mse.set_title("mean squared error over time")
 ax_mse.legend()
 
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, "density_and_mse.png"), dpi=500)
+plt.savefig(os.path.join(output_dir, "density_and_mse.svg"), dpi=500)
 plt.close()
 
 # === Plot and save training loss ===

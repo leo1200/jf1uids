@@ -1,7 +1,7 @@
-# # ==== GPU selection ====
-# from autocvd import autocvd
-# autocvd(num_gpus = 1, interval = 10)
-# # =======================
+# ==== GPU selection ====
+from autocvd import autocvd
+autocvd(num_gpus = 1, interval = 10)
+# =======================
 
 from jf1uids._physics_modules._cnn_mhd_corrector._cnn_mhd_corrector import CorrectorCNN
 from jf1uids._physics_modules._cnn_mhd_corrector._cnn_mhd_corrector_options import CNNMHDParams, CNNMHDconfig
@@ -210,64 +210,64 @@ def loss_fn(network_params_arrays):
     return loss
 
 
-# # Set up the optimizer using optax
-# learning_rate = 1e-3
-# optimizer = optax.adam(learning_rate)
-# opt_state = optimizer.init(neural_net_params)
+# Set up the optimizer using optax
+learning_rate = 1e-3
+optimizer = optax.adam(learning_rate)
+opt_state = optimizer.init(neural_net_params)
 
-# @eqx.filter_jit
-# def train_step(network_params_arrays, opt_state):
-#     """Performs one step of gradient descent."""
-#     loss_value, grads = eqx.filter_value_and_grad(loss_fn)(network_params_arrays)
-#     updates, opt_state = optimizer.update(grads, opt_state, network_params_arrays)
-#     network_params_arrays = eqx.apply_updates(network_params_arrays, updates)
-#     return network_params_arrays, opt_state, loss_value
+@eqx.filter_jit
+def train_step(network_params_arrays, opt_state):
+    """Performs one step of gradient descent."""
+    loss_value, grads = eqx.filter_value_and_grad(loss_fn)(network_params_arrays)
+    updates, opt_state = optimizer.update(grads, opt_state, network_params_arrays)
+    network_params_arrays = eqx.apply_updates(network_params_arrays, updates)
+    return network_params_arrays, opt_state, loss_value
 
-# # ===================================================
-# # ================== ↓ Training Loop ↓ ==============
-# # ===================================================
-# print("Starting training with optax...")
-# num_steps = 5000
-# losses = []
+# ===================================================
+# ================== ↓ Training Loop ↓ ==============
+# ===================================================
+print("Starting training with optax...")
+num_steps = 5000
+losses = []
 
-# # This variable will hold the trained parameters and be updated in the loop
-# trained_params = neural_net_params
+# This variable will hold the trained parameters and be updated in the loop
+trained_params = neural_net_params
 
-# # Timing
-# start_time = timer()
+# Timing
+start_time = timer()
 
-# # The main training loop
-# pbar = tqdm(range(num_steps))
-# best_loss = float('inf')
-# best_params = trained_params
-# for step in pbar:
-#     trained_params, opt_state, loss = train_step(trained_params, opt_state)
-#     losses.append(loss)
-#     if loss < best_loss:
-#         best_loss = loss
-#         best_params = trained_params
-#     pbar.set_description(f"Step {step+1}/{num_steps} | Loss: {loss:.2e}")
+# The main training loop
+pbar = tqdm(range(num_steps))
+best_loss = float('inf')
+best_params = trained_params
+for step in pbar:
+    trained_params, opt_state, loss = train_step(trained_params, opt_state)
+    losses.append(loss)
+    if loss < best_loss:
+        best_loss = loss
+        best_params = trained_params
+    pbar.set_description(f"Step {step+1}/{num_steps} | Loss: {loss:.2e}")
 
-# # After training, use the best parameters found
-# trained_params = best_params
+# After training, use the best parameters found
+trained_params = best_params
 
-# end_time = timer()
-# print(f"Training finished in {end_time - start_time:.2f} seconds.")
-# # ===================================================
-# # ================== ↑ Training Loop ↑ ==============
-# # ===================================================
+end_time = timer()
+print(f"Training finished in {end_time - start_time:.2f} seconds.")
+# ===================================================
+# ================== ↑ Training Loop ↑ ==============
+# ===================================================
 
 # pickle the trained parameters for later use
 import pickle
-# with open("trained_paramsX.pkl", "wb") as f:
-#     pickle.dump(trained_params, f)
+with open("trained_paramsX.pkl", "wb") as f:
+    pickle.dump(trained_params, f)
 
 # load the trained parameters if needed
 with open("trained_paramsX.pkl", "rb") as f:
     trained_params = pickle.load(f)
 
-# # save the losses for later analysis with jnp.savez
-# jnp.savez("lossesX.npz", losses = losses)
+# save the losses for later analysis with jnp.savez
+jnp.savez("lossesX.npz", losses = losses)
 
 # plot the target state and the final state after training and the
 # final state before training
@@ -343,21 +343,21 @@ def get_errors_over_time(time):
 
     return l2_error_corrected, l2_error_uncorrected
 
-# times = [0.0, 0.025, 0.05, 0.075, 0.1, 0.15, 0.175, 0.2, 0.225, 0.25]
-# l2_errors_corrected = []
-# l2_errors_uncorrected = []
-# for time in times:
-#     l2_error_corrected, l2_error_uncorrected = get_errors_over_time(time)
-#     l2_errors_corrected.append(l2_error_corrected)
-#     l2_errors_uncorrected.append(l2_error_uncorrected)
+times = [0.0, 0.025, 0.05, 0.075, 0.1, 0.15, 0.175, 0.2, 0.225, 0.25]
+l2_errors_corrected = []
+l2_errors_uncorrected = []
+for time in times:
+    l2_error_corrected, l2_error_uncorrected = get_errors_over_time(time)
+    l2_errors_corrected.append(l2_error_corrected)
+    l2_errors_uncorrected.append(l2_error_uncorrected)
 
-# # save the errors to a file
-# with open("l2_errors.pkl", "wb") as f:
-#     pickle.dump({
-#         "times": times,
-#         "l2_errors_corrected": l2_errors_corrected,
-#         "l2_errors_uncorrected": l2_errors_uncorrected
-#     }, f)
+# save the errors to a file
+with open("l2_errors.pkl", "wb") as f:
+    pickle.dump({
+        "times": times,
+        "l2_errors_corrected": l2_errors_corrected,
+        "l2_errors_uncorrected": l2_errors_uncorrected
+    }, f)
 
 # Load L2 error evolution over time
 with open("l2_errors.pkl", "rb") as f:
