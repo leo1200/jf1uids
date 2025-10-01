@@ -108,8 +108,11 @@ def make_scaling_plots(sharding = False, num_cells_list = [32, 64, 128, 256, 512
 
         if sharding:
             split = (1, 2, 2, 1)
-            sharding_mesh = jax.make_mesh(split, (VARAXIS, XAXIS, YAXIS, ZAXIS))
-            named_sharding = jax.NamedSharding(sharding_mesh, P(VARAXIS, XAXIS, YAXIS, ZAXIS))
+            axis_names = tuple(str(a) for a in (VARAXIS, XAXIS, YAXIS, ZAXIS))
+            sharding_mesh = jax.make_mesh(split, axis_names)
+            named_sharding = jax.NamedSharding(sharding_mesh, P(*axis_names))
+            # sharding_mesh = jax.make_mesh(split, (VARAXIS, XAXIS, YAXIS, ZAXIS))
+            # named_sharding = jax.NamedSharding(sharding_mesh, P(VARAXIS, XAXIS, YAXIS, ZAXIS))
             primitive_state = jax.device_put(primitive_state, named_sharding)
 
             jax.debug.visualize_array_sharding(primitive_state[0, :, :, 0])

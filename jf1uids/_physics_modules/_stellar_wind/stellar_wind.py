@@ -59,6 +59,7 @@ def _wind_injection(
             raise ValueError("Invalid wind injection scheme")
     elif config.dimensionality == 3:
         if config.wind_config.wind_injection_scheme == EI:
+            # primitive_state = _wind_ei3D_radial(params.wind_params, primitive_state, dt, config, helper_data, config.num_ghost_cells, config.wind_config.num_injection_cells, params.gamma, registered_variables, current_time, binary_state)
             primitive_state = _wind_ei3D(params.wind_params, primitive_state, dt, config, helper_data, config.num_ghost_cells, config.wind_config.num_injection_cells, params.gamma, registered_variables, current_time, binary_state)
         else:
             raise ValueError("Invalid wind injection scheme")
@@ -277,6 +278,133 @@ def dummy_multi_star_wind(wind_params: WindParams, primitive_state: STATE_TYPE, 
 #     primitive_state = primitive_state + source_term * dt
 
 #     return primitive_state
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['num_ghost_cells', 'num_injection_cells', 'registered_variables', 'config'])
+def _wind_ei3D_radial(
+    wind_params: WindParams,
+    primitive_state: STATE_TYPE,
+    dt: Float[Array, ""],
+    config: SimulationConfig,
+    helper_data: HelperData,
+    num_ghost_cells: int,
+    num_injection_cells: int,
+    gamma: Union[float, Float[Array, ""]],
+    registered_variables: RegisteredVariables,
+    current_time: Union[float, Float[Array, ""]],
+    binary_state: Union[None, Float[Array, "n"]] = None
+) -> STATE_TYPE:
+    """
+        Inject stellar wind energy/mass from multiple sources.
+        NOTE: changed to triangular-shaped cloud injection with quadratic
+              weights (weight = (1 - r/r_inj)**2 for r <= r_inj).
+    """
+
+    source_term = jnp.zeros_like(primitive_state)
+    # If you want per-source injection radii, pass an array instead and broadcast accordingly
+    r_inj = num_injection_cells * config.grid_spacing
+    V = 4.0 / 3.0 * jnp.pi * r_inj ** 3
+
+    y = helper_data.geometric_centers[..., 0] - config.box_size / 2   #x and y axis are exchanged because meshgrid indexing=xy
+    x = helper_data.geometric_centers[..., 1] - config.box_size / 2
+    z = helper_data.geometric_centers[..., 2] - config.box_size / 2
+
+    if config.binary_config.binary == True:
+        state = binary_state.reshape(-1, 7)
+        source_positions = state[:, 1:4]
+    else:
+        source_positions = wind_params.wind_injection_positions
+    dx = x[None, ...] - source_positions[:, 0, None, None, None]
+    dy = y[None, ...] - source_positions[:, 1, None, None, None]
+    dz = z[None, ...] - source_positions[:, 2, None, None, None]
+    dist = jnp.sqrt(dx ** 2 + dy ** 2 + dz ** 2)
+
+    # >>> CHANGED: compute a smooth triangular-shaped (quadratic) radial weight:
+    # weight(r) = (1 - r/r_inj)^2 for r <= r_inj, else 0
+    # This replaces the old sharp mask that used (dist <= r_inj - dx/2).
+    # The kernel is radial and will be normalized per source so that integrated
+    # injected mass = mass_rate for that source.
+    # raw_weight = jnp.where(dist <= r_inj, (1.0 - dist / r_inj) ** 2, 0.0)  # >>> CHANGED: raw per-cell weight (N, Nx, Ny, Nz)
+    r_inj = num_injection_cells * config.grid_spacing
+    cell_volume = config.grid_spacing ** 3  
+    
+    # radial Gaussian kernel (truncated at r_inj)
+    sigma = r_inj / 2.0                 # tune: smaller sigma = sharper shell
+    raw_weight = jnp.where(dist <= r_inj,
+                       jnp.exp(-(dist/sigma)**2),
+                       0.0)
+    # >>> CHANGED: Normalize weights per source so the sum(weight * dV) == 1.0
+    # sum_weights has shape (N,)
+    sum_weights = jnp.sum(raw_weight, axis=(1, 2, 3))
+    # avoid division by zero for sources with no overlapping cells (rare) by
+    # replacing zero with 1.0 (raw_weight will be zero so result is safe)
+    sum_weights_safe = jnp.where(sum_weights > 0.0, sum_weights, 1.0)
+    normalization = sum_weights_safe * cell_volume  # >>> CHANGED: S = sum(f_i) * dV
+
+    # normalized weight per cell (dimensionless); sums to 1 when multiplied by cell_volume
+    weight = raw_weight / normalization[:, None, None, None]  # >>> CHANGED
+    
+    ##### supersampling #####################
+    # 8-point subcell offsets in units of grid_spacing
+    offsets = jnp.array([[0.25,0.25,0.25],[0.75,0.25,0.25],[0.25,0.75,0.25],[0.75,0.75,0.25],
+                     [0.25,0.25,0.75],[0.75,0.25,0.75],[0.25,0.75,0.75],[0.75,0.75,0.75]])
+
+    def radial_kernel(dist, r_inj):
+        sigma = r_inj * 0.4           # tune
+        return jnp.where(dist <= r_inj, jnp.exp(-(dist/sigma)**2), 0.0)
+
+    # accumulate subsamples
+    raw_weight = 0.0
+    for off in offsets:
+        dxs = (x[None,...] + off[0]*config.gri2d_spacing) - source_positions[:,0,None,None,None]
+        dys = (y[None,...] + off[1]*config.grid_spacing) - source_positions[:,1,None,None,None]
+        dzs = (z[None,...] + off[2]*config.grid_spacing) - source_positions[:,2,None,None,None]
+        dist_sub = jnp.sqrt(dxs**2 + dys**2 + dzs**2)
+        raw_weight = raw_weight + radial_kernel(dist_sub, r_inj)
+
+    raw_weight = raw_weight / offsets.shape[0]   # average subsamples
+
+    # normalize per source as before
+    sum_weights = jnp.sum(raw_weight, axis=(1,2,3))
+    sum_weights_safe = jnp.where(sum_weights > 0.0, sum_weights, 1.0)
+    normalization = sum_weights_safe * cell_volume
+    weight = raw_weight / normalization[:,None,None,None]
+
+    if config.wind_config.real_wind_params:
+        time_value, mass_rates_value, vel_scales_value = wind_params.real_params
+        mass_rates, vel_scales = get_current_wind_params(mass_rates_value, vel_scales_value, current_time, time_value)
+    else:
+        mass_rates = wind_params.wind_mass_loss_rates  
+        vel_scales = wind_params.wind_final_velocities 
+
+    # >>> CHANGED: distribute mass rate over cells using normalized weight.
+    # drho_dt_sources has shape (N, Nx, Ny, Nz); sum over sources
+    # each source contributes mass_rate * weight_cell (units: mass/time/volume)
+    drho_dt_sources = mass_rates[:, None, None, None] * weight  # >>> CHANGED
+    drho_dt = jnp.sum(drho_dt_sources, axis=0)  
+
+    # >>> CHANGED: energy injection rate per source follows the same weighting
+    dE_dt_sources = (0.5 * (vel_scales ** 2) * mass_rates)[:, None, None, None] * weight  # >>> CHANGED
+    dE_dt = jnp.sum(dE_dt_sources, axis=0) 
+
+    source_term = source_term.at[registered_variables.density_index].set(drho_dt)
+
+    # Update density in primitives
+    updated_density = primitive_state[registered_variables.density_index]
+    updated_density = jnp.where(drho_dt > 0.0, updated_density + drho_dt * dt, updated_density)
+
+    # supply the multi-source dE_dt and updated_density.
+    u = jnp.sqrt(
+        primitive_state[registered_variables.velocity_index.x] ** 2
+        + primitive_state[registered_variables.velocity_index.y] ** 2
+        + primitive_state[registered_variables.velocity_index.z] ** 2
+    )
+
+    dp_dt = pressure_from_energy(dE_dt, updated_density, u, gamma)
+    source_term = source_term.at[registered_variables.pressure_index].set(dp_dt)
+    primitive_state = primitive_state + source_term * dt
+
+    return primitive_state
+
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['num_ghost_cells', 'num_injection_cells', 'registered_variables', 'config'])
@@ -304,9 +432,9 @@ def _wind_ei3D(
     r_inj = num_injection_cells * config.grid_spacing
     V = 4.0 / 3.0 * jnp.pi * r_inj ** 3
 
-    y = helper_data.geometric_centers[..., 0] - config.box_size / 2   #x and y axis are exchanged because meshgrid indexing=xy
-    x = helper_data.geometric_centers[..., 1] - config.box_size / 2
-    z = helper_data.geometric_centers[..., 2] - config.box_size / 2
+    y = helper_data.volumetric_centers[..., 0] - config.box_size / 2   #x and y axis are exchanged because meshgrid indexing=xy
+    x = helper_data.volumetric_centers[..., 1] - config.box_size / 2
+    z = helper_data.volumetric_centers[..., 2] - config.box_size / 2
 
     if config.binary_config.binary == True:
         state = binary_state.reshape(-1, 7)
@@ -358,62 +486,197 @@ def _wind_ei3D(
 
     return primitive_state
 
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['num_ghost_cells', 'num_injection_cells', 'registered_variables', 'config'])
+def _wind_ei3D_tsc(
+    wind_params: WindParams,
+    primitive_state: STATE_TYPE,
+    dt: Float[Array, ""],
+    config: SimulationConfig,
+    helper_data: HelperData,
+    num_ghost_cells: int,
+    num_injection_cells: int,
+    gamma: Union[float, Float[Array, ""]],
+    registered_variables: RegisteredVariables,
+    current_time: Union[float, Float[Array, ""]],
+    binary_state: Union[None, Float[Array, "n"]] = None
+) -> STATE_TYPE:
+    """
+    Inject stellar wind energy/mass from multiple sources using a TRUE
+    separable 3D TSC (Triangular-Shaped-Cloud) kernel.
 
-# @jaxtyped(typechecker=typechecker)
-# @partial(jax.jit, static_argnames=['num_ghost_cells', 'num_injection_cells', 'registered_variables'])
-# def _wind_ei3D_superres(wind_params: WindParams, primitive_state: STATE_TYPE, dt: Float[Array, ""], config: SimulationConfig, helper_data: HelperData, num_ghost_cells: int, num_injection_cells: int, gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables) -> STATE_TYPE:
-#     """Inject stellar wind into the simulation by an thermal-energy-injection scheme (EI).
+    Notes on changes:
+    - Replaces the isotropic radial quadratic kernel with a separable 1D TSC
+      kernel along each axis: w3D = w(x) * w(y) * w(z).
+    - The per-axis TSC uses the standard piecewise formula:
+        s = |dx| / (grid_spacing * num_injection_cells_scale)
+        if 0 <= s < 0.5:   w = 3/4 - s^2
+        if 0.5 <= s < 1.5: w = 0.5 * (1.5 - s)^2
+        else:              w = 0
+      with support up to s < 1.5 (so physical support radius = 1.5 * scale).
+    - For compatibility with the user's previous interface, the TSC scale is
+      taken to be `num_injection_cells * grid_spacing` so that
+      num_injection_cells=1 corresponds to a kernel spanning ≈3 cells (±1.5 dx).
+    - We normalize per source so sum(weight * dV) == 1, ensuring integrated
+      injected mass == mass_rate for each source.
+    """
 
-#     Args:
-#         wind_params: The wind parameters.
-#         primitive_state: The primitive state array.
-#         dt: The time step.
-#         helper_data: The helper data.
-#         num_ghost_cells: The number of ghost cells.
-#         num_injection_cells: The number of injection cells.
-#         gamma: The adiabatic index.
+    source_term = jnp.zeros_like(primitive_state)
 
-#     Returns:
-#         The primitive state array with the stellar wind injected.
-#     """
+    # cell volume (used for normalization). >>> CHANGED TO TSC uses same normalization approach.
+    cell_volume = config.grid_spacing ** 3
 
-#     source_term = jnp.zeros_like(primitive_state)
-#     r_inj = num_injection_cells * config.grid_spacing
+    # grid-centered coordinates (same as before)
+    y = helper_data.geometric_centers[..., 0] - config.box_size / 2   # x/y swapped due to meshgrid indexing=xy
+    x = helper_data.geometric_centers[..., 1] - config.box_size / 2
+    z = helper_data.geometric_centers[..., 2] - config.box_size / 2
 
-#     total_mass_change = wind_params.wind_mass_loss_rate * dt
-#     total_energy_change = 0.5 * wind_params.wind_final_velocity**2 * total_mass_change
+    # get source positions (binary handling unchanged)
+    if config.binary_config.binary == True:
+        state = binary_state.reshape(-1, 7)
+        source_positions = state[:, 1:4]
+    else:
+        source_positions = wind_params.wind_injection_positions
 
-#     superres_factor = 8
-#     superres_grid_size = superres_factor * num_injection_cells * 2
-#     superres_grid_spacing = config.grid_spacing / superres_factor
+    # dx, dy, dz shape: (N_sources, Nx, Ny, Nz)
+    dx = x[None, ...] - source_positions[:, 0, None, None, None]
+    dy = y[None, ...] - source_positions[:, 1, None, None, None]
+    dz = z[None, ...] - source_positions[:, 2, None, None, None]
+
+    # >>> CHANGED TO TSC:
+    # Define per-axis TSC kernel (separable). We scale distances by:
+    # scale = grid_spacing * num_injection_cells. If num_injection_cells == 1,
+    # this reduces to the canonical TSC support of 1.5 * dx.
+    # s = abs(delta) / scale
+    # support: s < 1.5
+    scale = config.grid_spacing * jnp.maximum(1, num_injection_cells)  # avoid 0
+    sx = jnp.abs(dx) / scale
+    sy = jnp.abs(dy) / scale
+    sz = jnp.abs(dz) / scale
+
+    # 1D TSC function (vectorized via jnp.where)
+    # w_1d(s) = { 3/4 - s^2              , 0 <= s < 0.5
+    #            { 0.5*(1.5 - s)^2        , 0.5 <= s < 1.5
+    #            { 0                      , s >= 1.5
+    def tsc_1d(s):
+        w = jnp.where(
+            s < 0.5,
+            0.75 - s ** 2,
+            jnp.where(s < 1.5, 0.5 * (1.5 - s) ** 2, 0.0),
+        )
+        return w
+
+    wx = tsc_1d(sx)
+    wy = tsc_1d(sy)
+    wz = tsc_1d(sz)
+
+    # separable 3D weight (dimensionless)
+    # raw_weight shape: (N_sources, Nx, Ny, Nz)
+    raw_weight = wx * wy * wz  # >>> CHANGED TO TSC: separable product kernel
     
-#     half_width = superres_grid_size * superres_grid_spacing / 2
+    # >>> CHANGED TO TSC: Normalize per-source so sum(raw_weight * cell_volume) == 1.
+    # sum_weights (N_sources,)
+    sum_weights = jnp.sum(raw_weight, axis=(1, 2, 3))
+    # avoid division by zero for sources with no overlapping cells
+    sum_weights_safe = jnp.where(sum_weights > 0.0, sum_weights, 1.0)
+    normalization = sum_weights_safe * cell_volume  # has units of volume
+    weight = raw_weight / normalization[:, None, None, None]  # now has units 1/volume
 
-#     x = jnp.linspace(-half_width, half_width, superres_grid_size)
-#     y = jnp.linspace(-half_width, half_width, superres_grid_size)
-#     z = jnp.linspace(-half_width, half_width, superres_grid_size)
-#     X, Y, Z = jnp.meshgrid(x, y, z, indexing='ij')
-#     R = jnp.sqrt(X**2 + Y**2 + Z**2)
-#     superres_injection_weights = R <= r_inj
-#     superres_injection_weights = superres_injection_weights / jnp.sum(superres_injection_weights)
+    # fetch (possibly time-dependent) mass rates and velocity scales (unchanged)
+    if config.wind_config.real_wind_params:
+        time_value, mass_rates_value, vel_scales_value = wind_params.real_params
+        mass_rates, vel_scales = get_current_wind_params(mass_rates_value, vel_scales_value, current_time, time_value)
+    else:
+        mass_rates = wind_params.wind_mass_loss_rates
+        vel_scales = wind_params.wind_final_velocities
+
+    # distribute mass rate over cells using the normalized TSC weights
+    # drho_dt_sources shape: (N_sources, Nx, Ny, Nz)
+    drho_dt_sources = mass_rates[:, None, None, None] * weight  # mass/time/volume per cell from each source
+    drho_dt = jnp.sum(drho_dt_sources, axis=0)  # total dm/(dt dV) in each cell
+
+    # energy injection (per-source kinetic energy -> same separable weighting)
+    dE_dt_sources = (0.5 * (vel_scales ** 2) * mass_rates)[:, None, None, None] * weight
+    dE_dt = jnp.sum(dE_dt_sources, axis=0)
+
+    # put mass source into source_term and update primitives (same as before)
+    source_term = source_term.at[registered_variables.density_index].set(drho_dt)
+
+    # Update density in primitives (unchanged logic)
+    updated_density = primitive_state[registered_variables.density_index]
+    updated_density = jnp.where(drho_dt > 0.0, updated_density + drho_dt * dt, updated_density)
+
+    # velocity magnitude (unchanged)
+    u = jnp.sqrt(
+        primitive_state[registered_variables.velocity_index.x] ** 2
+        + primitive_state[registered_variables.velocity_index.y] ** 2
+        + primitive_state[registered_variables.velocity_index.z] ** 2
+    )
+
+    # convert energy injection to pressure change (same helper)
+    dp_dt = pressure_from_energy(dE_dt, updated_density, u, gamma)
+    source_term = source_term.at[registered_variables.pressure_index].set(dp_dt)
+
+    # finally update primitives
+    primitive_state = primitive_state + source_term * dt
+
+    return primitive_state
 
 
-#     # sum pool down the mask to get to a mask of size (num_injection_cells * 2)^3
-#     superres_injection_weights = superres_injection_weights.reshape((num_injection_cells * 2, superres_factor,
-#                                    num_injection_cells * 2, superres_factor,
-#                                    num_injection_cells * 2, superres_factor)).sum(axis=(1, 3, 5))
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['num_ghost_cells', 'num_injection_cells', 'registered_variables'])
+def _wind_ei3D_superres(wind_params: WindParams, primitive_state: STATE_TYPE, dt: Float[Array, ""], config: SimulationConfig, helper_data: HelperData, num_ghost_cells: int, num_injection_cells: int, gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables) -> STATE_TYPE:
+    """Inject stellar wind into the simulation by an thermal-energy-injection scheme (EI).
+
+    Args:
+        wind_params: The wind parameters.
+        primitive_state: The primitive state array.
+        dt: The time step.
+        helper_data: The helper data.
+        num_ghost_cells: The number of ghost cells.
+        num_injection_cells: The number of injection cells.
+        gamma: The adiabatic index.
+
+    Returns:
+        The primitive state array with the stellar wind injected.
+    """
+
+    source_term = jnp.zeros_like(primitive_state)
+    r_inj = num_injection_cells * config.grid_spacing
+
+    total_mass_change = wind_params.wind_mass_loss_rate * dt
+    total_energy_change = 0.5 * wind_params.wind_final_velocity**2 * total_mass_change
+
+    superres_factor = 8
+    superres_grid_size = superres_factor * num_injection_cells * 2
+    superres_grid_spacing = config.grid_spacing / superres_factor
+    
+    half_width = superres_grid_size * superres_grid_spacing / 2
+
+    x = jnp.linspace(-half_width, half_width, superres_grid_size)
+    y = jnp.linspace(-half_width, half_width, superres_grid_size)
+    z = jnp.linspace(-half_width, half_width, superres_grid_size)
+    X, Y, Z = jnp.meshgrid(x, y, z, indexing='ij')
+    R = jnp.sqrt(X**2 + Y**2 + Z**2)
+    superres_injection_weights = R <= r_inj
+    superres_injection_weights = superres_injection_weights / jnp.sum(superres_injection_weights)
+
+
+    # sum pool down the mask to get to a mask of size (num_injection_cells * 2)^3
+    superres_injection_weights = superres_injection_weights.reshape((num_injection_cells * 2, superres_factor,
+                                   num_injection_cells * 2, superres_factor,
+                                   num_injection_cells * 2, superres_factor)).sum(axis=(1, 3, 5))
     
 
-#     injection_weights = jnp.zeros_like(primitive_state[0])
-#     half_index = primitive_state[0].shape[0] // 2
-#     injection_weights = injection_weights.at[half_index - num_injection_cells:half_index + num_injection_cells, half_index - num_injection_cells:half_index + num_injection_cells, half_index - num_injection_cells:half_index + num_injection_cells].set(superres_injection_weights)
+    injection_weights = jnp.zeros_like(primitive_state[0])
+    half_index = primitive_state[0].shape[0] // 2
+    injection_weights = injection_weights.at[half_index - num_injection_cells:half_index + num_injection_cells, half_index - num_injection_cells:half_index + num_injection_cells, half_index - num_injection_cells:half_index + num_injection_cells].set(superres_injection_weights)
 
-#     source_term = source_term.at[registered_variables.density_index].set(total_mass_change * injection_weights / (config.grid_spacing**3))
-#     gamma = 4/3
-#     source_term = source_term.at[registered_variables.pressure_index].set(total_energy_change * (gamma - 1) * injection_weights / (config.grid_spacing**3))
+    source_term = source_term.at[registered_variables.density_index].set(total_mass_change * injection_weights / (config.grid_spacing**3))
+    gamma = 4/3
+    source_term = source_term.at[registered_variables.pressure_index].set(total_energy_change * (gamma - 1) * injection_weights / (config.grid_spacing**3))
 
-#     primitive_state = primitive_state + source_term
+    primitive_state = primitive_state + source_term
 
-#     return primitive_state
+    return primitive_state
 
-# ======================================================
