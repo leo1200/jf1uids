@@ -73,11 +73,11 @@ def create_config(
 
 class TrainingConfig(NamedTuple):
     # Intermediate loss computation settings
+    downscale_factor: int = 2
     compute_intermediate_losses: bool = True
     n_look_behind: int = 10
 
     # Loss function and related settings
-    loss_function: Optional[Callable] = None
     loss_weights: Optional[Dict[str, float]] = None
     use_relative_error: bool = False
 

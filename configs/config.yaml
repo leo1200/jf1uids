@@ -1,11 +1,14 @@
 defaults:
   - _self_
   - training: basic_training
-  - data: on_the_fly
+  - data: data
   - models: cnn
 
 experiment:
-  name: "n_look_behind_works"
+  name: "experiment_1"
+
+data:
+  debug: ${training.debug}
 
 hydra:
   job:

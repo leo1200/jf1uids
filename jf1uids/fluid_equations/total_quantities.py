@@ -22,7 +22,7 @@ from jf1uids.fluid_equations.fluid import get_absolute_velocity, total_energy_fr
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
 def calculate_internal_energy(state, helper_data, gamma, config, registered_variables):
-    num_ghost_cells = config.num_ghost_cells
+
     p = state[registered_variables.pressure_index]
 
     if config.cosmic_ray_config.cosmic_rays:
@@ -32,15 +32,37 @@ def calculate_internal_energy(state, helper_data, gamma, config, registered_vari
     internal_energy = p / (gamma - 1)
 
     if config.dimensionality == 1:
-        return jnp.sum(internal_energy[num_ghost_cells:-num_ghost_cells] * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])
+        return jnp.sum(internal_energy * helper_data.cell_volumes)
     else:
         return jnp.sum(internal_energy * config.grid_spacing**config.dimensionality)
+    
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+def calculate_radial_momentum(state, helper_data, config, registered_variables):
+
+    rho = state[registered_variables.density_index]
+    box_center = jnp.zeros(config.dimensionality) + config.box_size / 2
+    geometric_centers = helper_data.geometric_centers
+    r_hat = (geometric_centers - box_center) / jnp.linalg.norm(geometric_centers - box_center, axis = -1, keepdims=True)
+    
+    if config.dimensionality == 1:
+        u = state[registered_variables.velocity_index]
+    else:
+        u = state[registered_variables.velocity_index.x:registered_variables.velocity_index.x + config.dimensionality]
+    
+    u_radial = jnp.sum(jnp.moveaxis(u, 0, -1) * r_hat, axis = -1)
+
+    radial_momentum = rho * u_radial
+
+    if config.dimensionality == 1:
+        return jnp.sum(radial_momentum * helper_data.cell_volumes)
+    else:
+        return jnp.sum(radial_momentum * config.grid_spacing**config.dimensionality)
 
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
 def calculate_kinetic_energy(state, helper_data, config, registered_variables):
-    num_ghost_cells = config.num_ghost_cells
 
     rho = state[registered_variables.density_index]
     u = get_absolute_velocity(state, config, registered_variables)
@@ -48,7 +70,7 @@ def calculate_kinetic_energy(state, helper_data, config, registered_variables):
     kinetic_energy = 0.5 * rho * u ** 2
 
     if config.dimensionality == 1:
-        return jnp.sum(kinetic_energy[num_ghost_cells:-num_ghost_cells] * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])
+        return jnp.sum(kinetic_energy * helper_data.cell_volumes)
     else:
         return jnp.sum(kinetic_energy * config.grid_spacing**config.dimensionality)
 
@@ -58,14 +80,12 @@ def calculate_kinetic_energy(state, helper_data, config, registered_variables):
 @partial(jax.jit, static_argnames=['config', 'registered_variables'])
 def calculate_gravitational_energy(state, helper_data, gravitational_constant, config, registered_variables):
     
-    num_ghost_cells = config.num_ghost_cells
-
     rho = state[registered_variables.density_index]
     
     potential = _compute_gravitational_potential(rho, config.grid_spacing, config, gravitational_constant)
     gravitational_energy = 0.5 * rho * potential
     if config.dimensionality == 1:
-        return jnp.sum(gravitational_energy * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])
+        return jnp.sum(gravitational_energy * helper_data.cell_volumes)
     else:
         return jnp.sum(gravitational_energy * config.grid_spacing**config.dimensionality)
 
@@ -93,8 +113,6 @@ def calculate_total_energy(
         The total energy.
     """
 
-    num_ghost_cells = config.num_ghost_cells
-
     rho = primitive_state[registered_variables.density_index]
     u = get_absolute_velocity(primitive_state, config, registered_variables)
     p = primitive_state[registered_variables.pressure_index]
@@ -108,11 +126,8 @@ def calculate_total_energy(
         potential = _compute_gravitational_potential(rho, config.grid_spacing, config, gravitational_constant)
         energy += 0.5 * rho * potential
 
-    slice_off_ghost_cells = (slice(num_ghost_cells, -num_ghost_cells),) * config.dimensionality
-    energy = energy[slice_off_ghost_cells]
-
     if config.dimensionality == 1:
-        return jnp.sum(energy * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])
+        return jnp.sum(energy * helper_data.cell_volumes)
     else:
         return jnp.sum(energy * config.grid_spacing**config.dimensionality)
 
@@ -138,8 +153,6 @@ def calculate_total_mass(
     num_ghost_cells = config.num_ghost_cells
 
     if config.dimensionality == 1:
-        return jnp.sum(primitive_state[0, num_ghost_cells:-num_ghost_cells] * helper_data.cell_volumes[num_ghost_cells:-num_ghost_cells])
+        return jnp.sum(primitive_state[0] * helper_data.cell_volumes)
     else:
-        slice_off_ghost_cells = (0,) + (slice(num_ghost_cells, -num_ghost_cells),) * config.dimensionality
-        # note that here the box size is assumed to be the box size without the ghost cells
-        return jnp.sum(primitive_state[slice_off_ghost_cells]) * config.box_size**config.dimensionality
+        return jnp.sum(primitive_state[0]) * config.box_size**config.dimensionality

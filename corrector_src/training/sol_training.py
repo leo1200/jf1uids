@@ -4,6 +4,7 @@ autocvd(num_gpus=1)
 
 import os
 
+# os.environ["JAX_TRACEBACK_FILTERING"] = "off"
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 # os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 # os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.2"
@@ -19,11 +20,8 @@ import numpy as np
 import jax.numpy as jnp
 import jax
 
-from corrector_src.training.time_integration_w_training import (
-    time_integration_training,
-    time_integration_training_and_saving,
-    time_integration_training_DEBUG,
-)
+
+from corrector_src.training.solver_in_loop_train import time_integration_training
 
 from corrector_src.training.training_config import TrainingConfig
 from corrector_src.model._cnn_mhd_corrector import CorrectorCNN
@@ -43,9 +41,9 @@ import equinox as eqx
 import matplotlib.pyplot as plt
 import optax
 import time
-from omegaconf import OmegaConf
 import hydra
 from hydra.utils import get_original_cwd
+from hydra.utils import instantiate
 
 
 @hydra.main(version_base=None, config_path="../../configs", config_name="config")
@@ -55,22 +53,23 @@ def training_loop(cfg):
     downsampling_factor = cfg.data.downscaling_factor
     epochs = cfg.training.epochs
     n_look_behind = cfg.training.n_look_behind
-    generate_data_on_fly = False
+
+    assert cfg.data.num_snapshots % n_look_behind == 0, (
+        f"total steps not divisible by data lag, got {n_look_behind} and {cfg.data.num_snapshots}"
+    )
 
     # Training configuration
     training_config = TrainingConfig(
         compute_intermediate_losses=True,
         n_look_behind=n_look_behind,
-        loss_function=mse_loss,
         loss_weights=None,
         use_relative_error=False,
     )
+    loss_function = mse_loss
 
-    model = CorrectorCNN(
-        in_channels=8,
-        hidden_channels=cfg.models.hidden_channels,
-        key=jax.random.PRNGKey(60),
-    )
+    key = jax.random.PRNGKey(cfg.training.rng_key)
+    model = instantiate(cfg.models, key=key)
+
     neural_net_params, neural_net_static = eqx.partition(model, eqx.is_array)
     cnn_mhd_corrector_config = CNNMHDconfig(
         cnn_mhd_corrector=True, network_static=neural_net_static
@@ -84,9 +83,11 @@ def training_loop(cfg):
 
     snapshot_losses = []
     epoch_losses = []
-    randomized_vars = [1, 1, 1]
-
-    if cfg.training.precomputed_data:
+    rng_seed = 112
+    assert cfg.data.precomputed_data != cfg.data.generate_data_on_fly, (
+        f"given use precomputed data {cfg.data.precomputed_data} and data on the fly {cfg.data.generate_data_on_fly}"
+    )
+    if cfg.data.precomputed_data and not cfg.data.generate_data_on_fly:
         filepath = filepath_state(
             [
                 get_original_cwd(),
@@ -96,47 +97,44 @@ def training_loop(cfg):
             ]
         )
         if not os.path.exists(filepath):
+            gt_cfg_data = cfg.data
+            gt_cfg_data.debug = False
             ground_truth, _ = integrate_blast(
-                cfg.data, filepath, randomized_vars, downscale=True, save_file=True
+                cfg.data, filepath, rng_seed, downscale=True, save_file=True
             )
         else:
             ground_truth = load_states(filepath)
-        training_config._replace(ground_truth_snapshots=ground_truth)
 
     for i in range(epochs):
-        if generate_data_on_fly:
-            ground_truth, randomized_vars = integrate_blast(cfg.data, downscale=True)
-            training_config._replace(ground_truth_snapshots=ground_truth)
-        """        initial_state, config, params, helper_data, registered_variables, _ = (
-            blast.randomized_initial_blast_state(
-                num_cells_hr // downsampling_factor, randomized_vars
-            )
-        )
-        config = finalize_config(config, initial_state.shape)
-        config = config._replace(cnn_mhd_corrector_config=cnn_mhd_corrector_config)
-        params = params._replace(cnn_mhd_corrector_params=cnn_mhd_corrector_params)
-        """
+        if cfg.data.generate_data_on_fly:
+            ground_truth, rng_seed = integrate_blast(cfg.data, downscale=True)
+
         initial_state, config, params, helper_data, registered_variables = (
             prepare_initial_state(
                 cfg.data,
-                randomized_vars,
+                rng_seed,
                 cnn_mhd_corrector_config,
                 cnn_mhd_corrector_params,
             )
         )
         time_train = time.time()
-        if cfg.training.return_full_sim and i % cfg.training.return_full_sim_epoch_interval == 0:
-            losses, new_network_params, opt_state, full_sim = time_integration_training_and_saving(
-                initial_state,
-                config,
-                params,
-                helper_data,
-                registered_variables,
-                training_config,
-                ground_truth,
-                optimizer,
-                opt_state,
-                train_early_steps=cfg.training.early_steps,
+        if (
+            cfg.training.return_full_sim
+            and i % cfg.training.return_full_sim_epoch_interval == 0
+            and not cfg.training.debug
+        ):
+            losses, new_network_params, opt_state, full_sim = time_integration_training(
+                initial_state=initial_state,
+                config=config,
+                params=params,
+                helper_data=helper_data,
+                registered_variables=registered_variables,
+                training_config=training_config,
+                target_data=ground_truth,
+                optimizer=optimizer,
+                opt_state=opt_state,
+                loss_function=loss_function,
+                save_full_sim=True,
             )
             np.save(
                 f"sim_epoch_{i}.npy",
@@ -146,7 +144,7 @@ def training_loop(cfg):
                 print("found nans in the final states running rollback")
                 initial_state, config, params, helper_data, registered_variables, _ = (
                     blast.randomized_initial_blast_state(
-                        num_cells_hr // downsampling_factor, randomized_vars
+                        num_cells_hr // downsampling_factor, rng_seed
                     )
                 )
                 config = finalize_config(config, initial_state.shape)
@@ -166,20 +164,41 @@ def training_loop(cfg):
                 else:
                     print("nan not found in rb")
 
-        else:
-            losses, new_network_params, opt_state = time_integration_training(
-                initial_state,
-                config,
-                params,
-                helper_data,
-                registered_variables,
-                training_config,
-                ground_truth,
-                optimizer,
-                opt_state,
-                train_early_steps=cfg.training.early_steps,
+        elif cfg.training.debug:
+            err, (losses, new_network_params, opt_state, _) = time_integration_training(
+                initial_state=initial_state,
+                config=config,
+                params=params,
+                helper_data=helper_data,
+                registered_variables=registered_variables,
+                training_config=training_config,
+                target_data=ground_truth,
+                optimizer=optimizer,
+                opt_state=opt_state,
+                loss_function=loss_function,
+                save_full_sim=False,
             )
+            err.throw()
+        else:
+            losses, new_network_params, opt_state, _ = time_integration_training(
+                initial_state=initial_state,
+                config=config,
+                params=params,
+                helper_data=helper_data,
+                registered_variables=registered_variables,
+                training_config=training_config,
+                target_data=ground_truth,
+                optimizer=optimizer,
+                opt_state=opt_state,
+                loss_function=loss_function,
+                save_full_sim=False,
+            )
+
         time_train = time.time() - time_train
+
+        if np.isnan(np.mean(losses)):
+            print("nan found in loss, stopping the training")
+            break
         snapshot_losses.append(losses.flatten())
         epoch_losses.append(np.mean(losses))
         cnn_mhd_corrector_params = cnn_mhd_corrector_params._replace(

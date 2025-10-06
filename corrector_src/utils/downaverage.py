@@ -18,8 +18,8 @@ def downaverage_state(state: jnp.ndarray, downsample_factor: int) -> jnp.ndarray
     Returns:
         The downaveraged JAX array with shape (NUM_VARS, h, w).
     """
-    num_vars, h_in, w_in = state.shape
-    h_out, w_out = h_in // downsample_factor, w_in // downsample_factor
+    num_vars, h_in, w_in, d_in = state.shape
+    h_out, w_out, d_out = h_in // downsample_factor, w_in // downsample_factor, d_in // downsample_factor
 
     if h_in % h_out != 0 or w_in % w_out != 0:
         raise ValueError(
@@ -27,9 +27,10 @@ def downaverage_state(state: jnp.ndarray, downsample_factor: int) -> jnp.ndarray
         )
     h_factor = h_in // h_out
     w_factor = w_in // w_out
+    d_factor = d_in // d_out
 
-    reshaped = state.reshape(num_vars, h_out, h_factor, w_out, w_factor)
-    downaveraged = reshaped.mean(axis=(2, 4))
+    reshaped = state.reshape(num_vars, h_out, h_factor, w_out, w_factor, d_out, d_factor)
+    downaveraged = reshaped.mean(axis=(2, 4, 6))
 
     return downaveraged
 

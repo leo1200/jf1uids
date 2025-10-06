@@ -1,1 +1,3 @@
-hidden_channels: 8
+_target_: corrector_src.model._cnn_mhd_corrector.CorrectorCNN
+in_channels: 8
+hidden_channels: 16

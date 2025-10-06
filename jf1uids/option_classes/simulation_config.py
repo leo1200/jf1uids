@@ -20,11 +20,24 @@ MINMOD = 0
 OSHER = 1
 DOUBLE_MINMOD = 2
 SUPERBEE = 3
+VAN_ALBADA = 4
+VAN_ALBADA_PP = 5
+
+# splitting modes
+UNSPLIT = 0
+SPLIT = 1
 
 # Riemann solvers
 HLL = 0
 HLLC = 1
 HLLC_LM = 2
+LAX_FRIEDRICHS = 3
+HYBRID_HLLC = 4
+AM_HLLC = 5
+
+# time integrators
+RK2_SSP = 0
+MUSCL = 1
 
 # boundary conditions
 OPEN_BOUNDARY = 0
@@ -46,6 +59,12 @@ VARAXIS = 0
 XAXIS = 1
 YAXIS = 2
 ZAXIS = 3
+
+# self-gravity versions
+SIMPLE_SOURCE_TERM = 0
+DONOR_ACCOUNTING = 1
+RIEMANN_SPLIT = 2
+RIEMANN_SPLIT_UNSTABLE = 3
 
 # ============================================================
 
@@ -71,6 +90,34 @@ FIELD_TYPE = Union[
 
 # =============================================================
 
+
+class SnapshotSettings(NamedTuple):
+    """Settings for the snapshot output of the simulation."""
+
+    #: Whether to return states during the simulation.
+    return_states: bool = True
+
+    #: Whether to return the final state of the simulation.
+    return_final_state: bool = False
+
+    #: Whether to return the total mass at the times the snapshots were taken.
+    return_total_mass: bool = False
+
+    #: Whether to return the total energy at the times the snapshots were taken.
+    return_total_energy: bool = False
+
+    #: Whether to return internal energy
+    return_internal_energy: bool = False
+
+    #: Whether to return kinetic energy
+    return_kinetic_energy: bool = False
+
+    #: Whether to return gravitational energy
+    return_gravitational_energy: bool = False
+
+    #: Whether to return radial momentum
+    return_radial_momentum: bool = False
+
 class BoundarySettings1D(NamedTuple):
     left_boundary: int = OPEN_BOUNDARY
     right_boundary: int = OPEN_BOUNDARY
@@ -94,6 +141,10 @@ class SimulationConfig(NamedTuple):
     #: Significantly reduces performance.
     runtime_debugging: bool = False
 
+    #: Memory analysis of the main time integration
+    #: function
+    memory_analysis: bool = False
+
     #: Activate progress bar
     progress_bar: bool = False
 
@@ -109,6 +160,7 @@ class SimulationConfig(NamedTuple):
     #: Self gravity switch, currently only
     #: for periodic boundaries.
     self_gravity: bool = False
+    self_gravity_version: int = DONOR_ACCOUNTING
 
     #: The size of the simulation box.
     box_size: float = 1.0
@@ -123,10 +175,19 @@ class SimulationConfig(NamedTuple):
     reconstruction_order: int = 1
 
     #: The limiter for the reconstruction.
-    limiter: int = DOUBLE_MINMOD
+    limiter: int = MINMOD
 
     #: The Riemann solver used
-    riemann_solver: int = HLLC
+    riemann_solver: int = HLL
+
+    #: Dimensional splitting / unsplit mode.
+    #: Note that the UNSPLIT scheme currently
+    #: interferes with energy conservation in settings
+    #: with self-gravity.
+    split: int = UNSPLIT
+
+    #: Time integration method.
+    time_integrator: int = RK2_SSP
 
     # Explanation of the ghost cells
     #                                |---------|
@@ -177,6 +238,9 @@ class SimulationConfig(NamedTuple):
     #: instead of only the final fluid state.
     return_snapshots: bool = False
 
+    #: Snapshot settings
+    snapshot_settings: SnapshotSettings = SnapshotSettings()
+
     #: Call a user given function on the snapshot data,
     #: e.g. for saving or plotting. Must have signature
     #: callback(time, state, registered_variables).
@@ -184,7 +248,6 @@ class SimulationConfig(NamedTuple):
 
     #: Return snapshots at specific time points.
     use_specific_snapshot_timepoints: bool = False
-    specific_snapshot_timepoints: tuple = ()
 
     #: The number of snapshots to return.
     num_snapshots: int = 10
@@ -229,10 +292,30 @@ def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
 
     if config.geometry == SPHERICAL:
 
-        print("For spherical geometry, only HLL is currently supported.")
+        print("For spherical geometry, only HLL is currently supported. Also, only the unsplit mode has been tested.")
         config = config._replace(grid_spacing = config.box_size / (config.num_cells - 1))
-        config = config._replace(riemann_solver = HLL)
 
+        if config.riemann_solver != HLL:
+            print("Setting HLL Riemann solver for spherical geometry.")
+            config = config._replace(riemann_solver = HLL)
+
+        if config.split != SPLIT:
+            print("Setting unsplit mode for spherical geometry")
+            config = config._replace(split = SPLIT)
+
+        if config.limiter == VAN_ALBADA or config.limiter == VAN_ALBADA_PP:
+            print("Setting minmod limiter for spherical geometry")
+            config = config._replace(limiter = MINMOD)
+
+        if config.time_integrator != MUSCL:
+            print("Setting MUSCL time integrator for spherical geometry")
+            config = config._replace(time_integrator = MUSCL)
+
+    if config.self_gravity == True and (config.limiter != MINMOD):
+        print("Curiously, in self-gravitating systems, the VAN_ALBADA limiters seem to cause crashes.")
+        print("Setting DOUBLE_MINMOD limiter for self-gravity.")
+        config = config._replace(limiter = MINMOD)
+        
     # set boundary conditions if not set
     if config.boundary_settings is None:
 
@@ -249,5 +332,8 @@ def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
     if config.wind_config.stellar_wind:
         print("For stellar wind simulations, we need source term aware timesteps, turning on.")
         config = config._replace(source_term_aware_timestep = True)
+
+    if config.self_gravity and (config.riemann_solver == HLLC or config.riemann_solver == HLLC_LM) and config.riemann_solver != RIEMANN_SPLIT:
+        print("Consider using RIEMANN_SPLIT as the self_gravity_version.")
     
     return config

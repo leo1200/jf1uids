@@ -2,17 +2,13 @@ import jax.numpy as jnp
 from corrector_src.training.training_config import TrainingConfig
 
 
-def mse_loss(
-    predicted_state: jnp.ndarray,
-    ground_truth: jnp.ndarray,
-    training_config: TrainingConfig,
-) -> float:
+def mse_loss(predicted_state: jnp.ndarray, ground_truth: jnp.ndarray) -> float:
     """
     Default MSE loss function for ground truth training.
 
     Args:
         predicted_state: Current simulation state
-        time_step_idx: Current time step index (for indexing ground truth)
+        ground_truth:
         training_config: Training configuration containing ground truth data
 
     Returns:

@@ -38,15 +38,9 @@ from jf1uids import CodeUnits
 from astropy import units as u
 
 import random
-
-import yaml
-import os
-
-config_path = os.path.join(os.path.dirname(__file__), "..", "config.yaml")
-config_path = os.path.abspath(config_path)
-
-with open(config_path, "r") as f:
-    config_file = yaml.safe_load(f)
+from typing import Optional
+from omegaconf import OmegaConf
+import time
 
 
 def initial_blast_state(num_cells):
@@ -147,7 +141,9 @@ def initial_blast_state(num_cells):
     return initial_state, config, params, helper_data, registered_variables
 
 
-def randomized_initial_blast_state(num_cells, randomizers=None):
+def randomized_initial_blast_state(
+    num_cells: int, cfg_data: OmegaConf, rng_seed: Optional[int] = None
+):
     adiabatic_index = 5 / 3
     box_size = 1.0
     fixed_timestep = True
@@ -156,7 +152,7 @@ def randomized_initial_blast_state(num_cells, randomizers=None):
 
     # setup simulation config
     config = SimulationConfig(
-        runtime_debugging=False,
+        runtime_debugging=cfg_data.debug,
         first_order_fallback=False,
         progress_bar=False,
         dimensionality=3,
@@ -169,9 +165,9 @@ def randomized_initial_blast_state(num_cells, randomizers=None):
         riemann_solver=HLL,
         limiter=0,
         return_snapshots=True,
-        num_snapshots=config_file["blast_creation"]["num_snapshots"],
+        num_snapshots=cfg_data.num_snapshots,
         boundary_settings=BoundarySettings(),
-        num_checkpoints=config_file["blast_creation"]["num_checkpoints"],
+        num_checkpoints=cfg_data.num_checkpoints,
         # boundary_settings=BoundarySettings(
         #    x=BoundarySettings1D(PERIODIC_BOUNDARY, PERIODIC_BOUNDARY),
         #    y=BoundarySettings1D(PERIODIC_BOUNDARY, PERIODIC_BOUNDARY),
@@ -215,21 +211,24 @@ def randomized_initial_blast_state(num_cells, randomizers=None):
     X, Y, Z = jnp.meshgrid(x, y, z, indexing="ij")
 
     r = helper_data.r
-    if randomizers is None:
-        randomizers = [
-            random.uniform(
-                config_file["blast_creation"]["randomizer_1"][0],
-                config_file["blast_creation"]["randomizer_1"][0],
-            ),
-            random.uniform(
-                config_file["blast_creation"]["randomizer_2"][0],
-                config_file["blast_creation"]["randomizer_2"][1],
-            ),
-            random.uniform(
-                config_file["blast_creation"]["randomizer_3"][0],
-                config_file["blast_creation"]["randomizer_3"][1],
-            ),
-        ]
+
+    if rng_seed is None:
+        rng_seed = int(time.time() * 1e6) % (2**32 - 1)
+    random.seed(rng_seed)
+    randomizers = [
+        random.uniform(
+            cfg_data.randomizer_1[0],
+            cfg_data.randomizer_1[1],
+        ),
+        random.uniform(
+            cfg_data.randomizer_2[0],
+            cfg_data.randomizer_2[1],
+        ),
+        random.uniform(
+            cfg_data.randomizer_3[0],
+            cfg_data.randomizer_3[1],
+        ),
+    ]
     # Initialize state
     rho = jnp.ones_like(X)
     P = jnp.ones_like(X) * 0.1
@@ -245,7 +244,6 @@ def randomized_initial_blast_state(num_cells, randomizers=None):
     B_x = B_0 * jnp.ones_like(X)
     B_y = B_0 * jnp.ones_like(X)
     B_z = jnp.zeros_like(X)
-
     initial_state = construct_primitive_state(
         config=config,
         registered_variables=registered_variables,
@@ -258,7 +256,7 @@ def randomized_initial_blast_state(num_cells, randomizers=None):
         magnetic_field_y=B_y,
         magnetic_field_z=B_z,
     )
-    return initial_state, config, params, helper_data, registered_variables, randomizers
+    return initial_state, config, params, helper_data, registered_variables, rng_seed
 
 
 def run_blast_simulation(num_cells):
