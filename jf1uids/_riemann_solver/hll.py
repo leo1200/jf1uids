@@ -10,13 +10,13 @@ from typing import Union
 
 # general jf1uids
 from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import speed_of_sound_crs
+from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 
 # fluid stuff
-from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, speed_of_sound
+from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, get_absolute_velocity, speed_of_sound
 from jf1uids.fluid_equations.euler import _euler_flux
-from jf1uids.option_classes.simulation_config import HLLC_LM, STATE_TYPE, SimulationConfig
-
+from jf1uids.option_classes.simulation_config import AM_HLLC, HLLC_LM, HYBRID_HLLC, STATE_TYPE, SimulationConfig
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'registered_variables', 'flux_direction_index'])
@@ -75,8 +75,8 @@ def _hll_solver(primitives_left: STATE_TYPE, primitives_right: STATE_TYPE, gamma
     return fluxes
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config', 'registered_variables', 'flux_direction_index'])
-def _hllc_solver(primitives_left: STATE_TYPE, primitives_right: STATE_TYPE, gamma: Union[float, Float[Array, ""]], config: SimulationConfig, registered_variables: RegisteredVariables, flux_direction_index: int) -> STATE_TYPE:
+@partial(jax.jit, static_argnames=['config', 'registered_variables', 'flux_direction_index', 'hllc_lm', 'low_mach_dissipation_control'])
+def _hllc_solver(primitives_left: STATE_TYPE, primitives_right: STATE_TYPE, gamma: Union[float, Float[Array, ""]], config: SimulationConfig, registered_variables: RegisteredVariables, flux_direction_index: int, hllc_lm: bool = False, low_mach_dissipation_control: bool = False) -> STATE_TYPE:
     """
     Returns the conservative fluxes.
 
@@ -145,16 +145,118 @@ def _hllc_solver(primitives_left: STATE_TYPE, primitives_right: STATE_TYPE, gamm
     # HLLC-LM adaptation
     # following
     # https://doi.org/10.1016/j.jcp.2020.109762
-    if config.riemann_solver == HLLC_LM:
+    if config.riemann_solver == HLLC_LM or hllc_lm:
         Ma_limit = 0.1
         Ma_local = jnp.maximum(jnp.abs(u_L / c_L), jnp.abs(u_R / c_R))
         phi = jnp.sin(jnp.minimum(1, Ma_local / Ma_limit) * jnp.pi / 2)
-        S_L = S_L * phi
-        S_R = S_R * phi
+        S_Llm = S_L * phi
+        S_Rlm = S_R * phi
 
-    # calculate the interface HLLC fluxes
-    F_star = 0.5 * (F_L + F_R) + 0.5 * (S_L * (U_star_L - U_L) + jnp.abs(S_star) * (U_star_L - U_star_R) + S_R * (U_star_R - U_R))
+    if config.riemann_solver == HLLC_LM or hllc_lm:
+        S_Lstar = S_Llm
+        S_Rstar = S_Rlm
+    else:
+        S_Lstar = S_L
+        S_Rstar = S_R
+
+    bulk_flux_star = 0.5 * (F_L + F_R)
+    dissipation_term_star = 0.5 * (S_Lstar * (U_star_L - U_L) + jnp.abs(S_star) * (U_star_L - U_star_R) + S_Rstar * (U_star_R - U_R))
+
+    if low_mach_dissipation_control:
+        absolute_velocity_L = get_absolute_velocity(primitives_left, config, registered_variables)
+        absolute_velocity_R = get_absolute_velocity(primitives_right, config, registered_variables)
+        Ma_tilde = jnp.maximum(
+            jnp.abs(absolute_velocity_L / c_L),
+            jnp.abs(absolute_velocity_R / c_R)
+        )
+        f = jnp.minimum(1, Ma_tilde)
+
+        if config.dimensionality == 1:
+            velocity_start_index = registered_variables.velocity_index
+        else:
+            velocity_start_index = registered_variables.velocity_index.x
+
+        dissipation_term_star = dissipation_term_star.at[
+            velocity_start_index:velocity_start_index + config.dimensionality
+        ].set(
+            f * dissipation_term_star[
+                velocity_start_index:velocity_start_index + config.dimensionality
+            ]
+        )
+
+    F_star = bulk_flux_star + dissipation_term_star
+
     fluxes = jnp.where(S_L >= 0, F_L, F_star)
     fluxes = jnp.where(S_R <= 0, F_R, fluxes)
 
     return fluxes
+
+
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'registered_variables', 'flux_direction_index'])
+def _am_hllc_solver(
+    primitives_left: STATE_TYPE,
+    primitives_right: STATE_TYPE,
+    primitive_state: STATE_TYPE,
+    gamma: Union[float, Float[Array, ""]],
+    config: SimulationConfig,
+    registered_variables: RegisteredVariables,
+    flux_direction_index: int,
+) -> STATE_TYPE:
+    """
+    https://www.sciencedirect.com/science/article/pii/S1007570425005891
+    """
+    
+    d = config.grid_spacing
+    C_th = 0.05
+    a = speed_of_sound(
+        primitive_state[registered_variables.density_index],
+        primitive_state[registered_variables.pressure_index],
+        gamma
+    )
+    # not optimal, sum over all dimensions
+    # is carried out once per dimension
+    div_v = sum(
+        _stencil_add(
+            primitive_state[i + 1],
+            indices = (1, -1),
+            factors = (1.0, -1.0),
+            axis = i
+        ) / (2 * d)
+        for i in range(config.dimensionality)
+    )
+    g = jnp.where(
+        div_v < -C_th * a / d,
+        1,
+        0
+    )
+
+    if config.riemann_solver == AM_HLLC:
+        low_mach_dissipation_control = True
+    elif config.riemann_solver == HYBRID_HLLC:
+        low_mach_dissipation_control = False
+    else:
+        raise ValueError("Riemann solver not supported for AM-HLLC.")
+
+
+    fluxes_hllc = _hllc_solver(
+        primitives_left,
+        primitives_right,
+        gamma,
+        config,
+        registered_variables,
+        flux_direction_index,
+        low_mach_dissipation_control = low_mach_dissipation_control
+    )
+    fluxes_hllc_lm = _hllc_solver(
+        primitives_left,
+        primitives_right,
+        gamma,
+        config,
+        registered_variables,
+        flux_direction_index,
+        hllc_lm = True,
+        low_mach_dissipation_control = low_mach_dissipation_control
+    )
+
+    return g * fluxes_hllc_lm + (1 - g) * fluxes_hllc

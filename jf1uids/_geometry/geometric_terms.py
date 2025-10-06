@@ -45,8 +45,8 @@ def _pressure_nozzling_source(
     # calculate the pressure nozzling term, following
     # eq. 14 in Crittendend and Balachandar, 2018
     # https://doi.org/10.1007/s00193-017-0784-y
-    pressure_nozzling = helper_data.geometric_centers[1:-1] ** (config.geometry - 1) * p[1:-1] + (helper_data.r_hat_alpha[1:-1] - helper_data.volumetric_centers[1:-1] * helper_data.geometric_centers[1:-1] ** (config.geometry - 1)) * dp_dr
-    nozzling = jnp.zeros((registered_variables.num_vars, p.shape[0] - 2))
+    pressure_nozzling = helper_data.geometric_centers ** (config.geometry - 1) * p + (helper_data.r_hat_alpha - helper_data.volumetric_centers * helper_data.geometric_centers ** (config.geometry - 1)) * dp_dr
+    nozzling = jnp.zeros((registered_variables.num_vars, p.shape[0]))
     nozzling = nozzling.at[registered_variables.velocity_index].set(config.geometry * pressure_nozzling)
 
     return nozzling

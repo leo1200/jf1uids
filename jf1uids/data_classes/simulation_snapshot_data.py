@@ -1,6 +1,7 @@
 from typing import NamedTuple
 import jax.numpy as jnp
 
+
 class SnapshotData(NamedTuple):
     """Return format for the time integration, when snapshots are requested."""
 
@@ -9,6 +10,10 @@ class SnapshotData(NamedTuple):
 
     #: The primitive states at the times the snapshots were taken.
     states: jnp.ndarray = None
+
+    #: The final state of the simulation. This is especially useful
+    #: when no snapshots are returned but only the statistics.
+    final_state: jnp.ndarray = None
 
     #: The total mass at the times the snapshots were taken.
     total_mass: jnp.ndarray = None
@@ -24,6 +29,9 @@ class SnapshotData(NamedTuple):
 
     #: gravitational energy
     gravitational_energy: jnp.ndarray = None
+
+    #: Radial momentum
+    radial_momentum: jnp.ndarray = None
 
     # The runtime of the simulation-loop.
     runtime: float = 0.0

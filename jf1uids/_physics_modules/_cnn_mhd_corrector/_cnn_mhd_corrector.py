@@ -36,7 +36,7 @@ class CorrectorCNN(eqx.Module):
         # A simple 3-layer CNN.
         # Note the use of padding=1 with kernel_size=3 to keep the
         # spatial dimensions (height and width) the same.
-        self.layers = [
+        self.layers = (
             # Layer 1: Expand channels from NUM_VARS to HIDDEN_CHANNELS
             eqx.nn.Conv2d(
                 in_channels, hidden_channels, kernel_size=3, padding=1, key=key1

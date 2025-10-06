@@ -16,7 +16,7 @@ class SimulationParams(NamedTuple):
 
     #: The Courant-Friedrichs-Lewy number, a factor
     #: in the time step calculation.
-    C_cfl: float = 0.8
+    C_cfl: float = 0.4
 
     #: Gravitational constant.
     gravitational_constant: float = 1.0

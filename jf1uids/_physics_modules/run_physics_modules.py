@@ -1,6 +1,7 @@
 from typing import Union
 import jax
 from functools import partial
+import jax.numpy as jnp
 
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
@@ -26,8 +27,7 @@ from jf1uids.option_classes.simulation_config import (
 )
 from jf1uids.option_classes.simulation_params import SimulationParams
 from jf1uids._physics_modules._stellar_wind.stellar_wind import _wind_injection
-from jax.experimental import checkify
-
+from jf1uids.shock_finder.shock_finder import shock_criteria
 
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
@@ -66,29 +66,26 @@ def _run_physics_modules(
         # primitive_state = _boundary_handler(primitive_state, config.left_boundary, config.right_boundary)
 
     if config.cosmic_ray_config.diffusive_shock_acceleration:
+
+        shock_crit = shock_criteria(
+            primitive_state,
+            config,
+            registered_variables,
+            helper_data
+        )
+
         # injecting cosmic rays only after a certain amount of time
         # is an ad-hoc fix to problems that come about when a shock
         # has not yet properly formed
         primitive_state = jax.lax.cond(
-            current_time
-            > params.cosmic_ray_params.diffusive_shock_acceleration_start_time,
-            lambda primitive_state: inject_crs_at_strongest_shock(
-                primitive_state,
-                params.gamma,
-                helper_data,
-                params.cosmic_ray_params,
-                config,
-                registered_variables,
-                dt,
-            ),
+            jnp.logical_and(current_time >= params.cosmic_ray_params.diffusive_shock_acceleration_start_time, jnp.any(shock_crit)),
+            lambda primitive_state: inject_crs_at_strongest_shock(primitive_state, params.gamma, helper_data, params.cosmic_ray_params, config, registered_variables, dt),
             lambda primitive_state: primitive_state,
             primitive_state,
         )
 
     if config.cooling_config.cooling:
-        primitive_state = update_pressure_by_cooling(
-            primitive_state, registered_variables, params, dt
-        )
+        primitive_state = update_pressure_by_cooling(primitive_state, registered_variables, config.cooling_config.cooling_curve_config, params, dt)
 
     if config.neural_net_force_config.neural_net_force:
         primitive_state = _neural_net_force(

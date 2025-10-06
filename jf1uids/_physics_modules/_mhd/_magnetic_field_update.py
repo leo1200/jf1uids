@@ -50,24 +50,13 @@ def magnetic_update(
         The updated magnetic field.
     """
 
-    # retrieve the velocity
     if config.dimensionality == 2:
         # retrieve the velocity
         # THIS IS ONLY WRITTEN FOR 2D!!!!!
-        velocity = jnp.zeros((3, *gas_state.shape[1:]), dtype=magnetic_field.dtype)
-        velocity = velocity.at[0:2, :, :].set(
-            gas_state[
-                registered_variables.velocity_index.x : registered_variables.velocity_index.x
-                + 2,
-                ...,
-            ]
-        )
+        velocity = jnp.zeros((3, *gas_state.shape[1:]), dtype = magnetic_field.dtype)
+        velocity = velocity.at[0:2, :, :].set(gas_state[registered_variables.velocity_index.x:registered_variables.velocity_index.x + 2, ...])
     elif config.dimensionality == 3:
-        velocity = gas_state[
-            registered_variables.velocity_index.x : registered_variables.velocity_index.x
-            + 3,
-            ...,
-        ]
+        velocity = gas_state[registered_variables.velocity_index.x:registered_variables.velocity_index.x + 3, ...]
     else:
         raise ValueError("No 1D MHD.")
 
@@ -190,20 +179,17 @@ def magnetic_update(
         )
 
     # update the gas energy
-    gas_energy = total_energy_from_primitives(
-        density,
-        jnp.linalg.norm(velocity, axis=0),
-        gas_state[registered_variables.pressure_index, ...],
-        5 / 3,
-    )
-    gas_energy_updated = (
-        gas_energy
-        - 0.5 * density * jnp.linalg.norm(velocity, axis=0) ** 2
-        + 0.5 * density * jnp.linalg.norm(v_n, axis=0) ** 2
-    )
-    pressure_updated = pressure_from_energy(
-        gas_energy_updated, density, jnp.linalg.norm(v_n, axis=0), 5 / 3
-    )
+    gas_energy = total_energy_from_primitives(density, jnp.linalg.norm(velocity, axis = 0), gas_state[registered_variables.pressure_index, ...], 5/3)
+    gas_energy_updated = gas_energy - 0.5 * density * jnp.linalg.norm(velocity, axis = 0)**2 + 0.5 * density * jnp.linalg.norm(v_n, axis = 0)**2
+    pressure_updated = pressure_from_energy(gas_energy_updated, density, jnp.linalg.norm(v_n, axis = 0), 5/3)
+    
+    # update the gas state
+    if config.dimensionality == 2:
+        gas_state = gas_state.at[registered_variables.velocity_index.x:registered_variables.velocity_index.x + 2, ...].set(v_n[:2, ...])
+    elif config.dimensionality == 3:
+        gas_state = gas_state.at[registered_variables.velocity_index.x:registered_variables.velocity_index.x + 3, ...].set(v_n)
+
+    gas_state = gas_state.at[registered_variables.pressure_index, ...].set(pressure_updated)
 
     # update the gas state
     if config.dimensionality == 2:

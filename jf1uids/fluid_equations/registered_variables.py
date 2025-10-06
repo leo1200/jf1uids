@@ -121,6 +121,11 @@ def get_registered_variables(config: SimulationConfig) -> RegisteredVariables:
                 num_vars=registered_variables.num_vars + 3
             )
 
+        # update the magnetic field index
+        if config.mhd:
+            registered_variables = registered_variables._replace(magnetic_index = StaticIntVector(4, 5, 6))
+            registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 3)
+
     if config.wind_config.trace_wind_density:
         registered_variables = registered_variables._replace(
             wind_density_index=registered_variables.num_vars

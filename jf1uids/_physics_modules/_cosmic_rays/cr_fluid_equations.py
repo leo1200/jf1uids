@@ -13,6 +13,11 @@ from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 
 # NOTE: currently only supports 1d setups, TODO: generalize
 
+# HERE SET MANUALLY, SHOULD COME FROM
+# THE SIMULATION PARAMS
+gamma_gas = 5/3
+gamma_cr = 4/3
+
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['registered_variables'])
 def total_energy_from_primitives_with_crs(
@@ -29,10 +34,6 @@ def total_energy_from_primitives_with_crs(
     Returns:
         Total energy density array
     """
-
-
-    gamma_cr = 4/3
-    gamma_gas = 5/3
 
     # get the cosmic ray pressure
     cosmic_ray_pressure = primitive_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
@@ -71,9 +72,6 @@ def gas_pressure_from_primitives_with_crs(
         gas pressure
     """
 
-    gamma_cr = 4/3
-    gamma_gas = 5/3
-
     # get the cosmic ray pressure
     cosmic_ray_pressure = primitive_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
 
@@ -99,9 +97,6 @@ def total_pressure_from_conserved_with_crs(
     Returns:
         total pressure
     """
-
-    gamma_cr = 4/3
-    gamma_gas = 5/3
 
     # get the cosmic ray pressure
     cosmic_ray_pressure = conserved_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
@@ -141,9 +136,6 @@ def speed_of_sound_crs(
     Returns:
         sound speed
     """
-
-    gamma_cr = 4/3
-    gamma_gas = 5/3
 
     # get the cosmic ray pressure
     cosmic_ray_pressure = primitive_state[registered_variables.cosmic_ray_n_index] ** gamma_cr
