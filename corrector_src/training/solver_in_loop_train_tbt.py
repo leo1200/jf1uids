@@ -28,15 +28,6 @@ from jf1uids.time_stepping._timestep_estimator import (
     _cfl_time_step,
     _source_term_aware_time_step,
 )
-from jf1uids.fluid_equations.total_quantities import (
-    calculate_internal_energy,
-    calculate_total_mass,
-)
-from jf1uids.fluid_equations.total_quantities import (
-    calculate_total_energy,
-    calculate_kinetic_energy,
-    calculate_gravitational_energy,
-)
 
 from corrector_src.training.training_config import TrainingConfig
 from corrector_src.utils.downaverage import downaverage_states, downaverage_state
@@ -49,7 +40,7 @@ from jax.experimental import checkify
 from functools import partial
 
 
-def time_integration_training_tbt( #timestep by timestep (poco a poco lava la vieja el coco)
+def time_integration_training_tbt(  # timestep by timestep (poco a poco lava la vieja el coco)
     initial_state_hr: STATE_TYPE,
     config_hr: SimulationConfig,
     config_lr: SimulationConfig,
@@ -63,21 +54,47 @@ def time_integration_training_tbt( #timestep by timestep (poco a poco lava la vi
     opt_state: optax.OptState,
     save_full_sim: bool = False,
 ) -> Tuple[jnp.ndarray, eqx.Module, optax.OptState, SnapshotData]:
-    assert config_hr.num_checkpoints == config_lr.num_checkpoints, "num_checkpoints different from hr to lr"
-    assert config_hr.runtime_debugging == config_lr.runtime_debugging, "runtime_debugging different from hr to lr"
-    assert config_hr.dimensionality == config_lr.dimensionality, "dimensionality different from hr to lr"
+    assert config_hr.num_checkpoints == config_lr.num_checkpoints, (
+        "num_checkpoints different from hr to lr"
+    )
+    assert config_hr.runtime_debugging == config_lr.runtime_debugging, (
+        "runtime_debugging different from hr to lr"
+    )
+    assert config_hr.dimensionality == config_lr.dimensionality, (
+        "dimensionality different from hr to lr"
+    )
     assert config_hr.mhd == config_lr.mhd, "mhd different from hr to lr"
-    assert config_hr.self_gravity == config_lr.self_gravity, "self_gravity different from hr to lr"
+    assert config_hr.self_gravity == config_lr.self_gravity, (
+        "self_gravity different from hr to lr"
+    )
     assert config_hr.box_size == config_lr.box_size, "box_size different from hr to lr"
-    assert config_hr.riemann_solver == config_lr.riemann_solver, "riemann_solver different from hr to lr"
-    assert config_hr.num_ghost_cells == config_lr.num_ghost_cells, "num_ghost_cells different from hr to lr"
-    assert config_hr.boundary_settings == config_lr.boundary_settings, "boundary_settings different from hr to lr"
-    assert config_hr.fixed_timestep == config_lr.fixed_timestep, "fixed_timestep different from hr to lr"
-    assert config_hr.exact_end_time == config_lr.exact_end_time, "exact_end_time different from hr to lr"
-    assert config_hr.num_timesteps == config_lr.num_timesteps, "num_timesteps different from hr to lr"
-    assert config_hr.differentiation_mode == config_lr.differentiation_mode, "differentiation_mode different from hr to lr"
-    assert config_hr.return_snapshots == config_lr.return_snapshots, "return_snapshots different from hr to lr"
-    assert config_hr.num_cells // training_config.downscale_factor == config_lr.num_cells, "downscaled cells different from lr cells"
+    assert config_hr.riemann_solver == config_lr.riemann_solver, (
+        "riemann_solver different from hr to lr"
+    )
+    assert config_hr.num_ghost_cells == config_lr.num_ghost_cells, (
+        "num_ghost_cells different from hr to lr"
+    )
+    assert config_hr.boundary_settings == config_lr.boundary_settings, (
+        "boundary_settings different from hr to lr"
+    )
+    assert config_hr.fixed_timestep == config_lr.fixed_timestep, (
+        "fixed_timestep different from hr to lr"
+    )
+    assert config_hr.exact_end_time == config_lr.exact_end_time, (
+        "exact_end_time different from hr to lr"
+    )
+    assert config_hr.num_timesteps == config_lr.num_timesteps, (
+        "num_timesteps different from hr to lr"
+    )
+    assert config_hr.differentiation_mode == config_lr.differentiation_mode, (
+        "differentiation_mode different from hr to lr"
+    )
+    assert config_hr.return_snapshots == config_lr.return_snapshots, (
+        "return_snapshots different from hr to lr"
+    )
+    assert (
+        config_hr.num_cells // training_config.downscale_factor == config_lr.num_cells
+    ), "downscaled cells different from lr cells"
     assert config_hr.geometry == config_lr.geometry, "geometry not the sames"
     if config_hr.runtime_debugging:
         checked_integration = checkify.checkify(_time_integration_training)
@@ -114,6 +131,8 @@ def time_integration_training_tbt( #timestep by timestep (poco a poco lava la vi
             opt_state,
             save_full_sim,
         )
+
+
 @partial(
     jax.jit,
     static_argnames=[
@@ -156,17 +175,32 @@ def _time_integration_training(
     data_lag = training_config.n_look_behind
     num_batches = total_steps // data_lag
     ghost_cells = config_hr.num_ghost_cells
+    jax.debug.print("timestep {}", jnp.asarray(params.t_end / config_hr.num_timesteps))
+
     # helpers for padding/unpadding states with ghost cells
     def pad_state(state):
         if config_hr.geometry == CARTESIAN:
             original_shape = state.shape
             if config_hr.dimensionality == 1:
-                state = jnp.pad(state, ((0, 0), (ghost_cells, ghost_cells)), mode="edge")
+                state = jnp.pad(
+                    state, ((0, 0), (ghost_cells, ghost_cells)), mode="edge"
+                )
             elif config_hr.dimensionality == 2:
-                state = jnp.pad(state, ((0, 0), (ghost_cells, ghost_cells), (ghost_cells, ghost_cells)), mode="edge")
+                state = jnp.pad(
+                    state,
+                    ((0, 0), (ghost_cells, ghost_cells), (ghost_cells, ghost_cells)),
+                    mode="edge",
+                )
             elif config_hr.dimensionality == 3:
                 state = jnp.pad(
-                    state, ((0, 0), (ghost_cells, ghost_cells), (ghost_cells, ghost_cells), (ghost_cells, ghost_cells)), mode="edge"
+                    state,
+                    (
+                        (0, 0),
+                        (ghost_cells, ghost_cells),
+                        (ghost_cells, ghost_cells),
+                        (ghost_cells, ghost_cells),
+                    ),
+                    mode="edge",
                 )
             return state, original_shape
         else:
@@ -175,19 +209,32 @@ def _time_integration_training(
     def unpad_state(state):
         if config_hr.geometry == CARTESIAN:
             if config_hr.dimensionality == 1:
-                return jax.lax.slice_in_dim(state, ghost_cells, state.shape[1] - ghost_cells, axis=1)
+                return jax.lax.slice_in_dim(
+                    state, ghost_cells, state.shape[1] - ghost_cells, axis=1
+                )
             elif config_hr.dimensionality == 2:
-                s = jax.lax.slice_in_dim(state, ghost_cells, state.shape[1] - ghost_cells, axis=1)
-                return jax.lax.slice_in_dim(s, ghost_cells, s.shape[2] - ghost_cells, axis=2)
+                s = jax.lax.slice_in_dim(
+                    state, ghost_cells, state.shape[1] - ghost_cells, axis=1
+                )
+                return jax.lax.slice_in_dim(
+                    s, ghost_cells, s.shape[2] - ghost_cells, axis=2
+                )
             elif config_hr.dimensionality == 3:
-                s = jax.lax.slice_in_dim(state, ghost_cells, state.shape[1] - ghost_cells, axis=1)
-                s = jax.lax.slice_in_dim(s, ghost_cells, s.shape[2] - ghost_cells, axis=2)
-                return jax.lax.slice_in_dim(s, ghost_cells, s.shape[3] - ghost_cells, axis=3)
+                s = jax.lax.slice_in_dim(
+                    state, ghost_cells, state.shape[1] - ghost_cells, axis=1
+                )
+                s = jax.lax.slice_in_dim(
+                    s, ghost_cells, s.shape[2] - ghost_cells, axis=2
+                )
+                return jax.lax.slice_in_dim(
+                    s, ghost_cells, s.shape[3] - ghost_cells, axis=3
+                )
         return state
 
-
     # Prepare padded initial states and storage
-    initial_state_lr = downaverage_state(initial_state_hr, training_config.downscale_factor)
+    initial_state_lr = downaverage_state(
+        initial_state_hr, training_config.downscale_factor
+    )
     initial_state_hr, original_shape_hr = pad_state(initial_state_hr)
     initial_state_lr, original_shape_lr = pad_state(initial_state_lr)
 
@@ -224,20 +271,24 @@ def _time_integration_training(
             state, dt, cfg, prm, help_data, registered_variables, current_time + dt
         )
         state = _evolve_state(
-            state,
-            dt,
-            prm.gamma,
-            prm.gravitational_constant,
-            cfg,
-            help_data,
-            registered_variables,
+            primitive_state=state,
+            dt=dt,
+            gamma=prm.gamma,
+            gravitational_constant=prm.gravitational_constant,
+            config=cfg,
+            params=prm,
+            helper_data=help_data,
+            registered_variables=registered_variables,
         )
         current_time = current_time + dt
         return state, current_time
 
     # helper to run 'data_lag' steps and return (final_state, final_time, lag_buffer, sim_data_updated)
-    def run_for_lag_steps(state_init, time_init, cfg, prm, save_full_sim_flag, help_data):
+    def run_for_lag_steps(
+        state_init, time_init, cfg, prm, save_full_sim_flag, help_data
+    ):
         lag_buffer = jnp.zeros((data_lag, *unpad_state(state_init).shape))
+
         # carry for scan: (state, current_time, sim_data, lag_buffer, step_idx)
         def body(carry, idx):
             state, current_time, lag_buf = carry
@@ -256,8 +307,10 @@ def _time_integration_training(
             )
             """
             # step
-            state_new, time_new = single_simulation_step(state, current_time, cfg, prm, help_data)
-            
+            state_new, time_new = single_simulation_step(
+                state, current_time, cfg, prm, help_data
+            )
+
             # put unpadded into lag buffer
             lag_buf = lag_buf.at[idx].set(unpad_state(state_new))
 
@@ -268,7 +321,6 @@ def _time_integration_training(
             body, init_carry, jnp.arange(data_lag)
         )
         return final_state, final_time, final_lag_buf
-
 
     # initial carry for the outer batch scan
     batch_init_carry = (
@@ -301,8 +353,9 @@ def _time_integration_training(
         # lag_hr has shape (data_lag, *unpadded_hr_shape)
 
         # vectorize over time axis
-        lag_hr_down = downaverage_states(lag_hr, training_config.downscale_factor)  # shape (data_lag, *unpadded_lr_shape)
-
+        lag_hr_down = downaverage_states(
+            lag_hr, training_config.downscale_factor
+        )  # shape (data_lag, *unpadded_lr_shape)
 
         # --- 4) compute gradients and update network params (if applicable) ---
         # We create a function that produces the loss given network params. In your setup the network
@@ -314,15 +367,25 @@ def _time_integration_training(
                 )
             )
             state_lr_after, time_lr_after, lag_lr = run_for_lag_steps(
-                state_lr, current_time, config_lr, batch_params, save_full_sim, helper_data_lr
+                state_lr,
+                current_time,
+                config_lr,
+                batch_params,
+                save_full_sim,
+                helper_data_lr,
             )
             return loss_function(lag_lr, lag_hr_down), (
                 state_lr_after,
                 time_lr_after,
             )
+
         # Compute gradients; filter_value_and_grad will return grads in same pytree layout as network_params
-        (loss_val, (state_lr_after, time_lr_after)), grads = eqx.filter_value_and_grad(loss_wrt_params, has_aux=True)(network_params)
-        updates, new_opt_state = optimizer.update(grads, opt_state_local, network_params)
+        (loss_val, (state_lr_after, time_lr_after)), grads = eqx.filter_value_and_grad(
+            loss_wrt_params, has_aux=True
+        )(network_params)
+        updates, new_opt_state = optimizer.update(
+            grads, opt_state_local, network_params
+        )
         new_network_params = eqx.apply_updates(network_params, updates)
 
         # prepare carry for next batch:

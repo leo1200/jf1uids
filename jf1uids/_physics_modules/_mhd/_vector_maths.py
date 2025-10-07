@@ -33,6 +33,43 @@ def divergence2D(field, grid_spacing: float):
 
 
 @jax.jit
+def divergence3D(field, grid_spacing: float):
+    """Calculate the divergence of a 3D vector field on a 3D grid.
+
+    Args:
+        field: jnp.ndarray of shape (3, Nx, Ny, Nz)
+            The vector field (fx, fy, fz).
+        grid_spacing: float
+            The uniform grid spacing.
+
+    Returns:
+        jnp.ndarray of shape (Nx, Ny, Nz)
+            The divergence of the field.
+    """
+    divergence = jnp.zeros_like(field)
+
+    # ∂fx/∂x
+    divergence = divergence.at[0, 1:-1, 1:-1, 1:-1].add(
+        (field[0, 2:, 1:-1, 1:-1] - field[0, :-2, 1:-1, 1:-1]) / (2 * grid_spacing)
+    )
+
+    # ∂fy/∂y
+    divergence = divergence.at[1, 1:-1, 1:-1, 1:-1].add(
+        (field[1, 1:-1, 2:, 1:-1] - field[1, 1:-1, :-2, 1:-1]) / (2 * grid_spacing)
+    )
+
+    # ∂fz/∂z
+    divergence = divergence.at[2, 1:-1, 1:-1, 1:-1].add(
+        (field[2, 1:-1, 1:-1, 2:] - field[2, 1:-1, 1:-1, :-2]) / (2 * grid_spacing)
+    )
+
+    # Sum over vector components → scalar divergence
+    divergence = jnp.sum(divergence, axis=0)
+
+    return divergence
+
+
+@jax.jit
 def curl3D(field, grid_spacing: float):
     """Calculate the curl of a 3d field on a 3d grid.
 

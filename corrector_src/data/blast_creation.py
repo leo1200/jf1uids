@@ -146,15 +146,24 @@ def randomized_initial_blast_state(
 ):
     adiabatic_index = 5 / 3
     box_size = 1.0
-    fixed_timestep = True
-    dt_max = 0.1
+    fixed_timestep = cfg_data.fixed_timestep
+    dt_max = cfg_data.dt_max
     mhd = True
-
+    if (
+        cfg_data.use_specific_snapshot_timepoints
+        and cfg_data.snapshot_timepoints is not None
+    ):
+        snapshot_timepoints = jnp.array(cfg_data.snapshot_timepoints)
+        num_snapshots = len(cfg_data.snapshot_timepoints)
+    else:
+        raise ValueError(
+            "use_specific_snapshot_times was True but snapshot times were not given"
+        )
     # setup simulation config
     config = SimulationConfig(
         runtime_debugging=cfg_data.debug,
         first_order_fallback=False,
-        progress_bar=False,
+        progress_bar=True,
         dimensionality=3,
         num_ghost_cells=2,
         box_size=box_size,
@@ -165,9 +174,11 @@ def randomized_initial_blast_state(
         riemann_solver=HLL,
         limiter=0,
         return_snapshots=True,
-        num_snapshots=cfg_data.num_snapshots,
+        num_snapshots=num_snapshots,
         boundary_settings=BoundarySettings(),
         num_checkpoints=cfg_data.num_checkpoints,
+        num_timesteps=cfg_data.num_timesteps,
+        use_specific_snapshot_timepoints=cfg_data.use_specific_snapshot_timepoints,
         # boundary_settings=BoundarySettings(
         #    x=BoundarySettings1D(PERIODIC_BOUNDARY, PERIODIC_BOUNDARY),
         #    y=BoundarySettings1D(PERIODIC_BOUNDARY, PERIODIC_BOUNDARY),
@@ -186,8 +197,8 @@ def randomized_initial_blast_state(
 
     # time domain
     C_CFL = 0.4  # Courant-Friedrichs-Lewy number
-    t_final = 1.0 * 1e4 * u.yr
-    t_end = t_final.to(code_units.code_time).value
+    # t_final = 1.0 * 1e4 * u.yr
+    t_end = cfg_data.t_end
 
     # set the simulation parameters
     params = SimulationParams(
@@ -195,6 +206,7 @@ def randomized_initial_blast_state(
         dt_max=dt_max,
         gamma=adiabatic_index,
         t_end=t_end,
+        snapshot_timepoints=snapshot_timepoints,
     )
 
     grid_spacing = config.box_size / config.num_cells

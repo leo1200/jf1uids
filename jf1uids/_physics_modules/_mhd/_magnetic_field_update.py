@@ -10,6 +10,7 @@ from jf1uids._physics_modules._mhd._vector_maths import (
     curl2D,
     curl3D,
     divergence2D,
+    divergence3D,
 )
 from jf1uids.fluid_equations.fluid import (
     pressure_from_energy,
@@ -53,10 +54,20 @@ def magnetic_update(
     if config.dimensionality == 2:
         # retrieve the velocity
         # THIS IS ONLY WRITTEN FOR 2D!!!!!
-        velocity = jnp.zeros((3, *gas_state.shape[1:]), dtype = magnetic_field.dtype)
-        velocity = velocity.at[0:2, :, :].set(gas_state[registered_variables.velocity_index.x:registered_variables.velocity_index.x + 2, ...])
+        velocity = jnp.zeros((3, *gas_state.shape[1:]), dtype=magnetic_field.dtype)
+        velocity = velocity.at[0:2, :, :].set(
+            gas_state[
+                registered_variables.velocity_index.x : registered_variables.velocity_index.x
+                + 2,
+                ...,
+            ]
+        )
     elif config.dimensionality == 3:
-        velocity = gas_state[registered_variables.velocity_index.x:registered_variables.velocity_index.x + 3, ...]
+        velocity = gas_state[
+            registered_variables.velocity_index.x : registered_variables.velocity_index.x
+            + 3,
+            ...,
+        ]
     else:
         raise ValueError("No 1D MHD.")
 
@@ -163,33 +174,74 @@ def magnetic_update(
             "Eigeniteration for v not converged!",
         )
         """
-        checkify.check(
-            jnp.all(
-                jnp.abs(
-                    divergence2D(B_n, grid_spacing) - divergence2D(B_0, grid_spacing)
-                )
-                < 1e-8
-            ),
-            "Divergence of magnetic field not conserved, by {divergence}",
-            divergence=jnp.max(
-                jnp.abs(
-                    divergence2D(B_n, grid_spacing) - divergence2D(B_0, grid_spacing)
-                )
-            ),
-        )
+        if config.dimensionality == 2:
+            checkify.check(
+                jnp.all(
+                    jnp.abs(
+                        divergence2D(B_n, grid_spacing)[2:-2, 2:-2]
+                        - divergence2D(B_0, grid_spacing)[2:-2, 2:-2]
+                    )
+                    < 1e-8
+                ),
+                "2d Divergence of magnetic field not conserved, by{divergence}",
+                divergence=jnp.max(
+                    jnp.abs(
+                        divergence2D(B_n, grid_spacing)[2:-2, 2:-2]
+                        - divergence2D(B_0, grid_spacing)[2:-2, 2:-2]
+                    )
+                ),
+            )
+        elif config.dimensionality == 3:
+            checkify.check(
+                jnp.all(
+                    jnp.abs(
+                        divergence3D(B_n, grid_spacing)
+                        - divergence3D(B_0, grid_spacing)
+                    )
+                    < 1e-8
+                ),
+                "3d Divergence of magnetic field not conserved, by {divergence}",
+                divergence=jnp.max(
+                    jnp.abs(
+                        divergence3D(B_n, grid_spacing)
+                        - divergence3D(B_0, grid_spacing)
+                    )
+                ),
+            )
 
     # update the gas energy
-    gas_energy = total_energy_from_primitives(density, jnp.linalg.norm(velocity, axis = 0), gas_state[registered_variables.pressure_index, ...], 5/3)
-    gas_energy_updated = gas_energy - 0.5 * density * jnp.linalg.norm(velocity, axis = 0)**2 + 0.5 * density * jnp.linalg.norm(v_n, axis = 0)**2
-    pressure_updated = pressure_from_energy(gas_energy_updated, density, jnp.linalg.norm(v_n, axis = 0), 5/3)
-    
+    gas_energy = total_energy_from_primitives(
+        density,
+        jnp.linalg.norm(velocity, axis=0),
+        gas_state[registered_variables.pressure_index, ...],
+        5 / 3,
+    )
+    gas_energy_updated = (
+        gas_energy
+        - 0.5 * density * jnp.linalg.norm(velocity, axis=0) ** 2
+        + 0.5 * density * jnp.linalg.norm(v_n, axis=0) ** 2
+    )
+    pressure_updated = pressure_from_energy(
+        gas_energy_updated, density, jnp.linalg.norm(v_n, axis=0), 5 / 3
+    )
+
     # update the gas state
     if config.dimensionality == 2:
-        gas_state = gas_state.at[registered_variables.velocity_index.x:registered_variables.velocity_index.x + 2, ...].set(v_n[:2, ...])
+        gas_state = gas_state.at[
+            registered_variables.velocity_index.x : registered_variables.velocity_index.x
+            + 2,
+            ...,
+        ].set(v_n[:2, ...])
     elif config.dimensionality == 3:
-        gas_state = gas_state.at[registered_variables.velocity_index.x:registered_variables.velocity_index.x + 3, ...].set(v_n)
+        gas_state = gas_state.at[
+            registered_variables.velocity_index.x : registered_variables.velocity_index.x
+            + 3,
+            ...,
+        ].set(v_n)
 
-    gas_state = gas_state.at[registered_variables.pressure_index, ...].set(pressure_updated)
+    gas_state = gas_state.at[registered_variables.pressure_index, ...].set(
+        pressure_updated
+    )
 
     # update the gas state
     if config.dimensionality == 2:

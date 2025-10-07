@@ -3,8 +3,13 @@ downscaling_factor : 2
 randomizer_1: [0.5, 1.5]
 randomizer_2: [0.5, 1.5]
 randomizer_3: [0.5, 1.5]
-num_snapshots: 100
-num_checkpoints: 100
+num_snapshots: 80
+num_checkpoints: 10
 num_timesteps: 1000
 generate_data_on_fly: False
 precomputed_data : True
+fixed_timestep: False
+dt_max: 0.1
+use_specific_snapshot_timepoints: True
+t_end: 0.34
+snapshot_timepoints: [0.1, 0.2, 0.3]

@@ -1,3 +1,10 @@
+"""time integration with nn training
+each new snapshot is saved onto a lag_data which takes that snapshot and the last data_lag snapshots
+with those and the reference ground truth the loss is computed and the optimization is called
+in practice doesnt work due to several reasons:
+    to get the same states to the ground truth the fixed timestep is used
+    as we are comparing snapshot to snapshot is very memory requiring"""
+
 import jax
 import jax.numpy as jnp
 

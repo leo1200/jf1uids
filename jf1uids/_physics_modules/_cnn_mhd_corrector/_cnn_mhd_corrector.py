@@ -52,7 +52,7 @@ class CorrectorCNN(eqx.Module):
             eqx.nn.Conv2d(
                 hidden_channels, in_channels, kernel_size=3, padding=1, key=key3
             ),
-        ]
+        )
 
     def __call__(self, x: Float[Array, "num_vars h w"]) -> Float[Array, "num_vars h w"]:
         """

@@ -9,7 +9,7 @@ from beartype import beartype as typechecker
 from jf1uids._physics_modules._cnn_mhd_corrector._cnn_mhd_corrector import (
     _cnn_mhd_corrector,
 )
-from corrector_src.model._cnn_mhd_corrector import _cnn_mhd_corrector_3d
+from corrector_src.model._cnn_mhd_corrector import _cnn_mhd_corrector_3d, _cnn_mhd_corrector_2d
 from jf1uids._physics_modules._cooling._cooling import update_pressure_by_cooling
 from jf1uids._physics_modules._cosmic_rays.cr_injection import (
     inject_crs_at_strongest_shock,
@@ -99,9 +99,16 @@ def _run_physics_modules(
         )
 
     if config.cnn_mhd_corrector_config.cnn_mhd_corrector:
-        primitive_state = _cnn_mhd_corrector_3d(
-            primitive_state, config, registered_variables, params, dt
-        )
+        if config.dimensionality == 2:
+            primitive_state = _cnn_mhd_corrector_2d(
+                primitive_state, config, registered_variables, params, dt
+            )
+        elif config.dimensionality == 3:
+            primitive_state = _cnn_mhd_corrector_3d(
+                primitive_state, config, registered_variables, params, dt
+            )
+
+    """
     if config.runtime_debugging:
         checkify.check(
             jax.numpy.any(jax.numpy.isnan(primitive_state)),
@@ -117,5 +124,5 @@ def _run_physics_modules(
             jax.numpy.any(primitive_state[registered_variables.density_index, ...] < 0),
             "negative value found in density after corrector",
         )
-
+    """
     return primitive_state

@@ -1,6 +1,7 @@
 # ==== GPU selection ====
 from autocvd import autocvd
-autocvd(num_gpus = 1, interval = 10)
+
+autocvd(num_gpus=1, interval=10)
 # =======================
 
 from jf1uids._physics_modules._cnn_mhd_corrector._cnn_mhd_corrector import CorrectorCNN
@@ -55,6 +56,8 @@ from jf1uids.option_classes.simulation_config import (
     BoundarySettings1D,
 )
 
+from jf1uids._physics_modules._mhd._vector_maths import divergence2D
+
 
 def get_blast_setup(num_cells):
     # spatial domain
@@ -71,6 +74,7 @@ def get_blast_setup(num_cells):
         limiter=MINMOD,
         riemann_solver=HLL,
         exact_end_time=True,
+        runtime_debugging=True,
     )
 
     helper_data = get_helper_data(config)
@@ -105,10 +109,11 @@ def get_blast_setup(num_cells):
 
     B_0 = 1 / jnp.sqrt(2)
     B_x = B_0 * jnp.ones_like(X)
-    B_y = B_0 * jnp.ones_like(X)
+    B_y = jnp.zeros_like(X)
     B_z = jnp.zeros_like(X)
 
     initial_magnetic_field = jnp.stack([B_x, B_y, B_z], axis=0)
+    print(jnp.max(divergence2D(initial_magnetic_field, grid_spacing)))
 
     initial_state = construct_primitive_state(
         config=config,
@@ -245,6 +250,7 @@ learning_rate = 1e-3
 optimizer = optax.adam(learning_rate)
 opt_state = optimizer.init(neural_net_params)
 
+
 @eqx.filter_jit
 def train_step(network_params_arrays, opt_state):
     """Performs one step of gradient descent."""
@@ -253,11 +259,12 @@ def train_step(network_params_arrays, opt_state):
     network_params_arrays = eqx.apply_updates(network_params_arrays, updates)
     return network_params_arrays, opt_state, loss_value
 
+
 # ===================================================
 # ================== ↓ Training Loop ↓ ==============
 # ===================================================
 print("Starting training with optax...")
-num_steps = 5000
+num_steps = 200
 losses = []
 
 # This variable will hold the trained parameters and be updated in the loop
@@ -268,7 +275,7 @@ start_time = timer()
 
 # The main training loop
 pbar = tqdm(range(num_steps))
-best_loss = float('inf')
+best_loss = float("inf")
 best_params = trained_params
 for step in pbar:
     trained_params, opt_state, loss = train_step(trained_params, opt_state)
@@ -276,7 +283,7 @@ for step in pbar:
     if loss < best_loss:
         best_loss = loss
         best_params = trained_params
-    pbar.set_description(f"Step {step+1}/{num_steps} | Loss: {loss:.2e}")
+    pbar.set_description(f"Step {step + 1}/{num_steps} | Loss: {loss:.2e}")
 
 # After training, use the best parameters found
 trained_params = best_params
@@ -289,6 +296,7 @@ print(f"Training finished in {end_time - start_time:.2f} seconds.")
 
 # pickle the trained parameters for later use
 import pickle
+
 with open("trained_paramsX.pkl", "wb") as f:
     pickle.dump(trained_params, f)
 
@@ -297,7 +305,7 @@ with open("trained_paramsX.pkl", "rb") as f:
     trained_params = pickle.load(f)
 
 # save the losses for later analysis with jnp.savez
-jnp.savez("lossesX.npz", losses = losses)
+jnp.savez("lossesX.npz", losses=losses)
 
 # plot the target state and the final state after training and the
 # final state before training
@@ -394,6 +402,7 @@ def get_errors_over_time(time):
 
     return l2_error_corrected, l2_error_uncorrected
 
+
 times = [0.0, 0.025, 0.05, 0.075, 0.1, 0.15, 0.175, 0.2, 0.225, 0.25]
 l2_errors_corrected = []
 l2_errors_uncorrected = []
@@ -404,11 +413,14 @@ for time in times:
 
 # save the errors to a file
 with open("l2_errors.pkl", "wb") as f:
-    pickle.dump({
-        "times": times,
-        "l2_errors_corrected": l2_errors_corrected,
-        "l2_errors_uncorrected": l2_errors_uncorrected
-    }, f)
+    pickle.dump(
+        {
+            "times": times,
+            "l2_errors_corrected": l2_errors_corrected,
+            "l2_errors_uncorrected": l2_errors_uncorrected,
+        },
+        f,
+    )
 
 # Load L2 error evolution over time
 with open("l2_errors.pkl", "rb") as f:

@@ -7,15 +7,16 @@ from jaxtyping import Array, Float, PRNGKeyArray
 from functools import partial
 import jax.numpy as jnp
 import jax
-
 import equinox as eqx
+
+from jax.experimental import checkify
 
 # typing
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
 from typing import Tuple, Union
 
-from jf1uids._physics_modules._mhd._vector_maths import curl2D, curl3D
+from jf1uids._physics_modules._mhd._vector_maths import curl2D, curl3D, divergence3D
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfig
@@ -114,7 +115,11 @@ def _cnn_mhd_corrector_3d(
     electric_field_correction = correction[-3:, ...]
     magnetic_field_correction = curl3D(electric_field_correction, config.grid_spacing)
     correction = correction.at[-3:, ...].set(magnetic_field_correction)
-
+    if config.runtime_debugging:
+        jax.debug.print(
+            "divergence of correction {}",
+            jnp.max(divergence3D(correction[-3:, ...], config.grid_spacing)),
+        )
     # update the primitive state with the correction
     primitive_state = primitive_state + correction * time_step
 
