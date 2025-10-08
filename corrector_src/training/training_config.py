@@ -98,8 +98,11 @@ class TrainingConfig(NamedTuple):
     current_checkpoint_chunk: int = 0
     current_loss_index: int = 0
 
-    # could also be a percentage might be easier to use not sure
-    loss_calculation_times: np.ndarray = np.array([0.0])
-
     exact_end_time: bool = True
     return_full_sim: bool = True
+
+
+class TrainingParams(NamedTuple):
+    # the main difference is that these can be differentiated
+    # could also be a percentage might be easier to use not sure
+    loss_calculation_times: np.ndarray = np.array([0.0])

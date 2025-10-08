@@ -1,16 +1,18 @@
-from autocvd import autocvd
+# from autocvd import autocvd
 
-autocvd(num_gpus=1)
+# autocvd(num_gpus=1)
 
 import os
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+
 # os.environ["JAX_TRACEBACK_FILTERING"] = "off"
-# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 # os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 # os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.2"
 
 from jf1uids.option_classes.simulation_config import finalize_config
 from jf1uids import time_integration
+from jf1uids.data_classes.simulation_helper_data import HelperData, get_helper_data
 
 import corrector_src.data.blast_creation as blast
 from corrector_src.utils.downaverage import downaverage_states
@@ -20,10 +22,11 @@ import numpy as np
 import jax.numpy as jnp
 import jax
 
+jax.log_compiles(True)
 
-from corrector_src.training.sol_one_training_snapshots import _time_integration
+from corrector_src.training.sol_one_training_snapshots import time_integration
 
-from corrector_src.training.training_config import TrainingConfig
+from corrector_src.training.training_config import TrainingConfig, TrainingParams
 from corrector_src.model._cnn_mhd_corrector import CorrectorCNN
 from corrector_src.model._cnn_mhd_corrector_options import (
     CNNMHDParams,
@@ -49,21 +52,20 @@ from hydra.utils import instantiate
 @hydra.main(version_base=None, config_path="../../configs", config_name="config")
 def training_loop(cfg):
     print("Hydra run dir:", os.getcwd())
-    num_cells_hr = cfg.data.hr_res
-    downsampling_factor = cfg.data.downscaling_factor
     epochs = cfg.training.epochs
     n_look_behind = cfg.training.n_look_behind
-
-    loss_timesteps = jnp.array([0.3, 0.5, 0.8, 1.0])
-
+    loss_timesteps = jnp.array(cfg.data.snapshot_timepoints)
+    assert loss_timesteps.any() > cfg.data.t_end, (
+        "found value greater than the end time in the snapshot timepoints"
+    )
     # Training configuration
     training_config = TrainingConfig(
         compute_intermediate_losses=True,
         n_look_behind=n_look_behind,
         loss_weights=None,
         use_relative_error=False,
-        loss_calculation_times=loss_timesteps,
     )
+    training_params = TrainingParams(loss_calculation_times=loss_timesteps)
     loss_function = mse_loss
 
     # Initialize model and optimizer
@@ -76,7 +78,7 @@ def training_loop(cfg):
     )
     cnn_mhd_corrector_params = CNNMHDParams(network_params=neural_net_params)
     optimizer = optax.chain(
-        optax.clip_by_global_norm(1.0),
+        # optax.clip_by_global_norm(1.0),
         optax.adam(float(cfg.training.learning_rate)),
     )
     opt_state = optimizer.init(neural_net_params)
@@ -108,7 +110,7 @@ def training_loop(cfg):
     gt_cfg_data = cfg.data
     gt_cfg_data.debug = False
     ground_truth, _ = integrate_blast(cfg.data, None, rng_seed, downscale=True)
-    print(jnp.shape(ground_truth))
+    print("gt_shape:", jnp.shape(ground_truth))
 
     for i in range(epochs):
         # if cfg.data.generate_data_on_fly:
@@ -116,27 +118,27 @@ def training_loop(cfg):
 
         initial_state, config, params, helper_data, registered_variables = (
             prepare_initial_state(
-                cfg.data,
-                rng_seed,
-                cnn_mhd_corrector_config,
-                cnn_mhd_corrector_params,
-                True,
+                cfg_data=cfg.data,
+                rng_seed=rng_seed,
+                cnn_mhd_corrector_config=cnn_mhd_corrector_config,
+                cnn_mhd_corrector_params=cnn_mhd_corrector_params,
+                downscale=True,
             )
         )
-        time_train = time.time()
 
-        losses, new_network_params, opt_state, _ = _time_integration(
-            initial_state=initial_state,
+        time_train = time.time()
+        losses, new_network_params, opt_state, _ = time_integration(
+            primitive_state=initial_state,
             config=config,
             params=params,
             helper_data=helper_data,
             registered_variables=registered_variables,
-            training_config=training_config,
-            target_data=ground_truth,
             optimizer=optimizer,
-            opt_state=opt_state,
             loss_function=loss_function,
-            save_full_sim=False,
+            opt_state=opt_state,
+            target_data=ground_truth,
+            training_config=training_config,
+            training_params=training_params,
         )
 
         time_train = time.time() - time_train

@@ -58,20 +58,25 @@ from timeit import default_timer as timer
 
 from jf1uids.time_stepping._utils import _pad, _unpad
 
-from corrector_src.training.training_config import TrainingConfig
+from corrector_src.training.training_config import TrainingConfig, TrainingParams
 import optax
 import equinox as eqx
 
 
-@jaxtyped(typechecker=typechecker)
 def time_integration(
     primitive_state: STATE_TYPE,
     config: SimulationConfig,
     params: SimulationParams,
     helper_data: HelperData,
     registered_variables: RegisteredVariables,
+    optimizer: optax.GradientTransformation,
+    loss_function: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray],
+    opt_state: optax.OptState,
+    target_data: jnp.ndarray,
     snapshot_callable=None,
-    sharding: Union[NoneType, jax.NamedSharding] = None,
+    training_config: Optional[TrainingConfig] = None,
+    training_params: Optional[TrainingParams] = None,
+    sharding: Optional[jax.NamedSharding] = None,
 ) -> Union[STATE_TYPE, SnapshotData]:
     """
     Integrate the fluid equations in time. For the options of
@@ -103,14 +108,20 @@ def time_integration(
         )
         checked_integration = checkify.checkify(_time_integration, errors)
 
-        err, final_state = checked_integration(
+        err, (losses, network_params, opt_state, state) = checked_integration(
             primitive_state,
             config,
             params,
             helper_data,
             helper_data_pad,
             registered_variables,
+            optimizer,
+            loss_function,
+            opt_state,
+            target_data,
             snapshot_callable,
+            training_config,
+            training_params,
         )
         err.throw()
 
@@ -123,7 +134,13 @@ def time_integration(
                 helper_data,
                 helper_data_pad,
                 registered_variables,
+                optimizer,
+                loss_function,
+                opt_state,
+                target_data,
                 snapshot_callable,
+                training_config,
+                training_params,
             ).compile()
             compiled_stats = compiled_step.memory_analysis()
             if compiled_stats is not None:
@@ -145,17 +162,23 @@ def time_integration(
                 print(f"Total size: {total / (1024**2):.2f} MB")
                 print("========================================")
 
-        final_state = _time_integration(
+        losses, network_params, opt_state, state = _time_integration(
             primitive_state,
             config,
             params,
             helper_data,
             helper_data_pad,
             registered_variables,
+            optimizer,
+            loss_function,
+            opt_state,
+            target_data,
             snapshot_callable,
+            training_config,
+            training_params,
         )
 
-    return final_state
+    return losses, network_params, opt_state, state
 
 
 @partial(
@@ -165,11 +188,10 @@ def time_integration(
         "registered_variables",
         "snapshot_callable",
         "training_config",
-        "target_data",
         "loss_function",
+        "optimizer",
     ],
 )
-@jaxtyped(typechecker=typechecker)
 def _time_integration(
     primitive_state: STATE_TYPE,
     config: SimulationConfig,
@@ -183,6 +205,7 @@ def _time_integration(
     target_data: jnp.ndarray,
     snapshot_callable=None,
     training_config: Optional[TrainingConfig] = None,
+    training_params: Optional[TrainingParams] = None,
 ) -> Tuple[jnp.ndarray, eqx.Module, optax.OptState, SnapshotData]:
     """
     Time integration.
@@ -280,351 +303,426 @@ def _time_integration(
             current_checkpoint=current_checkpoint,
         )
 
-    def update_step(carry):
-        if config.return_snapshots:
-            time, state, snapshot_data = carry
+    # def condition(carry):
+    #     if config.return_snapshots or config.activate_snapshot_callback:
+    #         t, _, _ = carry
+    #     else:
+    #         t, _ = carry
+    #     return t < params.t_end
 
-            def update_snapshot_data(time, state, snapshot_data):
-                time_points = snapshot_data.time_points.at[
-                    snapshot_data.current_checkpoint
-                ].set(time)
-
-                unpad_state = _unpad(state, config)
-
-                if config.snapshot_settings.return_states:
-                    states = snapshot_data.states.at[
-                        snapshot_data.current_checkpoint
-                    ].set(unpad_state)
-                else:
-                    states = None
-
-                if config.snapshot_settings.return_total_mass:
-                    total_mass = snapshot_data.total_mass.at[
-                        snapshot_data.current_checkpoint
-                    ].set(calculate_total_mass(unpad_state, helper_data, config))
-                else:
-                    total_mass = None
-
-                if config.snapshot_settings.return_total_energy:
-                    total_energy = snapshot_data.total_energy.at[
-                        snapshot_data.current_checkpoint
-                    ].set(
-                        calculate_total_energy(
-                            unpad_state,
-                            helper_data,
-                            params.gamma,
-                            params.gravitational_constant,
-                            config,
-                            registered_variables,
-                        )
-                    )
-                else:
-                    total_energy = None
-
-                if config.snapshot_settings.return_internal_energy:
-                    internal_energy = snapshot_data.internal_energy.at[
-                        snapshot_data.current_checkpoint
-                    ].set(
-                        calculate_internal_energy(
-                            unpad_state,
-                            helper_data,
-                            params.gamma,
-                            config,
-                            registered_variables,
-                        )
-                    )
-                else:
-                    internal_energy = None
-
-                if config.snapshot_settings.return_kinetic_energy:
-                    kinetic_energy = snapshot_data.kinetic_energy.at[
-                        snapshot_data.current_checkpoint
-                    ].set(
-                        calculate_kinetic_energy(
-                            unpad_state, helper_data, config, registered_variables
-                        )
-                    )
-                else:
-                    kinetic_energy = None
-
-                if config.snapshot_settings.return_radial_momentum:
-                    radial_momentum = snapshot_data.radial_momentum.at[
-                        snapshot_data.current_checkpoint
-                    ].set(
-                        calculate_radial_momentum(
-                            unpad_state, helper_data, config, registered_variables
-                        )
-                    )
-                else:
-                    radial_momentum = None
-
-                if (
-                    config.self_gravity
-                    and config.snapshot_settings.return_gravitational_energy
-                ):
-                    gravitational_energy = snapshot_data.gravitational_energy.at[
-                        snapshot_data.current_checkpoint
-                    ].set(
-                        calculate_gravitational_energy(
-                            unpad_state,
-                            helper_data,
-                            params.gravitational_constant,
-                            config,
-                            registered_variables,
-                        )
-                    )
-                else:
-                    gravitational_energy = None
-
-                current_checkpoint = snapshot_data.current_checkpoint + 1
-                snapshot_data = snapshot_data._replace(
-                    time_points=time_points,
-                    states=states,
-                    current_checkpoint=current_checkpoint,
-                    total_mass=total_mass,
-                    total_energy=total_energy,
-                    internal_energy=internal_energy,
-                    kinetic_energy=kinetic_energy,
-                    gravitational_energy=gravitational_energy,
-                    radial_momentum=radial_momentum,
-                )
-                return snapshot_data
-
-            def dont_update_snapshot_data(time, state, snapshot_data):
-                return snapshot_data
-
-            if config.use_specific_snapshot_timepoints:
-                snapshot_data = jax.lax.cond(
-                    jnp.abs(
-                        time
-                        - params.snapshot_timepoints[snapshot_data.current_checkpoint]
-                    )
-                    < 1e-12,
-                    update_snapshot_data,
-                    dont_update_snapshot_data,
-                    time,
-                    state,
-                    snapshot_data,
-                )
-            else:
-                snapshot_data = jax.lax.cond(
-                    time
-                    >= snapshot_data.current_checkpoint
-                    * params.t_end
-                    / config.num_snapshots,
-                    update_snapshot_data,
-                    dont_update_snapshot_data,
-                    time,
-                    state,
-                    snapshot_data,
-                )
-
-            num_iterations = snapshot_data.num_iterations + 1
-            snapshot_data = snapshot_data._replace(num_iterations=num_iterations)
-
-        elif config.activate_snapshot_callback:
-            time, state, snapshot_data = carry
-
-            def update_snapshot_data(snapshot_data):
-                current_checkpoint = snapshot_data.current_checkpoint + 1
-                snapshot_data = snapshot_data._replace(
-                    current_checkpoint=current_checkpoint
-                )
-
-                jax.debug.callback(snapshot_callable, time, state, registered_variables)
-
-                return snapshot_data
-
-            def dont_update_snapshot_data(snapshot_data):
-                return snapshot_data
-
-            snapshot_data = jax.lax.cond(
-                time
-                >= snapshot_data.current_checkpoint
-                * params.t_end
-                / config.num_snapshots,
-                update_snapshot_data,
-                dont_update_snapshot_data,
-                snapshot_data,
-            )
-
-            num_iterations = snapshot_data.num_iterations + 1
-            snapshot_data = snapshot_data._replace(num_iterations=num_iterations)
-        else:
-            time, state = carry
-
-        # do not differentiate through the choice of the time step
-        if not config.fixed_timestep:
-            if config.source_term_aware_timestep:
-                dt = jax.lax.stop_gradient(
-                    _source_term_aware_time_step(
-                        state,
-                        config,
-                        params,
-                        helper_data_pad,
-                        registered_variables,
-                        time,
-                    )
-                )
-            else:
-                dt = jax.lax.stop_gradient(
-                    _cfl_time_step(
-                        state,
-                        config.grid_spacing,
-                        params.dt_max,
-                        params.gamma,
-                        config,
-                        registered_variables,
-                        params.C_cfl,
-                    )
-                )
-        else:
-            dt = params.t_end / config.num_timesteps
-
-        if config.use_specific_snapshot_timepoints and config.return_snapshots:
-            dt = jnp.minimum(
-                dt, params.snapshot_timepoints[snapshot_data.current_checkpoint] - time
-            )
-
-        if config.exact_end_time and not config.use_specific_snapshot_timepoints:
-            dt = jnp.minimum(dt, params.t_end - time)
-
-        if training_config.exact_end_time:
-            dt = jnp.minimum(
-                dt,
-                training_config.loss_calculation_times[
-                    training_config.current_loss_index
-                ]
-                - time,
-            )
-        # for now we mainly consider the stellar wind, a constant source term term,
-        # so the source is handled via a simple Euler step but generally
-        # a higher order method (in a split fashion) may be used
-
-        # state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables, time)
-        state = _run_physics_modules(
-            state, dt, config, params, helper_data_pad, registered_variables, time + dt
-        )
-        state = _evolve_state(
-            state,
-            dt,
-            params.gamma,
-            params.gravitational_constant,
-            config,
-            params,
-            helper_data_pad,
-            registered_variables,
-        )
-
-        time += dt
-
-        if config.use_specific_snapshot_timepoints and config.return_snapshots:
-            snapshot_data = jax.lax.cond(
-                jnp.abs(time - params.t_end) < 1e-12,
-                update_snapshot_data,
-                dont_update_snapshot_data,
-                time,
-                state,
-                snapshot_data,
-            )
-
-        if config.progress_bar:
-            jax.debug.callback(_show_progress, time, params.t_end)
-
-        if config.return_snapshots or config.activate_snapshot_callback:
-            carry = (time, state, snapshot_data)
-        else:
-            carry = (time, state)
-
-        return carry
-
-    def update_step_for(_, carry):
-        return update_step(carry)
-
-    def condition(carry):
-        if config.return_snapshots or config.activate_snapshot_callback:
-            t, _, _ = carry
-        else:
-            t, _ = carry
-        return t < params.t_end
-
-    if config.return_snapshots or config.activate_snapshot_callback:
-        carry = (0.0, primitive_state, snapshot_data)
-    else:
-        carry = (0.0, primitive_state)
-
-    if TrainingConfig is None:
+    if training_config is None:
         raise ValueError("no training config was given!!")
     else:
-        tsteps_lag = config.num_timesteps / len(training_config.loss_calculation_times)
+        tsteps_lag = config.num_timesteps / len(training_params.loss_calculation_times)
 
-        def condition_loss(carry):
-            if config.return_snapshots or config.activate_snapshot_callback:
-                t, _, _ = carry
-            else:
-                t, _ = carry
-            return (
-                t
-                < training_config.loss_calculation_times[
-                    training_config.current_loss_index
-                ]
-            )
-
-        def loss_fn(network_parameters, carry):
-            params = params._replace(
-                cnn_mhd_corrector_params=params.cnn_mhd_corrector_params._replace(
-                    network_params=network_parameters
-                )
-            )
-            if not config.fixed_timestep:
-                if config.differentiation_mode == BACKWARDS:
-                    carry = checkpointed_while_loop(
-                        condition_loss,
-                        update_step,
-                        carry,
-                        checkpoints=config.num_checkpoints,
-                    )
-                elif config.differentiation_mode == FORWARDS:
-                    carry = jax.lax.while_loop(condition_loss, update_step, carry)
-                else:
-                    raise ValueError("Unknown differentiation mode.")
-            else:
-                carry = jax.lax.fori_loop(0, tsteps_lag, update_step_for, carry)
-
-            if config.return_snapshots or config.activate_snapshot_callback:
-                time, final_state, snapshot_data = carry
-            else:
-                time, final_state = carry
-
-            final_state = _unpad(final_state, config)
-            loss = loss_function(
-                target_data[training_config.current_loss_index], final_state
-            )
-            training_config._replace(
-                current_loss_index=(training_config.current_loss_index + 1)
-            )
-
-            return loss, carry
-
-        def train_step(carry, network_params, opt_state, _):
+        def train_step(carry, loss_index):
             """Performs one step of gradient descent."""
-            (loss_value, carry), grads = eqx.filter_value_and_grad(
+            if config.return_snapshots or config.activate_snapshot_callback:
+                (
+                    time,
+                    primitive_state,
+                    snapshot_data,
+                    network_params,
+                    opt_state,
+                ) = carry
+                carry_loss = (
+                    time,
+                    primitive_state,
+                    snapshot_data,
+                )
+            else:
+                time, primitive_state, network_params, opt_state = carry
+                carry_loss = (
+                    time,
+                    primitive_state,
+                )
+
+            def condition_loss(carry):
+                if config.return_snapshots or config.activate_snapshot_callback:
+                    t, _, _ = carry
+                else:
+                    t, _ = carry
+                    jax.debug.print(
+                        "time {}, condition time {}",
+                        t,
+                        training_params.loss_calculation_times[loss_index],
+                    )
+                return t < training_params.loss_calculation_times[loss_index]
+
+            def loss_fn(network_parameters, carry):
+                updated_params = params._replace(
+                    cnn_mhd_corrector_params=params.cnn_mhd_corrector_params._replace(
+                        network_params=network_parameters
+                    )
+                )
+
+                def update_step(carry):
+                    if config.return_snapshots:
+                        time, state, snapshot_data = carry
+
+                        def update_snapshot_data(time, state, snapshot_data):
+                            time_points = snapshot_data.time_points.at[
+                                snapshot_data.current_checkpoint
+                            ].set(time)
+
+                            unpad_state = _unpad(state, config)
+
+                            if config.snapshot_settings.return_states:
+                                states = snapshot_data.states.at[
+                                    snapshot_data.current_checkpoint
+                                ].set(unpad_state)
+                            else:
+                                states = None
+
+                            if config.snapshot_settings.return_total_mass:
+                                total_mass = snapshot_data.total_mass.at[
+                                    snapshot_data.current_checkpoint
+                                ].set(
+                                    calculate_total_mass(
+                                        unpad_state, helper_data, config
+                                    )
+                                )
+                            else:
+                                total_mass = None
+
+                            if config.snapshot_settings.return_total_energy:
+                                total_energy = snapshot_data.total_energy.at[
+                                    snapshot_data.current_checkpoint
+                                ].set(
+                                    calculate_total_energy(
+                                        unpad_state,
+                                        helper_data,
+                                        updated_params.gamma,
+                                        updated_params.gravitational_constant,
+                                        config,
+                                        registered_variables,
+                                    )
+                                )
+                            else:
+                                total_energy = None
+
+                            if config.snapshot_settings.return_internal_energy:
+                                internal_energy = snapshot_data.internal_energy.at[
+                                    snapshot_data.current_checkpoint
+                                ].set(
+                                    calculate_internal_energy(
+                                        unpad_state,
+                                        helper_data,
+                                        updated_params.gamma,
+                                        config,
+                                        registered_variables,
+                                    )
+                                )
+                            else:
+                                internal_energy = None
+
+                            if config.snapshot_settings.return_kinetic_energy:
+                                kinetic_energy = snapshot_data.kinetic_energy.at[
+                                    snapshot_data.current_checkpoint
+                                ].set(
+                                    calculate_kinetic_energy(
+                                        unpad_state,
+                                        helper_data,
+                                        config,
+                                        registered_variables,
+                                    )
+                                )
+                            else:
+                                kinetic_energy = None
+
+                            if config.snapshot_settings.return_radial_momentum:
+                                radial_momentum = snapshot_data.radial_momentum.at[
+                                    snapshot_data.current_checkpoint
+                                ].set(
+                                    calculate_radial_momentum(
+                                        unpad_state,
+                                        helper_data,
+                                        config,
+                                        registered_variables,
+                                    )
+                                )
+                            else:
+                                radial_momentum = None
+
+                            if (
+                                config.self_gravity
+                                and config.snapshot_settings.return_gravitational_energy
+                            ):
+                                gravitational_energy = (
+                                    snapshot_data.gravitational_energy.at[
+                                        snapshot_data.current_checkpoint
+                                    ].set(
+                                        calculate_gravitational_energy(
+                                            unpad_state,
+                                            helper_data,
+                                            updated_params.gravitational_constant,
+                                            config,
+                                            registered_variables,
+                                        )
+                                    )
+                                )
+                            else:
+                                gravitational_energy = None
+
+                            current_checkpoint = snapshot_data.current_checkpoint + 1
+                            snapshot_data = snapshot_data._replace(
+                                time_points=time_points,
+                                states=states,
+                                current_checkpoint=current_checkpoint,
+                                total_mass=total_mass,
+                                total_energy=total_energy,
+                                internal_energy=internal_energy,
+                                kinetic_energy=kinetic_energy,
+                                gravitational_energy=gravitational_energy,
+                                radial_momentum=radial_momentum,
+                            )
+                            return snapshot_data
+
+                        def dont_update_snapshot_data(time, state, snapshot_data):
+                            return snapshot_data
+
+                        if config.use_specific_snapshot_timepoints:
+                            snapshot_data = jax.lax.cond(
+                                jnp.abs(
+                                    time
+                                    - updated_params.snapshot_timepoints[
+                                        snapshot_data.current_checkpoint
+                                    ]
+                                )
+                                < 1e-12,
+                                update_snapshot_data,
+                                dont_update_snapshot_data,
+                                time,
+                                state,
+                                snapshot_data,
+                            )
+                        else:
+                            snapshot_data = jax.lax.cond(
+                                time
+                                >= snapshot_data.current_checkpoint
+                                * updated_params.t_end
+                                / config.num_snapshots,
+                                update_snapshot_data,
+                                dont_update_snapshot_data,
+                                time,
+                                state,
+                                snapshot_data,
+                            )
+
+                        num_iterations = snapshot_data.num_iterations + 1
+                        snapshot_data = snapshot_data._replace(
+                            num_iterations=num_iterations
+                        )
+
+                    elif (
+                        config.activate_snapshot_callback
+                    ):  # for active snapshot_callback!!
+                        time, state, snapshot_data = carry
+
+                        def update_snapshot_data(snapshot_data):
+                            current_checkpoint = snapshot_data.current_checkpoint + 1
+                            snapshot_data = snapshot_data._replace(
+                                current_checkpoint=current_checkpoint
+                            )
+
+                            jax.debug.callback(
+                                snapshot_callable, time, state, registered_variables
+                            )
+
+                            return snapshot_data
+
+                        def dont_update_snapshot_data(snapshot_data):
+                            return snapshot_data
+
+                        snapshot_data = jax.lax.cond(
+                            time
+                            >= snapshot_data.current_checkpoint
+                            * updated_params.t_end
+                            / config.num_snapshots,
+                            update_snapshot_data,
+                            dont_update_snapshot_data,
+                            snapshot_data,
+                        )
+
+                        num_iterations = snapshot_data.num_iterations + 1
+                        snapshot_data = snapshot_data._replace(
+                            num_iterations=num_iterations
+                        )
+                    else:
+                        time, state = carry
+
+                    # do not differentiate through the choice of the time step
+                    if not config.fixed_timestep:
+                        if config.source_term_aware_timestep:
+                            dt = jax.lax.stop_gradient(
+                                _source_term_aware_time_step(
+                                    state,
+                                    config,
+                                    updated_params,
+                                    helper_data_pad,
+                                    registered_variables,
+                                    time,
+                                )
+                            )
+                        else:
+                            dt = jax.lax.stop_gradient(
+                                _cfl_time_step(
+                                    state,
+                                    config.grid_spacing,
+                                    updated_params.dt_max,
+                                    updated_params.gamma,
+                                    config,
+                                    registered_variables,
+                                    params.C_cfl,
+                                )
+                            )
+                    else:
+                        dt = updated_params.t_end / config.num_timesteps
+
+                    if (
+                        config.use_specific_snapshot_timepoints
+                        and config.return_snapshots
+                    ):
+                        dt = jnp.minimum(
+                            dt,
+                            updated_params.snapshot_timepoints[
+                                snapshot_data.current_checkpoint
+                            ]
+                            - time,
+                        )
+
+                    if (
+                        config.exact_end_time
+                        and not config.use_specific_snapshot_timepoints
+                    ):
+                        dt = jnp.minimum(dt, updated_params.t_end - time)
+
+                    if training_config.exact_end_time:
+                        dt = jnp.minimum(
+                            dt,
+                            training_params.loss_calculation_times[loss_index] - time,
+                        )
+                    # for now we mainly consider the stellar wind, a constant source term term,
+                    # so the source is handled via a simple Euler step but generally
+                    # a higher order method (in a split fashion) may be used
+
+                    # state = _run_physics_modules(state, dt / 2, config, params, helper_data, registered_variables, time)
+                    state = _run_physics_modules(
+                        state,
+                        dt,
+                        config,
+                        updated_params,
+                        helper_data_pad,
+                        registered_variables,
+                        time + dt,
+                    )
+                    state = _evolve_state(
+                        state,
+                        dt,
+                        updated_params.gamma,
+                        updated_params.gravitational_constant,
+                        config,
+                        updated_params,
+                        helper_data_pad,
+                        registered_variables,
+                    )
+
+                    time += dt
+
+                    if (
+                        config.use_specific_snapshot_timepoints
+                        and config.return_snapshots
+                    ):
+                        snapshot_data = jax.lax.cond(
+                            jnp.abs(time - updated_params.t_end) < 1e-12,
+                            update_snapshot_data,
+                            dont_update_snapshot_data,
+                            time,
+                            state,
+                            snapshot_data,
+                        )
+
+                    if config.progress_bar:
+                        jax.debug.callback(_show_progress, time, updated_params.t_end)
+
+                    if config.return_snapshots or config.activate_snapshot_callback:
+                        carry = (time, state, snapshot_data)
+                    else:
+                        carry = (time, state)
+
+                    return carry
+
+                def update_step_for(_, carry):
+                    return update_step(carry)
+
+                if not config.fixed_timestep:
+                    if config.differentiation_mode == BACKWARDS:
+                        carry = checkpointed_while_loop(
+                            condition_loss,
+                            update_step,
+                            carry,
+                            checkpoints=config.num_checkpoints,
+                        )
+                    elif config.differentiation_mode == FORWARDS:
+                        carry = jax.lax.while_loop(condition_loss, update_step, carry)
+                    else:
+                        raise ValueError("Unknown differentiation mode.")
+                else:
+                    carry = jax.lax.fori_loop(0, tsteps_lag, update_step_for, carry)
+
+                if config.return_snapshots or config.activate_snapshot_callback:
+                    time, final_state, snapshot_data = carry
+                else:
+                    time, final_state = carry
+
+                final_state = _unpad(final_state, config)
+                loss = loss_function(
+                    target_data[training_config.current_loss_index], final_state
+                )
+                return loss, carry
+
+            (loss_value, carry_loss), grads = eqx.filter_value_and_grad(
                 loss_fn, has_aux=True
-            )(network_params, carry)
+            )(network_params, carry_loss)
             updates, opt_state = optimizer.update(grads, opt_state, network_params)
             network_params_updated = eqx.apply_updates(network_params, updates)
-            return carry, network_params_updated, opt_state, loss_value
+            if config.return_snapshots or config.activate_snapshot_callback:
+                time, primitive_state, snapshot_data = carry_loss
+                carry = (
+                    time,
+                    primitive_state,
+                    snapshot_data,
+                    network_params_updated,
+                    opt_state,
+                )
+            else:
+                time, primitive_state = carry_loss
+
+                carry = time, primitive_state, network_params_updated, opt_state
+
+            jax.debug.print("current_loss_index {},  loss {}", loss_index, loss_value)
+
+            return carry, loss_value
 
     initial_network_params = params.cnn_mhd_corrector_params.network_params
-    (carry, network_params, opt_state), losses = jax.lax.scan(
+
+    if config.return_snapshots or config.activate_snapshot_callback:
+        carry = (0.0, primitive_state, snapshot_data, initial_network_params, opt_state)
+    else:
+        carry = (0.0, primitive_state, initial_network_params, opt_state)
+
+    carry, losses = jax.lax.scan(
         train_step,
-        (carry, initial_network_params, opt_state),
-        jnp.arange(len(training_config.loss_calculation_times)),
+        carry,
+        jnp.arange(len(training_params.loss_calculation_times)),
     )
 
     if config.return_snapshots or config.activate_snapshot_callback:
-        _, state, snapshot_data = carry
+        time, state, snapshot_data, network_params, opt_state = carry
+    else:
+        time, state, network_params, opt_state = carry
 
+    if config.return_snapshots or config.activate_snapshot_callback:
         if config.return_snapshots:
             if config.snapshot_settings.return_final_state:
                 snapshot_data = snapshot_data._replace(
@@ -634,8 +732,6 @@ def _time_integration(
         else:
             return losses, network_params, opt_state, _unpad(state, config)
     else:
-        _, state = carry
-
         # unpad the primitive state if we padded it
         state = _unpad(state, config)
 

@@ -144,26 +144,40 @@ def initial_blast_state(num_cells):
 def randomized_initial_blast_state(
     num_cells: int, cfg_data: OmegaConf, rng_seed: Optional[int] = None
 ):
+    """
+    Returns an initial states for a 3d mhd_blast, some parameters are randomized basted onthe rng_seed.
+    If none is given a random seed is used and returned aswell
+
+    Args:
+        num_cells: the resolution of the simulation
+        cfg_data: the configuration dictionary
+        rng_seed: the randomizer seed (should be an int)
+    """
+
     adiabatic_index = 5 / 3
     box_size = 1.0
     fixed_timestep = cfg_data.fixed_timestep
     dt_max = cfg_data.dt_max
     mhd = True
-    if (
-        cfg_data.use_specific_snapshot_timepoints
-        and cfg_data.snapshot_timepoints is not None
-    ):
-        snapshot_timepoints = jnp.array(cfg_data.snapshot_timepoints)
-        num_snapshots = len(cfg_data.snapshot_timepoints)
-    else:
-        raise ValueError(
-            "use_specific_snapshot_times was True but snapshot times were not given"
-        )
+    if cfg_data.return_snapshots:
+        if (
+            cfg_data.use_specific_snapshot_timepoints
+            and cfg_data.snapshot_timepoints is not None
+        ):
+            snapshot_timepoints = jnp.array(cfg_data.snapshot_timepoints)
+            num_snapshots = len(cfg_data.snapshot_timepoints)
+        else:
+            print(
+                "use_specific_snapshot_times was False or snapshot times were not given"
+            )
+            num_snapshots = cfg_data.num_snapshots
+            cfg_data.use_specific_snapshot_timepoints = False
+            snapshot_timepoints = None
     # setup simulation config
     config = SimulationConfig(
         runtime_debugging=cfg_data.debug,
         first_order_fallback=False,
-        progress_bar=True,
+        progress_bar=False,
         dimensionality=3,
         num_ghost_cells=2,
         box_size=box_size,
@@ -173,7 +187,7 @@ def randomized_initial_blast_state(
         differentiation_mode=BACKWARDS,
         riemann_solver=HLL,
         limiter=0,
-        return_snapshots=True,
+        return_snapshots=cfg_data.return_snapshots,
         num_snapshots=num_snapshots,
         boundary_settings=BoundarySettings(),
         num_checkpoints=cfg_data.num_checkpoints,
