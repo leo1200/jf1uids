@@ -1,7 +1,6 @@
 # TODO: fix units
 
 from autocvd import autocvd
-
 autocvd(num_gpus = 1)
 
 from jf1uids._physics_modules._cooling._cooling import get_pressure_from_temperature, get_temperature_from_pressure
@@ -117,23 +116,24 @@ def lambda_unitful(log10_lambda_code):
 
 
 
-
 corrector_resolutions = [500, 1000, 2000]
+reference_resolutions = [10000, 10000, 10000]
 
-fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+fig, ax = plt.subplots(1, 1, figsize=(6, 3))
 ax.plot(temp_unitful(log10_T_table), lambda_unitful(log10_Lambda_table), label="Schure et al., 2009", color="blue")
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlabel("temperature in K")
-ax.set_ylabel("cooling function Λ(T) in erg cm³ / s")
+ax.set_ylabel("cooling function Λ(T)\nin erg cm³ / s")
 ax.set_title("cooling function comparison")
 
-for low_res in corrector_resolutions:
-    with open("models/cooling_corrector" + str(low_res) + ".pkl", "rb") as f:
+for low_res, high_res in zip(corrector_resolutions, reference_resolutions):
+    with open("models/cooling_corrector" + str(high_res) + "_" + str(low_res) +  ".pkl", "rb") as f:
         cooling_corrector_params = pickle.load(f)
     cooling_corrector_network = eqx.combine(cooling_corrector_params, cooling_corrector_static)
     Lambda_net_after_training = jax.vmap(cooling_corrector_network)(log10_T_table)
     ax.plot(temp_unitful(log10_T_table), lambda_unitful(Lambda_net_after_training), label="learned cooling function, N = " + str(low_res), linestyle="--")
 
 ax.legend()
+plt.tight_layout()
 plt.savefig("figures/cooling_function_comparison.svg")

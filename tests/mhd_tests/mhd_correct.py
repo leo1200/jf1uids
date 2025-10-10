@@ -59,7 +59,7 @@ snapshot_timepoints_eval = jnp.linspace(0.0, 0.2, 50)
 
 # baseline config
 baseline_config = SimulationConfig(
-    progress_bar = True,
+    progress_bar = False,
     mhd = True,
     dimensionality = 2,
     limiter = MINMOD,
@@ -285,23 +285,24 @@ trained_params = neural_net_params
 # Timing
 start_time = timer()
 
-# # The main training loop
-# pbar = tqdm(range(num_steps))
-# best_loss = float('inf')
-# best_params = trained_params
-# for step in pbar:
-#     trained_params, opt_state, loss = train_step(trained_params, opt_state)
-#     losses.append(loss)
-#     if loss < best_loss:
-#         best_loss = loss
-#         best_params = trained_params
-#     pbar.set_description(f"Step {step+1}/{num_steps} | Loss: {loss:.2e}")
+# The main training loop
+pbar = tqdm(range(num_steps))
+best_loss = float('inf')
+best_params = trained_params
+for step in pbar:
+    trained_params, opt_state, loss = train_step(trained_params, opt_state)
+    losses.append(loss)
+    if loss < best_loss:
+        best_loss = loss
+        best_params = trained_params
+    pbar.set_description(f"Step {step+1}/{num_steps} | Loss: {loss:.2e}")
 
 # After training, use the best parameters found
-# trained_params = best_params
+trained_params = best_params
 
 end_time = timer()
 print(f"Training finished in {end_time - start_time:.2f} seconds.")
+input("Press Enter to continue...")
 
 # # # save the trained parameters using pickle
 import pickle

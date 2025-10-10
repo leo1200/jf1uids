@@ -293,7 +293,7 @@ def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
     if config.geometry == SPHERICAL:
 
         print("For spherical geometry, only HLL is currently supported. Also, only the unsplit mode has been tested.")
-        config = config._replace(grid_spacing = config.box_size / (config.num_cells - 1))
+        config = config._replace(grid_spacing = config.box_size / config.num_cells)
 
         if config.riemann_solver != HLL:
             print("Setting HLL Riemann solver for spherical geometry.")

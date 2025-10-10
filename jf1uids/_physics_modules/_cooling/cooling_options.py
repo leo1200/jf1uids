@@ -7,6 +7,7 @@ from jaxtyping import PyTree
 SIMPLE_POWER_LAW = 1
 PIECEWISE_POWER_LAW = 2
 NEURAL_NET_COOLING = 3
+NEURAL_NET_COOLING_WITH_DENSITY = 4
 
 class SimplePowerLawParams(NamedTuple):
     factor: float = 1.0

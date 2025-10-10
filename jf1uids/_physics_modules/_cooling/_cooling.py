@@ -40,7 +40,7 @@ import jax
 
 import equinox as eqx
 
-from jf1uids._physics_modules._cooling.cooling_options import COOLING_CURVE_TYPE, NEURAL_NET_COOLING, PIECEWISE_POWER_LAW, SIMPLE_POWER_LAW, CoolingCurveConfig, CoolingParams
+from jf1uids._physics_modules._cooling.cooling_options import COOLING_CURVE_TYPE, NEURAL_NET_COOLING, NEURAL_NET_COOLING_WITH_DENSITY, PIECEWISE_POWER_LAW, SIMPLE_POWER_LAW, CoolingCurveConfig, CoolingParams
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import FIELD_TYPE, STATE_TYPE
 
@@ -165,6 +165,7 @@ def cooling_time(
     # calculate the cooling rate
     cooling_rate = _cooling_rate(
         temperature,
+        density,
         cooling_curve_config,
         cooling_curve_params,
     )
@@ -315,6 +316,7 @@ def _piecewise_power_law_temporal_evolution_function_inverse(
 @partial(jax.jit, static_argnames = ("cooling_curve_config",))
 def _cooling_rate(
     temperature: FIELD_TYPE,
+    density: FIELD_TYPE,
     cooling_curve_config: CoolingCurveConfig,
     cooling_curve_params: COOLING_CURVE_TYPE,
 ) -> FIELD_TYPE:
@@ -340,6 +342,15 @@ def _cooling_rate(
         # for now we train the network in the specific code units,
         # so no appropriate rescaling here, to be changed later
         return 10 ** model(jnp.log10(temperature).reshape(-1, 1)).flatten()
+    elif cooling_curve_config.cooling_curve_type == NEURAL_NET_COOLING_WITH_DENSITY:
+        neural_net_params = cooling_curve_params.network_params
+        neural_net_static = cooling_curve_config.cooling_net_config.network_static
+        model = jax.vmap(eqx.combine(neural_net_params, neural_net_static))
+
+        # for now we train the network in the specific code units,
+        # so no appropriate rescaling here, to be changed later
+        input_data = jnp.stack([jnp.log10(temperature), jnp.log10(density)], axis=-1)
+        return 10 ** model(input_data).flatten()
 
     else:
         raise ValueError(f"Unknown cooling curve type: {cooling_curve_config.cooling_curve_type}")
@@ -424,12 +435,14 @@ def update_temperature(
     # calculate the cooling rate
     cooling_rate = _cooling_rate(
         temperature,
+        density,
         cooling_curve_config,
         cooling_curve_params
     )
 
     cooling_rate_reference = _cooling_rate(
         jnp.array([reference_temperature]),
+        jnp.array([density]),
         cooling_curve_config,
         cooling_curve_params
     )
@@ -479,6 +492,7 @@ def dtemperature_dt(
     # calculate the cooling rate
     cooling_rate = _cooling_rate(
         temperature,
+        density,
         cooling_curve_config,
         cooling_curve_params
     )

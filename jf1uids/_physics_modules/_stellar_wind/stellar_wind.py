@@ -2,7 +2,7 @@
 import jax.numpy as jnp
 import jax
 from jf1uids.data_classes.simulation_helper_data import HelperData
-from jf1uids.fluid_equations.fluid import pressure_from_energy
+from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, pressure_from_energy, primitive_state_from_conserved
 
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
@@ -37,8 +37,8 @@ def _wind_injection(primitive_state: STATE_TYPE, dt: Float[Array, ""], config: S
     if config.dimensionality == 1:
         if config.wind_config.wind_injection_scheme == MEO:
             primitive_state = _wind_meo(params.wind_params, primitive_state, dt, helper_data, config.num_ghost_cells, config.wind_config.num_injection_cells, params.gamma)
-        # elif config.wind_config.wind_injection_scheme == MEI:
-        #     primitive_state = _wind_mei(params.wind_params, primitive_state, dt, helper_data, config.num_ghost_cells, config.wind_config.num_injection_cells, params.gamma, registered_variables)
+        elif config.wind_config.wind_injection_scheme == MEI:
+            primitive_state = _wind_mei(params.wind_params, primitive_state, dt, config, helper_data, config.num_ghost_cells, config.wind_config.num_injection_cells, params.gamma, registered_variables)
         elif config.wind_config.wind_injection_scheme == EI:
             primitive_state = _wind_ei(params.wind_params, primitive_state, dt, helper_data, config.num_ghost_cells, config.wind_config.num_injection_cells, params.gamma, registered_variables)
         else:
@@ -88,39 +88,39 @@ def _wind_meo(wind_params: WindParams, primitive_state: Float[Array, "num_vars n
 
     return primitive_state
 
-# @jaxtyped(typechecker=typechecker)
-# @partial(jax.jit, static_argnames=['num_ghost_cells', 'num_injection_cells', 'registered_variables'])
-# def _wind_mei(wind_params: WindParams, primitive_state: Float[Array, "num_vars num_cells"], dt: Float[Array, ""], helper_data: HelperData, num_ghost_cells: int, num_injection_cells: int, gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells"]:
-#     """Inject stellar wind into the simulation by a momentum-and-energy-injection scheme (MEI).
+@jaxtyped(typechecker=typechecker)
+@partial(jax.jit, static_argnames=['config', 'num_ghost_cells', 'num_injection_cells', 'registered_variables'])
+def _wind_mei(wind_params: WindParams, primitive_state: Float[Array, "num_vars num_cells"], dt: Float[Array, ""], config: SimulationConfig, helper_data: HelperData, num_ghost_cells: int, num_injection_cells: int, gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables) -> Float[Array, "num_vars num_cells"]:
+    """Inject stellar wind into the simulation by a momentum-and-energy-injection scheme (MEI).
     
-#     Args:
-#         wind_params: The wind parameters.
-#         primitive_state: The primitive state array.
-#         dt: The time step.
-#         helper_data: The helper data.
-#         num_ghost_cells: The number of ghost cells.
-#         num_injection_cells: The number of injection cells.
-#         gamma: The adiabatic index.
+    Args:
+        wind_params: The wind parameters.
+        primitive_state: The primitive state array.
+        dt: The time step.
+        helper_data: The helper data.
+        num_ghost_cells: The number of ghost cells.
+        num_injection_cells: The number of injection cells.
+        gamma: The adiabatic index.
         
-#     Returns:
-#         The primitive state array with the stellar wind injected.
-#     """
+    Returns:
+        The primitive state array with the stellar wind injected.
+    """
 
-#     conservative_state = conserved_state_from_primitive(primitive_state, gamma, registered_variables)
+    conservative_state = conserved_state_from_primitive(primitive_state, gamma, config, registered_variables)
 
-#     V_inj = 4/3 * jnp.pi * helper_data.outer_cell_boundaries[num_injection_cells + num_ghost_cells]**3
+    V_inj = 4/3 * jnp.pi * helper_data.outer_cell_boundaries[num_injection_cells + num_ghost_cells]**3
 
-#     drho = wind_params.wind_mass_loss_rate * dt / V_inj
-#     dmomentum = wind_params.wind_final_velocity * drho
-#     denergy = 0.5 * wind_params.wind_final_velocity**2 * drho
+    drho = wind_params.wind_mass_loss_rate * dt / V_inj
+    dmomentum = wind_params.wind_final_velocity * drho
+    denergy = 0.5 * wind_params.wind_final_velocity**2 * drho
 
-#     conservative_state = conservative_state.at[0, num_ghost_cells:num_injection_cells + num_ghost_cells].add(drho)
-#     conservative_state = conservative_state.at[1, num_ghost_cells:num_injection_cells + num_ghost_cells].add(dmomentum)
-#     conservative_state = conservative_state.at[2, num_ghost_cells:num_injection_cells + num_ghost_cells].add(denergy)
+    conservative_state = conservative_state.at[0, num_ghost_cells:num_injection_cells + num_ghost_cells].add(drho)
+    conservative_state = conservative_state.at[1, num_ghost_cells:num_injection_cells + num_ghost_cells].add(dmomentum)
+    conservative_state = conservative_state.at[2, num_ghost_cells:num_injection_cells + num_ghost_cells].add(denergy)
 
-#     primitive_state = primitive_state_from_conserved(conservative_state, gamma, config, registered_variables)
+    primitive_state = primitive_state_from_conserved(conservative_state, gamma, config, registered_variables)
 
-#     return primitive_state
+    return primitive_state
 
 # not really ei
 @jaxtyped(typechecker=typechecker)
@@ -143,11 +143,12 @@ def _wind_ei(wind_params: WindParams, primitive_state: Float[Array, "num_vars nu
 
     source_term = jnp.zeros_like(primitive_state)
     
-    r = helper_data.volumetric_centers
-    r_inj = r[num_injection_cells + 2]
-    V = 4/3 * jnp.pi * r_inj**3
+    # r = helper_data.volumetric_centers
+    # r = helper_data.outer_cell_boundaries
+    # r_inj = r[num_injection_cells + 2]
+    # V = 4/3 * jnp.pi * r_inj**3
 
-    # V = jnp.sum(helper_data.cell_volumes[num_ghost_cells:num_injection_cells + num_ghost_cells])
+    V = jnp.sum(helper_data.cell_volumes[num_ghost_cells:num_injection_cells + num_ghost_cells])
 
     # mass injection
     drho_dt = wind_params.wind_mass_loss_rate / V

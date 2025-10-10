@@ -20,7 +20,7 @@ from jf1uids import WindParams
 from jf1uids import SimulationConfig
 from jf1uids import SimulationParams
 from jf1uids.option_classes import WindConfig
-from jf1uids._physics_modules._cooling.cooling_options import NEURAL_NET_COOLING, PIECEWISE_POWER_LAW, SIMPLE_POWER_LAW, CoolingConfig, CoolingCurveConfig, CoolingNetConfig, CoolingNetParams, CoolingParams, PiecewisePowerLawParams, SimplePowerLawParams
+from jf1uids._physics_modules._cooling.cooling_options import NEURAL_NET_COOLING, NEURAL_NET_COOLING_WITH_DENSITY, PIECEWISE_POWER_LAW, SIMPLE_POWER_LAW, CoolingConfig, CoolingCurveConfig, CoolingNetConfig, CoolingNetParams, CoolingParams, PiecewisePowerLawParams, SimplePowerLawParams
 
 from jf1uids import get_helper_data
 from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, construct_primitive_state, primitive_state_from_conserved
@@ -50,13 +50,13 @@ import optax
 from matplotlib.gridspec import GridSpec
 
 # options
-plot_problem_setting = True
+plot_problem_setting = False
 run_simulation = False
 train_model = False
 run_high_res_for_error_plot = False
 low_res = 500
-high_res_s = [500, 1000, 2000, 10000, 100000]
-num_epochs_corr = [350]
+high_res_s = [100000]
+num_epochs_corr = [500]
 domain_size = 1.0
 r_inj = 0.01 * domain_size
 
@@ -98,10 +98,10 @@ class CoolingNet(eqx.Module):
         key
     ):
         self.mlp = eqx.nn.MLP(
-            in_size=1,       # input: log10_T
+            in_size=2,       # input: log10_T, log10_rho
             out_size=1,      # output: log10_Lambda
             width_size=hidden_features,
-            depth=3,
+            depth=5,
             key=key,
         )
         
@@ -110,48 +110,67 @@ class CoolingNet(eqx.Module):
         
 
 # initialize cooling corrector network
-key = jax.random.PRNGKey(84)
+key = jax.random.PRNGKey(42)
 cooling_corrector_network = CoolingNet(
-    hidden_features = 256,
+    hidden_features = 1024,
     key = key
 )
 cooling_corrector_params, cooling_corrector_static = eqx.partition(cooling_corrector_network, eqx.is_array)
+
+# get final density from high res simulation with cooling
+states = jnp.load(f"data/reference_states{high_res_s[-1]}.npy", allow_pickle=True)
+densities = jnp.log10(states[:, 0, :].flatten())
 
 # pre-train the network to log10_Lambda_table(log10_T_table)
 # from the schure cooling table
 schure_cooling_params = schure_cooling(code_units)
 log10_T_table = schure_cooling_params.log10_T_table
 log10_Lambda_table = schure_cooling_params.log10_Lambda_table
-log10_T_table = log10_T_table[:, None]
+# log10_T_table = log10_T_table[:, None]
 log10_Lambda_table = log10_Lambda_table[:, None]
 
 # print(log10_Lambda_table)
 # print(log10_T_table)
 
 # simple training loop
-learning_rate = 1e-4
+learning_rate = 1e-3
 optimizer = optax.adam(learning_rate)
 opt_state = optimizer.init(cooling_corrector_params)
 
 @eqx.filter_jit
-def loss_fn_pre_train(network_params_arrays):
+def loss_fn_pre_train(network_params_arrays, key):
     """Calculates the difference between the final state and the target."""
     network = eqx.combine(network_params_arrays, cooling_corrector_static)
-    log10_Lambda_pred = jax.vmap(network)(log10_T_table)
+
+    # Randomly sample densities from the precomputed array
+    key, subkey = jax.random.split(key)
+    sampled_densities = jax.random.choice(subkey, densities, shape=log10_T_table.shape)
+
+    # Evaluate model and compute loss
+    log10_Lambda_pred = jax.vmap(network)(jnp.stack([log10_T_table, sampled_densities], axis=-1))
     loss_value = jnp.mean((log10_Lambda_pred - log10_Lambda_table) ** 2)
-    return loss_value
+    return loss_value, key
+
 
 @eqx.filter_jit
-def train_step_pre_train(network_params_arrays, opt_state):
+def train_step_pre_train(network_params_arrays, opt_state, key):
     """Performs one step of gradient descent."""
-    loss_value, grads = eqx.filter_value_and_grad(loss_fn_pre_train)(network_params_arrays)
+    (loss_value, key), grads = eqx.filter_value_and_grad(loss_fn_pre_train, has_aux=True)(
+        network_params_arrays, key
+    )
     updates, opt_state = optimizer.update(grads, opt_state, network_params_arrays)
     network_params_arrays = eqx.apply_updates(network_params_arrays, updates)
-    return network_params_arrays, opt_state, loss_value
+    return network_params_arrays, opt_state, key, loss_value
 
+
+# Training loop
 num_epochs = 10000
+key = jax.random.PRNGKey(42)
+
 for epoch in range(num_epochs):
-    cooling_corrector_params, opt_state, loss_value = train_step_pre_train(cooling_corrector_params, opt_state)
+    cooling_corrector_params, opt_state, key, loss_value = train_step_pre_train(
+        cooling_corrector_params, opt_state, key
+    )
     if epoch % 500 == 0 or epoch == num_epochs - 1:
         print(f"Pre-training Epoch {epoch+1}/{num_epochs}, Loss: {loss_value:.6f}")
 
@@ -161,8 +180,7 @@ cooling_curve_paramsC = CoolingNetParams(
     network_params = cooling_corrector_params
 )
 
-# plot the cooling curve
-Lambda_net = jax.vmap(cooling_corrector_network)(log10_T_table)
+
 
 def setup_simulation(num_cells, cooling_curve_type, cooling_curve_params, return_snapshots, num_snapshots, cooling = True, num_injection_cells = 20, use_specific_snapshot_timepoints = True, t_final = 1.25e12 * u.s):
     print("👷 Setting up simulation...")
@@ -261,6 +279,18 @@ def setup_simulation(num_cells, cooling_curve_type, cooling_curve_params, return
 
     return initial_state, config, params, helper_data, registered_variables
 
+def plot_density(ax, state, registered_variables, helper_data, code_units, label):
+    rho = state[registered_variables.density_index]
+    rho = rho * code_units.code_density
+    r = helper_data.geometric_centers * code_units.code_length
+    ax.plot(r.to(u.cm), (rho).to(u.g * u.cm**-3), label=label)
+    ax.set_yscale("log")
+    ax.set_title("density")
+    ax.set_ylabel(r"$\rho$ in g cm$^{-3}$")
+    ax.set_ylim(1e-27, 1e-21)
+    ax.set_xlim(0, 1e19)
+    ax.set_xlabel("r in cm")
+
 
 # compare with weaver solution
 def plot_profiles(axs, final_state, registered_variables, helper_data, code_units, label = "jf1uids", left_gray = False, start_index = 0, color = "blue"):
@@ -323,6 +353,52 @@ def plot_profiles(axs, final_state, registered_variables, helper_data, code_unit
         axs[2].axvspan(0, r[start_index].to(u.cm).value, color="gray", alpha=0.3)
         axs[3].axvspan(0, r[start_index].to(u.cm).value, color="gray", alpha=0.3)
 
+# problem setting
+if plot_problem_setting:
+
+    # one ax with cooling, one without
+    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+    for high_res in high_res_s:
+
+        num_cells = high_res
+        
+        # setup simulation without cooling
+        initial_state, config, params, helper_data, registered_variables = setup_simulation(
+            num_cells = num_cells,
+            cooling_curve_type = PIECEWISE_POWER_LAW,
+            cooling_curve_params = schure_cooling_params,
+            return_snapshots = False,
+            num_snapshots = 0,
+            cooling = False,
+        )
+        # run simulation without cooling
+        # final_state = time_integration(initial_state, config, params, helper_data, registered_variables)
+        # load from file
+        final_state = jnp.load(f"data/reference_states_no_cooling{high_res}.npy", allow_pickle=True)[-1]
+
+        plot_density(axs[0], final_state, registered_variables, helper_data, code_units, label = f"{num_cells} cells") # , {str(num_injection_cells) + ' inj. cells' if not fixed_r else 'R_inj = ' + str(r_inj) + ' L'}
+
+        # setup simulation with cooling
+        initial_state, config, params, helper_data, registered_variables = setup_simulation(
+            num_cells = num_cells,
+            cooling_curve_type = PIECEWISE_POWER_LAW,
+            cooling_curve_params = schure_cooling_params,
+            return_snapshots = False,
+            num_snapshots = 0,
+            cooling = True,
+        )
+        # run simulation with cooling
+        # final_state = time_integration(initial_state, config, params, helper_data, registered_variables)
+        final_state = jnp.load(f"data/reference_states{high_res}.npy", allow_pickle=True)[-1]
+        plot_density(axs[1], final_state, registered_variables, helper_data, code_units, label = f"{num_cells} cells") # , {str(num_injection_cells) + ' inj. cells' if not fixed_r else 'R_inj = ' + str(r_inj) + ' L'}
+    
+    axs[0].set_title("without cooling")
+    axs[1].set_title("with cooling")
+    axs[0].legend()
+    axs[1].legend()
+    plt.tight_layout()
+    plt.savefig("figures/problem_setting.svg")
+
 reference_state_collection = []
 
 for high_res in high_res_s:
@@ -356,49 +432,6 @@ for high_res in high_res_s:
 
     reference_state_collection.append(reference_states)
 
-# problem setting
-if plot_problem_setting:
-
-    # one ax with cooling, one without
-    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-    for high_res in high_res_s:
-
-        num_cells = high_res
-        
-        # setup simulation without cooling
-        initial_state, config, params, helper_data, registered_variables = setup_simulation(
-            num_cells = num_cells,
-            cooling_curve_type = PIECEWISE_POWER_LAW,
-            cooling_curve_params = schure_cooling_params,
-            return_snapshots = False,
-            num_snapshots = 0,
-            cooling = False,
-        )
-        # run simulation without cooling
-        # final_state = time_integration(initial_state, config, params, helper_data, registered_variables)
-        # load from file
-        final_state = jnp.load(f"data/reference_states_no_cooling{high_res}.npy", allow_pickle=True)[-1]
-
-        # setup simulation with cooling
-        initial_state, config, params, helper_data, registered_variables = setup_simulation(
-            num_cells = num_cells,
-            cooling_curve_type = PIECEWISE_POWER_LAW,
-            cooling_curve_params = schure_cooling_params,
-            return_snapshots = False,
-            num_snapshots = 0,
-            cooling = True,
-        )
-        # run simulation with cooling
-        # final_state = time_integration(initial_state, config, params, helper_data, registered_variables)
-        final_state = jnp.load(f"data/reference_states{high_res}.npy", allow_pickle=True)[-1]
-
-    axs[0].set_title("without cooling")
-    axs[1].set_title("with cooling")
-    axs[0].legend()
-    axs[1].legend()
-    plt.tight_layout()
-    plt.savefig("figures/problem_setting.svg")
-
 def downsample(states):
     return jnp.mean(jnp.reshape(states, (states.shape[0], states.shape[1], low_res, -1)), axis = -1)
 
@@ -407,7 +440,7 @@ downsampled_collection = [downsample(states) for states in reference_state_colle
 
 initial_state, config, params, helper_data_low_res, registered_variables = setup_simulation(
     num_cells = low_res,
-    cooling_curve_type = NEURAL_NET_COOLING,
+    cooling_curve_type = NEURAL_NET_COOLING_WITH_DENSITY,
     cooling_curve_params = cooling_curve_paramsC,
     return_snapshots = True,
     num_snapshots = 5,
@@ -418,7 +451,7 @@ learning_reference_timepoints = (params.snapshot_timepoints * code_units.code_ti
 
 
 # training loop
-learning_rate = 1e-4
+learning_rate = 1e-3
 optimizer = optax.adam(learning_rate)
 opt_state = optimizer.init(cooling_corrector_params)
 
@@ -482,12 +515,12 @@ if train_model:
     cooling_corrector_params = best_params
 
     # save the trained network parameters with pickle
-    with open("models/cooling_corrector" + str(high_res) + "_" + str(low_res) +  ".pkl", "wb") as f:
+    with open("models/cooling_corrector_rho" + str(high_res) + "_" + str(low_res) +  ".pkl", "wb") as f:
         pickle.dump(cooling_corrector_params, f)
 else:
     # load the trained network parameters with pickle
     # import pickle
-    with open("models/cooling_corrector" + str(high_res) + "_" + str(low_res) +  ".pkl", "rb") as f:
+    with open("models/cooling_corrector_rho" + str(high_res) + "_" + str(low_res) +  ".pkl", "rb") as f:
         cooling_corrector_params = pickle.load(f)
 
 
@@ -506,19 +539,6 @@ fig, axs = plt.subplots(1, 4, figsize=(20, 5))
 plot_profiles(axs, final_state, registered_variables, helper_data_low_res, code_units)
 plt.tight_layout()
 plt.savefig("figures/low_res_output_corrected.svg")
-
-# compare cooling curves
-cooling_corrector_network = eqx.combine(cooling_corrector_params, cooling_corrector_static)
-Lambda_net_after_training = jax.vmap(cooling_corrector_network)(log10_T_table)
-plt.figure(figsize=(8, 6))
-plt.plot(log10_T_table, log10_Lambda_table, label="Schure et al. 2009", color="blue")
-plt.plot(log10_T_table, Lambda_net, label="Cooling Corrector NN (pre-training)", linestyle="--", color="orange")
-plt.plot(log10_T_table, Lambda_net_after_training, label="Cooling Corrector NN (after training)", linestyle=":", color="green")
-plt.xlabel("temperature")
-plt.ylabel("cooling function Λ(T)")
-plt.title("Cooling Function Comparison")
-plt.legend()
-plt.savefig("figures/final_cooling_functions.svg")
 
 high_res = high_res_s[-1]
 
@@ -562,7 +582,7 @@ error_uncorrected = jnp.mean(((low_res_states[:, :, beginning_index:] - referenc
 # corrected low res
 initial_state, config, params, helper_data_low_res, registered_variables = setup_simulation(
     num_cells = low_res,
-    cooling_curve_type = NEURAL_NET_COOLING,
+    cooling_curve_type = NEURAL_NET_COOLING_WITH_DENSITY,
     cooling_curve_params = CoolingNetParams(
         network_params = cooling_corrector_params
     ),
@@ -633,4 +653,4 @@ fig.legend(
 )
 
 plt.tight_layout(rect=[0, 0.03, 1, 1])  # leave a little space for legend
-plt.savefig(f"figures/final_comparison{high_res}_{low_res}.svg", bbox_inches="tight")
+plt.savefig("figures/final_comparison_rho" + str(high_res) + "_" + str(low_res) +  ".svg")

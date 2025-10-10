@@ -6,6 +6,10 @@ package.json
 package-lock.json
 .firebase/
 
+tests/cooling_corrector/data
+
+tests/cooling_corrector/models
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

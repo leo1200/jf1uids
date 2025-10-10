@@ -49,14 +49,10 @@ def get_helper_data(config: SimulationConfig, sharding: Union[NoneType, NamedSha
     else:
         ngc = 0
 
-    # this should be unified
-    if config.geometry == SPHERICAL:
-        grid_spacing = config.box_size / (config.num_cells - 1)
-    else:
-        grid_spacing = config.box_size / config.num_cells
+    grid_spacing = config.box_size / config.num_cells
 
     if config.geometry == SPHERICAL or config.geometry == CYLINDRICAL:
-        r = jnp.linspace(grid_spacing / 2 - ngc * grid_spacing, config.box_size + grid_spacing / 2 + ngc * grid_spacing, config.num_cells + 2 * ngc)
+        r = jnp.linspace(grid_spacing / 2 - ngc * grid_spacing, config.box_size + grid_spacing / 2 + ngc * grid_spacing, config.num_cells + 2 * ngc, endpoint = False)
         inner_cell_boundaries = r - grid_spacing / 2
         outer_cell_boundaries = r + grid_spacing / 2
         volumetric_centers = _center_of_volume(r, grid_spacing, config.geometry)
