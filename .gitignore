@@ -10,6 +10,8 @@ tests/cooling_corrector/data
 
 tests/cooling_corrector/models
 
+TODO.md
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
