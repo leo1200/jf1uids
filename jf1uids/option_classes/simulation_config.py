@@ -145,6 +145,9 @@ class SimulationConfig(NamedTuple):
     #: function
     memory_analysis: bool = False
 
+    #: Print the elapsed time of the simulation
+    print_elapsed_time: bool = False
+
     #: Activate progress bar
     progress_bar: bool = False
 

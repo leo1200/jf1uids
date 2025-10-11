@@ -95,7 +95,29 @@ def time_integration(
                 print(f"Total size: {total/(1024**2):.2f} MB")
                 print("========================================")
 
+        if config.print_elapsed_time:
+            if not config.memory_analysis:
+                # compile the time integration function
+                _time_integration.lower(primitive_state, config, params, helper_data, helper_data_pad, registered_variables, snapshot_callable).compile()
+
+            start_time = timer()
+            print("🚀 Starting simulation...")
+
         final_state = _time_integration(primitive_state, config, params, helper_data, helper_data_pad, registered_variables, snapshot_callable)
+
+        if config.print_elapsed_time:
+            if config.return_snapshots and config.snapshot_settings.return_final_state:
+                final_state.final_state.block_until_ready()
+            else:
+                final_state.block_until_ready()
+            end_time = timer()
+            print("🏁 Simulation finished!")
+            print(f"⏱️ Time elapsed: {end_time - start_time:.2f} seconds")
+            if config.return_snapshots:
+                num_iterations = final_state.num_iterations
+                print(f"🔄 Number of iterations: {num_iterations}")
+                # print the time per iteration
+                print(f"⏱️/🔄 time per iteration: {(end_time - start_time) / num_iterations} seconds")
 
     return final_state
 

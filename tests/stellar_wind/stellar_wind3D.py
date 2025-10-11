@@ -1,7 +1,7 @@
 import os
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
 
-multi_gpu = True
+multi_gpu = False
 
 if multi_gpu:
     # ==== GPU selection ====
@@ -39,10 +39,10 @@ from jf1uids.fluid_equations.fluid import construct_primitive_state
 from jf1uids import get_registered_variables
 from jf1uids.option_classes import WindConfig
 
-from jf1uids.option_classes.simulation_config import BACKWARDS, DONOR_ACCOUNTING, HLL, HLLC, MINMOD, OSHER, PERIODIC_BOUNDARY, SIMPLE_SOURCE_TERM, VARAXIS, XAXIS, YAXIS, ZAXIS, BoundarySettings, BoundarySettings1D
+from jf1uids.option_classes.simulation_config import BACKWARDS, DONOR_ACCOUNTING, HLL, HLLC, MINMOD, OSHER, PERIODIC_BOUNDARY, SIMPLE_SOURCE_TERM, VARAXIS, XAXIS, YAXIS, ZAXIS, BoundarySettings, BoundarySettings1D, SnapshotSettings
 
 from jf1uids._physics_modules._cooling._cooling_tables import schure_cooling
-from jf1uids._physics_modules._cooling.cooling_options import PIECEWISE_POWER_LAW, CoolingConfig, CoolingParams
+from jf1uids._physics_modules._cooling.cooling_options import PIECEWISE_POWER_LAW, CoolingConfig, CoolingCurveConfig, CoolingParams
 
 # units
 from jf1uids import CodeUnits
@@ -66,13 +66,13 @@ gamma = 5/3
 
 # spatial domain
 box_size = 1.0
-num_cells = 412
+num_cells = 128
 
 # activate stellar wind
 stellar_wind = True
 
 # turbulence
-turbulence = False
+turbulence = True
 wanted_rms = 50 * u.km / u.s
 
 # cooling
@@ -100,6 +100,7 @@ num_timesteps = 2000
 config = SimulationConfig(
     runtime_debugging = False,
     memory_analysis = True,
+    print_elapsed_time = True,
     riemann_solver = HLL,
     mhd = mhd,
     limiter = DOUBLE_MINMOD,
@@ -117,28 +118,34 @@ config = SimulationConfig(
     fixed_timestep = fixed_timestep,
     differentiation_mode = FORWARDS,
     num_timesteps = num_timesteps,
-    return_snapshots = False,
-    # self_gravity = True,
+    return_snapshots = True,
+    snapshot_settings = SnapshotSettings(
+        return_states = False,
+        return_final_state = True
+    ),
+    self_gravity = True,
     self_gravity_version = SIMPLE_SOURCE_TERM,
     num_snapshots = 5,
     cooling_config = CoolingConfig(
         cooling = cooling,
-        cooling_curve_type = PIECEWISE_POWER_LAW
+        cooling_curve_config = CoolingCurveConfig(
+            cooling_curve_type = PIECEWISE_POWER_LAW
+        )
     ),
-    # boundary_settings =  BoundarySettings(
-    #     BoundarySettings1D(
-    #         left_boundary = PERIODIC_BOUNDARY,
-    #         right_boundary = PERIODIC_BOUNDARY
-    #     ),
-    #     BoundarySettings1D(
-    #         left_boundary = PERIODIC_BOUNDARY,
-    #         right_boundary = PERIODIC_BOUNDARY
-    #     ),
-    #     BoundarySettings1D(
-    #         left_boundary = PERIODIC_BOUNDARY,
-    #         right_boundary = PERIODIC_BOUNDARY
-    #     )
-    # ),
+    boundary_settings =  BoundarySettings(
+        BoundarySettings1D(
+            left_boundary = PERIODIC_BOUNDARY,
+            right_boundary = PERIODIC_BOUNDARY
+        ),
+        BoundarySettings1D(
+            left_boundary = PERIODIC_BOUNDARY,
+            right_boundary = PERIODIC_BOUNDARY
+        ),
+        BoundarySettings1D(
+            left_boundary = PERIODIC_BOUNDARY,
+            right_boundary = PERIODIC_BOUNDARY
+        )
+    ),
 )
 
 registered_variables = get_registered_variables(config)
@@ -154,7 +161,7 @@ code_units = CodeUnits(code_length, code_mass, code_velocity)
 C_CFL = 0.4
 # 2.5
 
-t_final = 0.01 * 1e4 * u.yr
+t_final = 1.0 * 1e4 * u.yr
 t_end = t_final.to(code_units.code_time).value
 
 if scale_time:
@@ -206,7 +213,7 @@ print(p_0.to(code_units.code_pressure).value)
 
 turbulence_slope = -2.0
 kmin = 2.0
-kmax = int(0.2 * num_cells / 2)
+kmax = int(0.4 * num_cells / 2)
 
 if multi_gpu:
 
@@ -312,18 +319,10 @@ else:
 
 config = finalize_config(config, initial_state.shape)
 
+
 result = time_integration(initial_state, config, params, helper_data, registered_variables, sharding = named_sharding)
 
-# if config.return_snapshots:
-#     final_state = result.states[-1]
-# else:
-#     final_state = result
-
-final_state = result
-
-# final_state = result
-
-# print(result.num_iterations, "iterations")
+final_state = result.final_state
 
 from matplotlib.colors import LogNorm
 
