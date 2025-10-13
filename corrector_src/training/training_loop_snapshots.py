@@ -1,28 +1,20 @@
-# from autocvd import autocvd
+from autocvd import autocvd
 
-# autocvd(num_gpus=1)
+autocvd(num_gpus=1)
 
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "7"
 
 # os.environ["JAX_TRACEBACK_FILTERING"] = "off"
 # os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 # os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.2"
-
-from jf1uids.option_classes.simulation_config import finalize_config
-from jf1uids import time_integration
-from jf1uids.data_classes.simulation_helper_data import HelperData, get_helper_data
-
-import corrector_src.data.blast_creation as blast
-from corrector_src.utils.downaverage import downaverage_states
 
 import numpy as np
 
 import jax.numpy as jnp
 import jax
 
-jax.log_compiles(True)
 
 from corrector_src.training.sol_one_training_snapshots import time_integration
 

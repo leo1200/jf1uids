@@ -173,6 +173,7 @@ def randomized_initial_blast_state(
             num_snapshots = cfg_data.num_snapshots
             cfg_data.use_specific_snapshot_timepoints = False
             snapshot_timepoints = None
+
     # setup simulation config
     config = SimulationConfig(
         runtime_debugging=cfg_data.debug,

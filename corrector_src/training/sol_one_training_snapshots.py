@@ -342,11 +342,6 @@ def _time_integration(
                     t, _, _ = carry
                 else:
                     t, _ = carry
-                    jax.debug.print(
-                        "time {}, condition time {}",
-                        t,
-                        training_params.loss_calculation_times[loss_index],
-                    )
                 return t < training_params.loss_calculation_times[loss_index]
 
             def loss_fn(network_parameters, carry):
@@ -699,8 +694,6 @@ def _time_integration(
                 time, primitive_state = carry_loss
 
                 carry = time, primitive_state, network_params_updated, opt_state
-
-            jax.debug.print("current_loss_index {},  loss {}", loss_index, loss_value)
 
             return carry, loss_value
 
