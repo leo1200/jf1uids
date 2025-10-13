@@ -89,7 +89,7 @@ def simulate_and_get_error(num_cells, use_first_order):
 # ===================================================
 
 # --- Convergence Study ---
-resolutions = jnp.array([64, 128, 256, 512, 1024, 2048])
+resolutions = [64, 128, 256, 512, 1024, 2048]
 l1_errors_1st = []
 l1_errors_2nd = []
 
@@ -128,8 +128,8 @@ r_fine, rho_1st_fine, rho_exact_fine, _ = simulate_and_get_error(resolutions[-1]
 _, rho_2nd_fine, _, _ = simulate_and_get_error(resolutions[-1], use_first_order=False)
 
 ax1.plot(r_fine, rho_exact_fine, 'k-', label='exact solution')
-ax1.plot(r_fine, rho_1st_fine, 'b--', label=f'1st order (simulation)')
-ax1.plot(r_fine, rho_2nd_fine, 'r:', label=f'2nd order (simulation)')
+ax1.plot(r_fine, rho_1st_fine, 'b--', label='1st order (simulation)')
+ax1.plot(r_fine, rho_2nd_fine, 'r:', label='2nd order (simulation)')
 ax1.set_xlabel("position")
 ax1.set_ylabel("density")
 ax1.legend()
@@ -141,9 +141,9 @@ ax2.loglog(resolutions, l1_errors_1st, 'bo-', label='1st order (simulation)')
 ax2.loglog(resolutions, l1_errors_2nd, 'rs-', label='2nd order (simulation)')
 
 # Reference lines
-first_order_ref = l1_errors_1st[0] * (resolutions[0] / resolutions)
+first_order_ref = l1_errors_1st[0] * (resolutions[0] / jnp.array(resolutions))
 ax2.loglog(resolutions, first_order_ref, 'k:', alpha=0.7, label='1st order (ideal)')
-second_order_ref = l1_errors_2nd[0] * (resolutions[0] / resolutions)**2
+second_order_ref = l1_errors_2nd[0] * (resolutions[0] / jnp.array(resolutions))**2
 ax2.loglog(resolutions, second_order_ref, 'k--', alpha=0.7, label='2nd order (ideal)')
 
 ax2.set_xlabel("resolution in number of cells")

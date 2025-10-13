@@ -1,10 +1,14 @@
 from types import NoneType
 from typing import NamedTuple, Union
 
-from jf1uids._physics_modules._cnn_mhd_corrector._cnn_mhd_corrector_options import CNNMHDconfig
+from jf1uids._physics_modules._cnn_mhd_corrector._cnn_mhd_corrector_options import (
+    CNNMHDconfig,
+)
 from jf1uids._physics_modules._cooling.cooling_options import CoolingConfig
 from jf1uids._physics_modules._cosmic_rays.cosmic_ray_options import CosmicRayConfig
-from jf1uids._physics_modules._neural_net_force._neural_net_force_options import NeuralNetForceConfig
+from jf1uids._physics_modules._neural_net_force._neural_net_force_options import (
+    NeuralNetForceConfig,
+)
 from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindConfig
 
 from jaxtyping import Array, Float
@@ -73,19 +77,19 @@ RIEMANN_SPLIT_UNSTABLE = 3
 STATE_TYPE = Union[
     Float[Array, "num_vars num_cells_x"],
     Float[Array, "num_vars num_cells_x num_cells_y"],
-    Float[Array, "num_vars num_cells_x num_cells_y num_cells_z"]
+    Float[Array, "num_vars num_cells_x num_cells_y num_cells_z"],
 ]
 
 STATE_TYPE_ALTERED = Union[
     Float[Array, "num_vars num_cells_a"],
     Float[Array, "num_vars num_cells_a num_cells_b"],
-    Float[Array, "num_vars num_cells_a num_cells_b num_cells_c"]
+    Float[Array, "num_vars num_cells_a num_cells_b num_cells_c"],
 ]
 
 FIELD_TYPE = Union[
     Float[Array, "num_cells_x"],
     Float[Array, "num_cells_x num_cells_y"],
-    Float[Array, "num_cells_x num_cells_y num_cells_z"]
+    Float[Array, "num_cells_x num_cells_y num_cells_z"],
 ]
 
 # =============================================================
@@ -118,19 +122,22 @@ class SnapshotSettings(NamedTuple):
     #: Whether to return radial momentum
     return_radial_momentum: bool = False
 
+
 class BoundarySettings1D(NamedTuple):
     left_boundary: int = OPEN_BOUNDARY
     right_boundary: int = OPEN_BOUNDARY
+
 
 class BoundarySettings(NamedTuple):
     x: BoundarySettings1D = BoundarySettings1D()
     y: BoundarySettings1D = BoundarySettings1D()
     z: BoundarySettings1D = BoundarySettings1D()
 
+
 class SimulationConfig(NamedTuple):
     """
     Configuration object for the simulation.
-    The simulation configuration are parameters defining 
+    The simulation configuration are parameters defining
     the simulation where changes necessitate recompilation.
     """
 
@@ -154,6 +161,9 @@ class SimulationConfig(NamedTuple):
     #: The number of dimensions of the simulation.
     dimensionality: int = 1
 
+    #: Use a struct for the state.
+    state_struct: bool = False
+
     #: The geometry of the simulation.
     geometry: int = CARTESIAN
 
@@ -171,7 +181,7 @@ class SimulationConfig(NamedTuple):
     #: The number of cells in the simulation (including ghost cells).
     num_cells: int = 400
 
-    #: The reconstruction order is the number of 
+    #: The reconstruction order is the number of
     #: cells on each side of the cell of interest
     #: used to calculate the gradients for the
     #: reconstruction at the interfaces.
@@ -280,7 +290,7 @@ def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
     """Finalizes the simulation configuration."""
 
     num_cells = state_shape[-1]
-    config = config._replace(num_cells = num_cells)
+    config = config._replace(num_cells=num_cells)
 
     if config.dimensionality == 2:
         num_cells_x, num_cells_y = state_shape[-2:]
@@ -291,52 +301,70 @@ def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
         if num_cells_x != num_cells_y or num_cells_x != num_cells_z:
             raise ValueError("The number of cells in x, y and z must be equal.")
 
-    config = config._replace(grid_spacing = config.box_size / config.num_cells)
+    config = config._replace(grid_spacing=config.box_size / config.num_cells)
 
     if config.geometry == SPHERICAL:
-
-        print("For spherical geometry, only HLL is currently supported. Also, only the unsplit mode has been tested.")
-        config = config._replace(grid_spacing = config.box_size / config.num_cells)
+        print(
+            "For spherical geometry, only HLL is currently supported. Also, only the unsplit mode has been tested."
+        )
+        config = config._replace(grid_spacing=config.box_size / config.num_cells)
 
         if config.riemann_solver != HLL:
             print("Setting HLL Riemann solver for spherical geometry.")
-            config = config._replace(riemann_solver = HLL)
+            config = config._replace(riemann_solver=HLL)
 
         if config.split != SPLIT:
             print("Setting unsplit mode for spherical geometry")
-            config = config._replace(split = SPLIT)
+            config = config._replace(split=SPLIT)
 
         if config.limiter == VAN_ALBADA or config.limiter == VAN_ALBADA_PP:
             print("Setting minmod limiter for spherical geometry")
-            config = config._replace(limiter = MINMOD)
+            config = config._replace(limiter=MINMOD)
 
         if config.time_integrator != MUSCL:
             print("Setting MUSCL time integrator for spherical geometry")
-            config = config._replace(time_integrator = MUSCL)
+            config = config._replace(time_integrator=MUSCL)
 
-    if config.self_gravity == True and (config.limiter != MINMOD):
-        print("Curiously, in self-gravitating systems, the VAN_ALBADA limiters seem to cause crashes.")
+    if config.self_gravity and (config.limiter != MINMOD):
+        print(
+            "Curiously, in self-gravitating systems, the VAN_ALBADA limiters seem to cause crashes."
+        )
         print("Setting DOUBLE_MINMOD limiter for self-gravity.")
-        config = config._replace(limiter = MINMOD)
-        
+        config = config._replace(limiter=MINMOD)
+
     # set boundary conditions if not set
     if config.boundary_settings is None:
-
         if config.geometry == CARTESIAN:
             print("Automatically setting open boundaries for Cartesian geometry.")
             if config.dimensionality == 1:
-                config = config._replace(boundary_settings = BoundarySettings1D(left_boundary = OPEN_BOUNDARY, right_boundary = OPEN_BOUNDARY))
+                config = config._replace(
+                    boundary_settings=BoundarySettings1D(
+                        left_boundary=OPEN_BOUNDARY, right_boundary=OPEN_BOUNDARY
+                    )
+                )
             else:
-                config = config._replace(boundary_settings = BoundarySettings())
+                config = config._replace(boundary_settings=BoundarySettings())
         elif config.geometry == SPHERICAL and config.dimensionality == 1:
-            print("Automatically setting reflective left and open right boundary for spherical geometry.")
-            config = config._replace(boundary_settings = BoundarySettings1D(left_boundary = REFLECTIVE_BOUNDARY, right_boundary = OPEN_BOUNDARY))
+            print(
+                "Automatically setting reflective left and open right boundary for spherical geometry."
+            )
+            config = config._replace(
+                boundary_settings=BoundarySettings1D(
+                    left_boundary=REFLECTIVE_BOUNDARY, right_boundary=OPEN_BOUNDARY
+                )
+            )
 
     if config.wind_config.stellar_wind:
-        print("For stellar wind simulations, we need source term aware timesteps, turning on.")
-        config = config._replace(source_term_aware_timestep = True)
+        print(
+            "For stellar wind simulations, we need source term aware timesteps, turning on."
+        )
+        config = config._replace(source_term_aware_timestep=True)
 
-    if config.self_gravity and (config.riemann_solver == HLLC or config.riemann_solver == HLLC_LM) and config.riemann_solver != RIEMANN_SPLIT:
+    if (
+        config.self_gravity
+        and (config.riemann_solver == HLLC or config.riemann_solver == HLLC_LM)
+        and config.riemann_solver != RIEMANN_SPLIT
+    ):
         print("Consider using RIEMANN_SPLIT as the self_gravity_version.")
-    
+
     return config

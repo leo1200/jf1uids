@@ -23,6 +23,7 @@ from jf1uids.option_classes.simulation_params import SimulationParams
 
 # ======= Create the primitive state ========
 
+# TODO: move this function
 @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['registered_variables', 'config', 'sharding'])
 def construct_primitive_state(
