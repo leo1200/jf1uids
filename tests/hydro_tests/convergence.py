@@ -3,6 +3,7 @@ from autocvd import autocvd
 autocvd(num_gpus = 1)
 # =======================
 
+from jf1uids.initial_condition_generation.construct_primitive_state import construct_primitive_state
 from jf1uids.option_classes.simulation_config import DOUBLE_MINMOD, HLLC, BoundarySettings1D
 
 # 64-bit floating point precision
@@ -15,7 +16,7 @@ from jf1uids import CARTESIAN, PERIODIC_BOUNDARY
 from jf1uids import SimulationConfig, SimulationParams
 
 # simulation setup and execution
-from jf1uids import get_helper_data, finalize_config, get_registered_variables, construct_primitive_state, time_integration
+from jf1uids import get_helper_data, finalize_config, get_registered_variables, time_integration
 
 # plotting
 import matplotlib.pyplot as plt

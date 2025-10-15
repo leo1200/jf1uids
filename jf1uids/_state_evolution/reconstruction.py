@@ -46,18 +46,6 @@ def _reconstruct_at_interface_split(
     registered_variables: RegisteredVariables,
     axis: int,
 ) -> tuple[STATE_TYPE_ALTERED, STATE_TYPE_ALTERED]:
-    """
-    Limited linear reconstruction of the primitive variables at the interfaces.
-
-    Args:
-        primitive_state: The primitive state array.
-        dt: The time step.
-        grid_spacing: The cell width.
-        gamma: The adiabatic index.
-
-    Returns:
-        The primitive variables at both sides of the interfaces.
-    """
 
     # get fluid variables for convenience
     rho = primitive_state[registered_variables.density_index]

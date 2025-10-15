@@ -4,8 +4,6 @@ of an array based on some stencil, e.g. b_i <- a_{i + 1} + a_{i - 1}.
 Allows for code "closer to the math".
 """
 
-# TODO: use stencil operations throughout the codebase
-
 # general
 import jax
 import jax.numpy as jnp

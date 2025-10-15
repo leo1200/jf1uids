@@ -21,7 +21,7 @@ from jf1uids import SimulationParams
 from jf1uids import get_helper_data
 from jf1uids import finalize_config
 from jf1uids import get_registered_variables
-from jf1uids import construct_primitive_state
+from jf1uids.initial_condition_generation.construct_primitive_state import construct_primitive_state
 from jf1uids.option_classes.simulation_config import (
     DOUBLE_MINMOD, HLL,
     HLLC, MINMOD, OSHER, SUPERBEE

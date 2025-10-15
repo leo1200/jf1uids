@@ -1,5 +1,7 @@
 # ==== GPU selection ====
 from autocvd import autocvd
+
+from jf1uids.initial_condition_generation.construct_primitive_state import construct_primitive_state
 autocvd(num_gpus = 1)
 # =======================
 
@@ -20,7 +22,7 @@ from jf1uids import SimulationConfig
 from jf1uids import get_helper_data
 from jf1uids import SimulationParams
 from jf1uids import time_integration
-from jf1uids.fluid_equations.fluid import construct_primitive_state, get_absolute_velocity, total_energy_from_primitives
+from jf1uids.fluid_equations.fluid import get_absolute_velocity, total_energy_from_primitives
 
 from jf1uids import get_registered_variables
 from jf1uids.option_classes import WindConfig
@@ -37,7 +39,7 @@ from astropy.constants import m_p
 from jf1uids._physics_modules._stellar_wind.weaver import Weaver
 
 # turbulence
-from jf1uids.initial_condition_generation.turb import create_turb_field
+from jf1uids.initial_condition_generation.turbulent_ic_generatorulent_ic_generator import create_turb_field
 
 from jf1uids.option_classes.simulation_config import FORWARDS
 

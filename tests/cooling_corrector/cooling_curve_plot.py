@@ -1,6 +1,8 @@
 # TODO: fix units
 
 from autocvd import autocvd
+
+from jf1uids.initial_condition_generation.construct_primitive_state import construct_primitive_state
 autocvd(num_gpus = 1)
 
 from jf1uids._physics_modules._cooling._cooling import get_pressure_from_temperature, get_temperature_from_pressure
@@ -23,7 +25,7 @@ from jf1uids.option_classes import WindConfig
 from jf1uids._physics_modules._cooling.cooling_options import NEURAL_NET_COOLING, PIECEWISE_POWER_LAW, SIMPLE_POWER_LAW, CoolingConfig, CoolingCurveConfig, CoolingNetConfig, CoolingNetParams, CoolingParams, PiecewisePowerLawParams, SimplePowerLawParams
 
 from jf1uids import get_helper_data
-from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, construct_primitive_state, primitive_state_from_conserved
+from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, primitive_state_from_conserved
 from jf1uids import get_registered_variables
 from jf1uids.option_classes.simulation_config import BACKWARDS, finalize_config
 

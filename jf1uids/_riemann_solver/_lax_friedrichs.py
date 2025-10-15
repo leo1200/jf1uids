@@ -27,16 +27,16 @@ def _lax_friedrichs_solver(
     registered_variables: RegisteredVariables,
     flux_direction_index: int,
 ) -> STATE_TYPE:
-    """
-    the flux such that the array at position i stores the interface
-    from from i-1 to i.
 
-    primitives left at i is the left state at the interface
-    between i-1 and i so the right extrapolation from the cell i-1
+    # the flux such that the array at position i stores the interface
+    # from from i-1 to i.
 
-    primitives right at i is the right state at the interface
-    between i-1 and i so the left extrapolation from the cell i
-    """
+    # primitives left at i is the left state at the interface
+    # between i-1 and i so the right extrapolation from the cell i-1
+
+    # primitives right at i is the right state at the interface
+    # between i-1 and i so the left extrapolation from the cell i
+
 
     rho_L = primitives_left[registered_variables.density_index]
     u_L = primitives_left[flux_direction_index]

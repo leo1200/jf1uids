@@ -171,20 +171,6 @@ def _evolve_gas_state_split(
     helper_data: HelperData,
     registered_variables: RegisteredVariables,
 ) -> STATE_TYPE:
-    """
-    Evolve the primitive state array.
-
-    Args:
-        primitive_state: The primitive state array.
-        grid_spacing: The cell width.
-        dt: The time step.
-        gamma: The adiabatic index.
-        config: The simulation configuration.
-        helper_data: The helper data.
-
-    Returns:
-        The evolved primitive state array.
-    """
     if config.dimensionality == 1:
         if config.self_gravity:
             old_primitive_state = primitive_state

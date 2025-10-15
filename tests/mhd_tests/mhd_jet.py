@@ -18,7 +18,7 @@ from jf1uids import SimulationConfig
 from jf1uids import get_helper_data
 from jf1uids import SimulationParams
 from jf1uids import time_integration
-from jf1uids.fluid_equations.fluid import construct_primitive_state
+from jf1uids.initial_condition_generation.construct_primitive_state import construct_primitive_state
 from jf1uids import get_registered_variables
 from jf1uids.option_classes.simulation_config import MHD_JET_BOUNDARY, OPEN_BOUNDARY, SPLIT, finalize_config
 from matplotlib.colors import LogNorm

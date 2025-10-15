@@ -130,23 +130,11 @@ def _hllc_solver(
     hllc_lm: bool = False,
     low_mach_dissipation_control: bool = False,
 ) -> STATE_TYPE:
-    """
-    Returns the conservative fluxes.
 
-    There seem to be problems for 1d radial, maybe because the same stuff that has to be
-    taken into consideration in the general scheme (averaging based on density might be
-    problematic, as the surface increases radially, ...) is not taken into account here.
-    Maybe interesting for future research, for now HLL works fine.
-
-    Args:
-        primitives_left: States left of the interfaces.
-        primitives_right: States right of the interfaces.
-        gamma: The adiabatic index.
-
-    Returns:
-        The conservative fluxes at the interfaces.
-
-    """
+    # There seem to be problems for 1d radial, maybe because the same stuff that has to be
+    # taken into consideration in the general scheme (averaging based on density might be
+    # problematic, as the surface increases radially, ...) is not taken into account here.
+    # Maybe interesting for future research, for now HLL works fine.
 
     rho_L = primitives_left[registered_variables.density_index]
     u_L = primitives_left[flux_direction_index]

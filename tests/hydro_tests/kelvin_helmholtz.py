@@ -14,7 +14,7 @@ from matplotlib.colors import LogNorm
 
 # jf1uids
 from jf1uids import SimulationConfig, get_helper_data, SimulationParams, time_integration
-from jf1uids.fluid_equations.fluid import construct_primitive_state
+from jf1uids.initial_condition_generation.construct_primitive_state import construct_primitive_state
 from jf1uids import get_registered_variables
 import os
 from jf1uids.option_classes.simulation_config import (

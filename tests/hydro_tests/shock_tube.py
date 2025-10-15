@@ -23,7 +23,7 @@ from jf1uids import SimulationParams
 from jf1uids import get_helper_data
 from jf1uids import finalize_config
 from jf1uids import get_registered_variables
-from jf1uids import construct_primitive_state
+from jf1uids.initial_condition_generation.construct_primitive_state import construct_primitive_state
 
 # time integration, core function
 from jf1uids import time_integration

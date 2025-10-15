@@ -45,6 +45,8 @@ def magnetic_update(
         gas_state: The gas state.
         grid_spacing: The width of the cells.
         dt: The time step.
+        registered_variables: The registered variables.
+        config: The simulation configuration.
 
     Returns:
         The updated magnetic field.

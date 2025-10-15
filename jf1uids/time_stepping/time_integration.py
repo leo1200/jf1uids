@@ -59,7 +59,7 @@ def time_integration(
     params: SimulationParams,
     helper_data: HelperData,
     registered_variables: RegisteredVariables,
-    snapshot_callable=None,
+    snapshot_callable = None,
     sharding: Union[NoneType, jax.NamedSharding] = None,
 ) -> Union[STATE_TYPE, SnapshotData]:
     """
@@ -72,6 +72,15 @@ def time_integration(
         config: The simulation configuration.
         params: The simulation parameters.
         helper_data: The helper data.
+        registered_variables: The registered variables.
+        snapshot_callable: A callable which is called at certain time points
+            if config.activate_snapshot_callback is True. The callable must
+            have the signature
+                callable(time: float, state: STATE_TYPE, registered_variables: RegisteredVariables) -> None
+            and can be used to e.g. output the current state to disk or
+            directly produce intermediate plots.
+        sharding: The sharding to use for the padded helper data. If None,
+                  no sharding is applied.
 
     Returns:
         Depending on the configuration (return_snapshots, num_snapshots)
@@ -102,9 +111,9 @@ def time_integration(
             primitive_state,
             config,
             params,
+            registered_variables,
             helper_data,
             helper_data_pad,
-            registered_variables,
             snapshot_callable,
         )
         err.throw()
@@ -115,9 +124,9 @@ def time_integration(
                 primitive_state,
                 config,
                 params,
+                registered_variables,
                 helper_data,
                 helper_data_pad,
-                registered_variables,
                 snapshot_callable,
             ).compile()
             compiled_stats = compiled_step.memory_analysis()
@@ -147,9 +156,9 @@ def time_integration(
                     primitive_state,
                     config,
                     params,
+                    registered_variables,
                     helper_data,
                     helper_data_pad,
-                    registered_variables,
                     snapshot_callable,
                 ).compile()
 
@@ -160,9 +169,9 @@ def time_integration(
             primitive_state,
             config,
             params,
+            registered_variables,
             helper_data,
             helper_data_pad,
-            registered_variables,
             snapshot_callable,
         )
 
@@ -193,10 +202,10 @@ def _time_integration(
     state: Union[STATE_TYPE, StateStruct],
     config: SimulationConfig,
     params: SimulationParams,
-    helper_data: HelperData,
-    helper_data_pad: HelperData,
     registered_variables: RegisteredVariables,
-    snapshot_callable=None,
+    helper_data_unpad: Union[HelperData, NoneType],
+    helper_data_pad: Union[HelperData, NoneType],
+    snapshot_callable = None,
 ) -> Union[STATE_TYPE, StateStruct, SnapshotData]:
     """
     Time integration.
@@ -362,7 +371,7 @@ def _time_integration(
                     total_mass = snapshot_data.total_mass.at[
                         snapshot_data.current_checkpoint
                     ].set(
-                        calculate_total_mass(unpad_primitive_state, helper_data, config)
+                        calculate_total_mass(unpad_primitive_state, helper_data_unpad, config)
                     )
                 else:
                     total_mass = None
@@ -373,7 +382,7 @@ def _time_integration(
                     ].set(
                         calculate_total_energy(
                             unpad_primitive_state,
-                            helper_data,
+                            helper_data_unpad,
                             params.gamma,
                             params.gravitational_constant,
                             config,
@@ -389,7 +398,7 @@ def _time_integration(
                     ].set(
                         calculate_internal_energy(
                             unpad_primitive_state,
-                            helper_data,
+                            helper_data_unpad,
                             params.gamma,
                             config,
                             registered_variables,
@@ -404,7 +413,7 @@ def _time_integration(
                     ].set(
                         calculate_kinetic_energy(
                             unpad_primitive_state,
-                            helper_data,
+                            helper_data_unpad,
                             config,
                             registered_variables,
                         )
@@ -418,7 +427,7 @@ def _time_integration(
                     ].set(
                         calculate_radial_momentum(
                             unpad_primitive_state,
-                            helper_data,
+                            helper_data_unpad,
                             config,
                             registered_variables,
                         )
@@ -435,7 +444,7 @@ def _time_integration(
                     ].set(
                         calculate_gravitational_energy(
                             unpad_primitive_state,
-                            helper_data,
+                            helper_data_unpad,
                             params.gravitational_constant,
                             config,
                             registered_variables,

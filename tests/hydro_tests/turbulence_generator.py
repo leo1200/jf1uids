@@ -42,14 +42,14 @@ from jf1uids.option_classes.simulation_config import BACKWARDS, HLL, HLLC, MINMO
 
 # jf1uids setup functions
 from jf1uids import get_helper_data
-from jf1uids.fluid_equations.fluid import construct_primitive_state
+from jf1uids.initial_condition_generation.construct_primitive_state import construct_primitive_state
 from jf1uids import get_registered_variables
 from jf1uids.option_classes.simulation_config import finalize_config
 from jf1uids.option_classes.simulation_config import PERIODIC_BOUNDARY, BoundarySettings, BoundarySettings1D
 
 
 # turbulent ic setup
-from jf1uids.initial_condition_generation.turb import create_turb_field
+from jf1uids.initial_condition_generation.turbulent_ic_generatorulent_ic_generator import create_turb_field
 
 # main simulation function
 from jf1uids import time_integration
