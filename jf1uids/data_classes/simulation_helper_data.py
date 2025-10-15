@@ -14,6 +14,7 @@ import jax
 # Helper data like the radii and cell volumes
 # in the simulation or cooling tables etc.
 
+
 class HelperData(NamedTuple):
     """Helper data used throughout the simulation."""
 

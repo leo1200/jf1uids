@@ -25,21 +25,6 @@ def _calculate_limited_gradients(
     helper_data: HelperData,
     axis: int
 ) -> STATE_TYPE_ALTERED:
-    """
-    Calculate the limited gradients of the primitive variables.
-
-    Args:
-        primitive_state: The primitive state array.
-        grid_spacing_or_rv: Usually the cell width, for spherical 
-        geometry the volumetric centers of the cells.
-        axis: The array axis along which the gradients are calculated,
-        = 1 for x (0th axis are the variables).
-        geometry: The geometry of the domain.
-
-    Returns:
-        The limited gradients of the primitive variables.
-
-    """
 
     # We first need to calculate the distances between the cells.
     # For 1D simulations in spherical geometry, we have to mind

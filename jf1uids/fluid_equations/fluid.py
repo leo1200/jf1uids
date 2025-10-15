@@ -8,29 +8,35 @@ from beartype import beartype as typechecker
 
 from typing import Union
 
-from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import total_energy_from_primitives_with_crs, total_pressure_from_conserved_with_crs
+from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import (
+    total_energy_from_primitives_with_crs,
+    total_pressure_from_conserved_with_crs,
+)
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import FIELD_TYPE, STATE_TYPE, SimulationConfig
+from jf1uids.option_classes.simulation_config import (
+    FIELD_TYPE,
+    STATE_TYPE,
+    SimulationConfig,
+)
 from jf1uids.option_classes.simulation_params import SimulationParams
 
-# The default state jf1uids operates on 
+# The default state jf1uids operates on
 # are the primitive variables rho, u, p.
 
 # We might want to add more variables to the
 # state array, e.g. a tracer for stellar wind
-# mass or cosmic ray pressure. 
+# mass or cosmic ray pressure.
 
 
 # ======= Create the primitive state ========
 
+
 # TODO: move this function
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['registered_variables', 'config', 'sharding'])
+@partial(jax.jit, static_argnames=["registered_variables", "config", "sharding"])
 def construct_primitive_state(
-
     config: SimulationConfig,
     registered_variables: RegisteredVariables,
-
     density: FIELD_TYPE,
     velocity_x: Union[FIELD_TYPE, NoneType] = None,
     velocity_y: Union[FIELD_TYPE, NoneType] = None,
@@ -40,16 +46,13 @@ def construct_primitive_state(
     magnetic_field_z: Union[FIELD_TYPE, NoneType] = None,
     gas_pressure: Union[FIELD_TYPE, NoneType] = None,
     cosmic_ray_pressure: Union[FIELD_TYPE, NoneType] = None,
-
-    sharding = None,
-
+    sharding=None,
 ) -> STATE_TYPE:
-
     """Stack the primitive variables into the state array.
 
     IN 1D SET ONLY THE XCOMPONENTS, in 2D SET X AND Y COMPONENTS,
     in 3D SET X, Y AND Z COMPONENTS
-    
+
     Args:
         config: The simulation configuration.
         registered_variables: The indices of the variables in the state array.
@@ -62,18 +65,17 @@ def construct_primitive_state(
         magnetic_field_z: The z-component of the magnetic field in B / sqrt(\mu_0).
         gas_pressure: The thermal pressure of the fluid.
         cosmic_ray_pressure: The cosmic ray pressure of the fluid.
-        
+
     Returns:
         The state array.
     """
     if sharding is not None:
         state = jax.lax.with_sharding_constraint(
-            jnp.zeros((registered_variables.num_vars, *density.shape)), 
-            sharding
+            jnp.zeros((registered_variables.num_vars, *density.shape)), sharding
         )
     else:
         state = jnp.zeros((registered_variables.num_vars, *density.shape))
-    
+
     state = state.at[registered_variables.density_index].set(density)
 
     if config.dimensionality == 1:
@@ -90,30 +92,39 @@ def construct_primitive_state(
         if config.dimensionality == 1:
             state = state.at[registered_variables.magnetic_index].set(magnetic_field_x)
         elif config.dimensionality >= 2:
-            state = state.at[registered_variables.magnetic_index.x].set(magnetic_field_x)
-            state = state.at[registered_variables.magnetic_index.y].set(magnetic_field_y)
-            state = state.at[registered_variables.magnetic_index.z].set(magnetic_field_z)
+            state = state.at[registered_variables.magnetic_index.x].set(
+                magnetic_field_x
+            )
+            state = state.at[registered_variables.magnetic_index.y].set(
+                magnetic_field_y
+            )
+            state = state.at[registered_variables.magnetic_index.z].set(
+                magnetic_field_z
+            )
 
     state = state.at[registered_variables.pressure_index].set(gas_pressure)
 
     if registered_variables.cosmic_ray_n_active:
-
         # TODO: get from params
-        gamma_cr = 4/3
+        gamma_cr = 4 / 3
 
-        state = state.at[registered_variables.pressure_index].set(gas_pressure + cosmic_ray_pressure)
-        state = state.at[registered_variables.cosmic_ray_n_index].set(cosmic_ray_pressure ** (1/gamma_cr))
+        state = state.at[registered_variables.pressure_index].set(
+            gas_pressure + cosmic_ray_pressure
+        )
+        state = state.at[registered_variables.cosmic_ray_n_index].set(
+            cosmic_ray_pressure ** (1 / gamma_cr)
+        )
 
     return state
 
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+@partial(jax.jit, static_argnames=["config", "registered_variables"])
 def primitive_state_from_conserved(
     conserved_state: STATE_TYPE,
     gamma: Union[float, Float[Array, ""]],
     config: SimulationConfig,
-    registered_variables: RegisteredVariables
+    registered_variables: RegisteredVariables,
 ) -> STATE_TYPE:
     """Convert the conserved state to the primitive state.
 
@@ -146,7 +157,9 @@ def primitive_state_from_conserved(
     p = pressure_from_energy(E, rho, u, gamma)
 
     if registered_variables.cosmic_ray_n_active:
-        p = total_pressure_from_conserved_with_crs(conserved_state, registered_variables)
+        p = total_pressure_from_conserved_with_crs(
+            conserved_state, registered_variables
+        )
     else:
         p = pressure_from_energy(E, rho, u, gamma)
 
@@ -156,17 +169,28 @@ def primitive_state_from_conserved(
     if config.dimensionality == 1:
         primitive_state = primitive_state.at[registered_variables.velocity_index].set(u)
     elif config.dimensionality == 2:
-        primitive_state = primitive_state.at[registered_variables.velocity_index.x].set(ux)
-        primitive_state = primitive_state.at[registered_variables.velocity_index.y].set(uy)
+        primitive_state = primitive_state.at[registered_variables.velocity_index.x].set(
+            ux
+        )
+        primitive_state = primitive_state.at[registered_variables.velocity_index.y].set(
+            uy
+        )
     elif config.dimensionality == 3:
-        primitive_state = primitive_state.at[registered_variables.velocity_index.x].set(ux)
-        primitive_state = primitive_state.at[registered_variables.velocity_index.y].set(uy)
-        primitive_state = primitive_state.at[registered_variables.velocity_index.z].set(uz)
-    
+        primitive_state = primitive_state.at[registered_variables.velocity_index.x].set(
+            ux
+        )
+        primitive_state = primitive_state.at[registered_variables.velocity_index.y].set(
+            uy
+        )
+        primitive_state = primitive_state.at[registered_variables.velocity_index.z].set(
+            uz
+        )
+
     # for all other variables assume that primitive and conserved state are the same
     # as for the mass density
 
     return primitive_state
+
 
 # ===========================================
 
@@ -174,12 +198,12 @@ def primitive_state_from_conserved(
 
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+@partial(jax.jit, static_argnames=["config", "registered_variables"])
 def conserved_state_from_primitive(
     primitive_state: STATE_TYPE,
     gamma: Union[float, Float[Array, ""]],
     config: SimulationConfig,
-    registered_variables: RegisteredVariables
+    registered_variables: RegisteredVariables,
 ) -> STATE_TYPE:
     """Convert the primitive state to the conserved state.
 
@@ -190,7 +214,7 @@ def conserved_state_from_primitive(
     Returns:
         The conserved state.
     """
-    
+
     rho = primitive_state[registered_variables.density_index]
 
     u = get_absolute_velocity(primitive_state, config, registered_variables)
@@ -204,30 +228,48 @@ def conserved_state_from_primitive(
     conserved_state = primitive_state.at[registered_variables.pressure_index].set(E)
 
     if config.dimensionality == 1:
-        conserved_state = conserved_state.at[registered_variables.velocity_index].set(rho * primitive_state[registered_variables.velocity_index])
+        conserved_state = conserved_state.at[registered_variables.velocity_index].set(
+            rho * primitive_state[registered_variables.velocity_index]
+        )
     elif config.dimensionality == 2:
-        conserved_state = conserved_state.at[registered_variables.velocity_index.x].set(rho * primitive_state[registered_variables.velocity_index.x])
-        conserved_state = conserved_state.at[registered_variables.velocity_index.y].set(rho * primitive_state[registered_variables.velocity_index.y])
+        conserved_state = conserved_state.at[registered_variables.velocity_index.x].set(
+            rho * primitive_state[registered_variables.velocity_index.x]
+        )
+        conserved_state = conserved_state.at[registered_variables.velocity_index.y].set(
+            rho * primitive_state[registered_variables.velocity_index.y]
+        )
     elif config.dimensionality == 3:
-        conserved_state = conserved_state.at[registered_variables.velocity_index.x].set(rho * primitive_state[registered_variables.velocity_index.x])
-        conserved_state = conserved_state.at[registered_variables.velocity_index.y].set(rho * primitive_state[registered_variables.velocity_index.y])
-        conserved_state = conserved_state.at[registered_variables.velocity_index.z].set(rho * primitive_state[registered_variables.velocity_index.z])
+        conserved_state = conserved_state.at[registered_variables.velocity_index.x].set(
+            rho * primitive_state[registered_variables.velocity_index.x]
+        )
+        conserved_state = conserved_state.at[registered_variables.velocity_index.y].set(
+            rho * primitive_state[registered_variables.velocity_index.y]
+        )
+        conserved_state = conserved_state.at[registered_variables.velocity_index.z].set(
+            rho * primitive_state[registered_variables.velocity_index.z]
+        )
     else:
         raise ValueError("Invalid dimension.")
 
     return conserved_state
 
+
 # ===========================================
 
 # =============== Fluid physics ===============
 
+
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['config', 'registered_variables'])
+@partial(jax.jit, static_argnames=["config", "registered_variables"])
 def get_absolute_velocity(
     primitive_state: STATE_TYPE,
     config: SimulationConfig,
-    registered_variables: RegisteredVariables
-) -> Union[Float[Array, "num_cells"], Float[Array, "num_cells_x num_cells_y"], Float[Array, "num_cells_x num_cells_y num_cells_z"]]:
+    registered_variables: RegisteredVariables,
+) -> Union[
+    Float[Array, "num_cells"],
+    Float[Array, "num_cells_x num_cells_y"],
+    Float[Array, "num_cells_x num_cells_y num_cells_z"],
+]:
     """Get the absolute velocity of the fluid.
 
     Args:
@@ -241,30 +283,39 @@ def get_absolute_velocity(
     if config.dimensionality == 1:
         return jnp.abs(primitive_state[registered_variables.velocity_index])
     elif config.dimensionality == 2:
-        return jnp.sqrt(primitive_state[registered_variables.velocity_index.x]**2 + primitive_state[registered_variables.velocity_index.y]**2)
+        return jnp.sqrt(
+            primitive_state[registered_variables.velocity_index.x] ** 2
+            + primitive_state[registered_variables.velocity_index.y] ** 2
+        )
     elif config.dimensionality == 3:
-        return jnp.sqrt(primitive_state[registered_variables.velocity_index.x]**2 + primitive_state[registered_variables.velocity_index.y]**2 + primitive_state[registered_variables.velocity_index.z]**2)
+        return jnp.sqrt(
+            primitive_state[registered_variables.velocity_index.x] ** 2
+            + primitive_state[registered_variables.velocity_index.y] ** 2
+            + primitive_state[registered_variables.velocity_index.z] ** 2
+        )
     else:
         raise ValueError("Invalid dimension.")
 
+
 @jax.jit
 def pressure_from_internal_energy(e, rho, gamma):
-  """
-  Calculate the pressure from the internal energy.
-  
-  Args:
-      e: The internal energy.
-      rho: The density.
-      gamma: The adiabatic index.
-      
-  Returns:
-      The pressure.
-  """
-  return (gamma - 1) * rho * e
+    """
+    Calculate the pressure from the internal energy.
+
+    Args:
+        e: The internal energy.
+        rho: The density.
+        gamma: The adiabatic index.
+
+    Returns:
+        The pressure.
+    """
+    return (gamma - 1) * rho * e
+
 
 @jax.jit
 def internal_energy_from_energy(E, rho, u):
-    """ Calculate the internal energy from the total energy.
+    """Calculate the internal energy from the total energy.
 
     Args:
         E: The total energy.
@@ -276,9 +327,10 @@ def internal_energy_from_energy(E, rho, u):
     """
     return E / rho - 0.5 * u**2
 
+
 @jax.jit
 def pressure_from_energy(E, rho, u, gamma):
-    """ Calculate the pressure from the total energy.
+    """Calculate the pressure from the total energy.
 
     Args:
         E: The total energy.
@@ -292,6 +344,7 @@ def pressure_from_energy(E, rho, u, gamma):
 
     e = internal_energy_from_energy(E, rho, u)
     return pressure_from_internal_energy(e, rho, gamma)
+
 
 @jax.jit
 def total_energy_from_primitives(rho, u, p, gamma):
@@ -308,6 +361,7 @@ def total_energy_from_primitives(rho, u, p, gamma):
     """
 
     return p / (gamma - 1) + 0.5 * rho * u**2
+
 
 @jax.jit
 def speed_of_sound(rho, p, gamma):

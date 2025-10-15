@@ -19,12 +19,12 @@ from jax.numpy.fft import fftn, ifftn
 
 
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['grid_spacing', 'config'])
+@partial(jax.jit, static_argnames=["grid_spacing", "config"])
 def _compute_gravitational_potential(
     gas_density: FIELD_TYPE,
     grid_spacing: float,
     config: SimulationConfig,
-    G: Union[float, Float[Array, ""]] = 1.0
+    G: Union[float, Float[Array, ""]] = 1.0,
 ) -> FIELD_TYPE:
     """
     Compute the gravitational potential using FFT to solve Poisson's equation for
@@ -53,26 +53,26 @@ def _compute_gravitational_potential(
 
     if dimensionality == 1:
         if not (
-            config.boundary_settings.left_boundary == PERIODIC_BOUNDARY and
-            config.boundary_settings.right_boundary == PERIODIC_BOUNDARY
+            config.boundary_settings.left_boundary == PERIODIC_BOUNDARY
+            and config.boundary_settings.right_boundary == PERIODIC_BOUNDARY
         ):
             non_periodic_boundaries = True
     elif dimensionality == 2:
         if not (
-            config.boundary_settings.x.left_boundary == PERIODIC_BOUNDARY and
-            config.boundary_settings.x.right_boundary == PERIODIC_BOUNDARY and
-            config.boundary_settings.y.left_boundary == PERIODIC_BOUNDARY and
-            config.boundary_settings.y.right_boundary == PERIODIC_BOUNDARY
+            config.boundary_settings.x.left_boundary == PERIODIC_BOUNDARY
+            and config.boundary_settings.x.right_boundary == PERIODIC_BOUNDARY
+            and config.boundary_settings.y.left_boundary == PERIODIC_BOUNDARY
+            and config.boundary_settings.y.right_boundary == PERIODIC_BOUNDARY
         ):
             non_periodic_boundaries = True
     elif dimensionality == 3:
         if not (
-            config.boundary_settings.x.left_boundary == PERIODIC_BOUNDARY and
-            config.boundary_settings.x.right_boundary == PERIODIC_BOUNDARY and
-            config.boundary_settings.y.left_boundary == PERIODIC_BOUNDARY and
-            config.boundary_settings.y.right_boundary == PERIODIC_BOUNDARY and
-            config.boundary_settings.z.left_boundary == PERIODIC_BOUNDARY and
-            config.boundary_settings.z.right_boundary == PERIODIC_BOUNDARY
+            config.boundary_settings.x.left_boundary == PERIODIC_BOUNDARY
+            and config.boundary_settings.x.right_boundary == PERIODIC_BOUNDARY
+            and config.boundary_settings.y.left_boundary == PERIODIC_BOUNDARY
+            and config.boundary_settings.y.right_boundary == PERIODIC_BOUNDARY
+            and config.boundary_settings.z.left_boundary == PERIODIC_BOUNDARY
+            and config.boundary_settings.z.right_boundary == PERIODIC_BOUNDARY
         ):
             non_periodic_boundaries = True
 
@@ -94,7 +94,7 @@ def _compute_gravitational_potential(
 
         if dimensionality == 1:
             k = k_base  # 1D case.
-            k_squared = k ** 2
+            k_squared = k**2
         elif dimensionality == 2:
             kx, ky = jnp.meshgrid(k_base, k_base, indexing="ij")
             k_squared = kx**2 + ky**2
@@ -104,14 +104,16 @@ def _compute_gravitational_potential(
 
         # Avoid division by zero (k = 0 mode).
         k_squared = jnp.where(k_squared == 0, 1e-12, k_squared)
-        greens_function = jnp.where(k_squared > 1e-12, -4 * jnp.pi * G / k_squared, -1/(4 * jnp.pi))
+        greens_function = jnp.where(
+            k_squared > 1e-12, -4 * jnp.pi * G / k_squared, -1 / (4 * jnp.pi)
+        )
 
         # Multiply in Fourier space and invert.
         potential_k = greens_function * density_k
         gravitational_potential = jnp.real(ifftn(potential_k))
 
         # this might be wrong for periodic boundaries, TODO: check
-        return gravitational_potential * grid_spacing ** dimensionality
+        return gravitational_potential * grid_spacing**dimensionality
 
     else:
         # ----------------------------------------------------
@@ -176,4 +178,4 @@ def _compute_gravitational_potential(
 
         # (e) Extract the portion of the potential corresponding to the original grid.
         gravitational_potential = potential_ext[slices]
-        return gravitational_potential * grid_spacing ** dimensionality
+        return gravitational_potential * grid_spacing**dimensionality

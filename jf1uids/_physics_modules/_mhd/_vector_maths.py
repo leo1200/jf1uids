@@ -24,10 +24,14 @@ def divergence2D(field, grid_spacing: float):
     """
     divergence = jnp.zeros_like(field)
 
-    divergence = divergence.at[0, 1:-1, 1:-1].add((field[0, 2:, 1:-1] - field[0, :-2, 1:-1]) / (2 * grid_spacing))
-    divergence = divergence.at[1, 1:-1, 1:-1].add((field[1, 1:-1, 2:] - field[1, 1:-1, :-2]) / (2 * grid_spacing))
+    divergence = divergence.at[0, 1:-1, 1:-1].add(
+        (field[0, 2:, 1:-1] - field[0, :-2, 1:-1]) / (2 * grid_spacing)
+    )
+    divergence = divergence.at[1, 1:-1, 1:-1].add(
+        (field[1, 1:-1, 2:] - field[1, 1:-1, :-2]) / (2 * grid_spacing)
+    )
 
-    divergence = jnp.sum(divergence, axis = 0)
+    divergence = jnp.sum(divergence, axis=0)
 
     return divergence
 
@@ -45,14 +49,26 @@ def curl3D(field, grid_spacing: float):
     """
     curl = jnp.zeros_like(field)
 
-    curl = curl.at[0, :, 1:-1, :].add(0.5 * (field[2, :, 2:, :] - field[2, :, :-2, :]) / grid_spacing)
-    curl = curl.at[0, :, :, 1:-1].add(-0.5 * (field[1, :, :, 2:] - field[1, :, :, :-2]) / grid_spacing)
+    curl = curl.at[0, :, 1:-1, :].add(
+        0.5 * (field[2, :, 2:, :] - field[2, :, :-2, :]) / grid_spacing
+    )
+    curl = curl.at[0, :, :, 1:-1].add(
+        -0.5 * (field[1, :, :, 2:] - field[1, :, :, :-2]) / grid_spacing
+    )
 
-    curl = curl.at[1, :, :, 1:-1].add(0.5 * (field[0, :, :, 2:] - field[0, :, :, :-2]) / grid_spacing)
-    curl = curl.at[1, 1:-1, :, :].add(-0.5 * (field[2, 2:, :, :] - field[2, :-2, :, :]) / grid_spacing)
+    curl = curl.at[1, :, :, 1:-1].add(
+        0.5 * (field[0, :, :, 2:] - field[0, :, :, :-2]) / grid_spacing
+    )
+    curl = curl.at[1, 1:-1, :, :].add(
+        -0.5 * (field[2, 2:, :, :] - field[2, :-2, :, :]) / grid_spacing
+    )
 
-    curl = curl.at[2, 1:-1, :, :].add(0.5 * (field[1, 2:, :, :] - field[1, :-2, :, :]) / grid_spacing)
-    curl = curl.at[2, :, 1:-1, :].add(-0.5 * (field[0, :, 2:, :] - field[0, :, :-2, :]) / grid_spacing)
+    curl = curl.at[2, 1:-1, :, :].add(
+        0.5 * (field[1, 2:, :, :] - field[1, :-2, :, :]) / grid_spacing
+    )
+    curl = curl.at[2, :, 1:-1, :].add(
+        -0.5 * (field[0, :, 2:, :] - field[0, :, :-2, :]) / grid_spacing
+    )
 
     return curl
 
@@ -71,10 +87,18 @@ def curl2D(field, grid_spacing: float):
     """
     curl = jnp.zeros_like(field)
 
-    curl = curl.at[0, 1:-1, 1:-1].add(0.5 * (field[2, 1:-1, 2:] - field[2, 1:-1, :-2]) / grid_spacing)
-    curl = curl.at[1, 1:-1, 1:-1].add(-0.5 * (field[2, 2:, 1:-1] - field[2, :-2, 1:-1]) / grid_spacing)
+    curl = curl.at[0, 1:-1, 1:-1].add(
+        0.5 * (field[2, 1:-1, 2:] - field[2, 1:-1, :-2]) / grid_spacing
+    )
+    curl = curl.at[1, 1:-1, 1:-1].add(
+        -0.5 * (field[2, 2:, 1:-1] - field[2, :-2, 1:-1]) / grid_spacing
+    )
 
-    curl = curl.at[2, 1:-1, 1:-1].add(0.5 * (field[1, 2:, 1:-1] - field[1, :-2, 1:-1]) / grid_spacing)
-    curl = curl.at[2, 1:-1, 1:-1].add(-0.5 * (field[0, 1:-1, 2:] - field[0, 1:-1, :-2]) / grid_spacing)
+    curl = curl.at[2, 1:-1, 1:-1].add(
+        0.5 * (field[1, 2:, 1:-1] - field[1, :-2, 1:-1]) / grid_spacing
+    )
+    curl = curl.at[2, 1:-1, 1:-1].add(
+        -0.5 * (field[0, 1:-1, 2:] - field[0, 1:-1, :-2]) / grid_spacing
+    )
 
     return curl

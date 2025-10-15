@@ -122,7 +122,7 @@ def time_integration(
             ).compile()
             compiled_stats = compiled_step.memory_analysis()
             if compiled_stats is not None:
-                # Calculate total memory usage including temporary storage, 
+                # Calculate total memory usage including temporary storage,
                 # arguments, and outputs (but excluding aliases)
                 total = (
                     compiled_stats.temp_size_in_bytes
@@ -208,8 +208,8 @@ def _time_integration(
         helper_data: The helper data.
 
     Returns:
-        Depending on the configuration (return_snapshots, num_snapshots) 
-        either the final state of the fluid after the time integration 
+        Depending on the configuration (return_snapshots, num_snapshots)
+        either the final state of the fluid after the time integration
         of snapshots of the time evolution.
     """
 
@@ -227,7 +227,7 @@ def _time_integration(
     original_shape = primitive_state.shape
     primitive_state = _pad(primitive_state, config)
 
-    # important for active boundaries influencing 
+    # important for active boundaries influencing
     # the time step criterion for now only gas state
     if config.mhd:
         primitive_state = primitive_state.at[:-3, ...].set(
@@ -241,7 +241,7 @@ def _time_integration(
     # -------------------------------------------------------------
 
     # In case the user requests the fluid state (or given
-    # statistics) at certain time points (and not only a 
+    # statistics) at certain time points (and not only a
     # final state at the end), we have to set up the arrays
     # to store this data.
 
@@ -327,19 +327,17 @@ def _time_integration(
     # updated appropriately if snapshots are requested.
 
     def update_step(carry):
-
         # --------------- ↓ Carry unpacking+ ↓ ----------------
 
         # Depending on the configuration, the carry might either contain
         #   - the time, the primitive state and the snapshot data
         #   - only the time and the primitive state
 
-        # We need to appropriately unpack the carry and in case we 
+        # We need to appropriately unpack the carry and in case we
         # have snapshot data, we also directly update it here at
         # the beginning of the time step.
 
         if config.return_snapshots:
-
             # When SnapshotData is involved, we need to unpack the carry
             # correctly and update the SnapshotData if we are currently
             # at a point in time where we want to take a snapshot.
@@ -363,7 +361,9 @@ def _time_integration(
                 if config.snapshot_settings.return_total_mass:
                     total_mass = snapshot_data.total_mass.at[
                         snapshot_data.current_checkpoint
-                    ].set(calculate_total_mass(unpad_primitive_state, helper_data, config))
+                    ].set(
+                        calculate_total_mass(unpad_primitive_state, helper_data, config)
+                    )
                 else:
                     total_mass = None
 
@@ -403,7 +403,10 @@ def _time_integration(
                         snapshot_data.current_checkpoint
                     ].set(
                         calculate_kinetic_energy(
-                            unpad_primitive_state, helper_data, config, registered_variables
+                            unpad_primitive_state,
+                            helper_data,
+                            config,
+                            registered_variables,
                         )
                     )
                 else:
@@ -414,7 +417,10 @@ def _time_integration(
                         snapshot_data.current_checkpoint
                     ].set(
                         calculate_radial_momentum(
-                            unpad_primitive_state, helper_data, config, registered_variables
+                            unpad_primitive_state,
+                            helper_data,
+                            config,
+                            registered_variables,
                         )
                     )
                 else:
@@ -485,7 +491,6 @@ def _time_integration(
             snapshot_data = snapshot_data._replace(num_iterations=num_iterations)
 
         elif config.activate_snapshot_callback:
-
             # Here we deal with the case where the user passes
             # a callable which is applied at certain time points
             # - e.g. to output the current state to disk or
@@ -499,7 +504,9 @@ def _time_integration(
                     current_checkpoint=current_checkpoint
                 )
 
-                jax.debug.callback(snapshot_callable, time, primitive_state, registered_variables)
+                jax.debug.callback(
+                    snapshot_callable, time, primitive_state, registered_variables
+                )
 
                 return snapshot_data
 
@@ -527,7 +534,7 @@ def _time_integration(
         # --------------- ↑ Carry unpacking+ ↑ ----------------
 
         # ---------------- ↓ time step logic ↓ ----------------
-        
+
         # This is the heart of the time integration function.
         # Here we determine the time step size and then evolve
         # the state and run the physics modules.
@@ -575,7 +582,13 @@ def _time_integration(
         # so the source is handled via a simple Euler step but generally
         # a higher order method (in a split fashion) may be used
         primitive_state = _run_physics_modules(
-            primitive_state, dt, config, params, helper_data_pad, registered_variables, time + dt
+            primitive_state,
+            dt,
+            config,
+            params,
+            helper_data_pad,
+            registered_variables,
+            time + dt,
         )
 
         # EVOLVE THE STATE
@@ -614,7 +627,7 @@ def _time_integration(
             carry = (time, primitive_state)
 
         return carry
-    
+
     # -------------------------------------------------------------
     # ====================== ↑ Update step ↑ ======================
     # -------------------------------------------------------------
@@ -690,7 +703,7 @@ def _time_integration(
             return StateStruct(primitive_state=primitive_state)
 
         return primitive_state
-    
+
     # -------------------------------------------------------------
     # ===================== ↑ return logic ↑ ======================
     # -------------------------------------------------------------

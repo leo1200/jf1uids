@@ -26,15 +26,10 @@ class CorrectorCNN(eqx.Module):
     """
     A simple CNN that maps an input of shape (C, H, W) to an output of the same shape.
     """
+
     layers: list
 
-    def __init__(
-        self,
-        in_channels: int,
-        hidden_channels: int,
-        *,
-        key: PRNGKeyArray
-    ):
+    def __init__(self, in_channels: int, hidden_channels: int, *, key: PRNGKeyArray):
         # We need a key for each convolutional layer
         key1, key2, key3 = jax.random.split(key, 3)
 
@@ -43,16 +38,20 @@ class CorrectorCNN(eqx.Module):
         # spatial dimensions (height and width) the same.
         self.layers = (
             # Layer 1: Expand channels from NUM_VARS to HIDDEN_CHANNELS
-            eqx.nn.Conv2d(in_channels, hidden_channels, kernel_size=3, padding=1, key=key1),
+            eqx.nn.Conv2d(
+                in_channels, hidden_channels, kernel_size=3, padding=1, key=key1
+            ),
             jax.nn.relu,
-
             # Layer 2: A hidden convolutional layer
-            eqx.nn.Conv2d(hidden_channels, hidden_channels, kernel_size=3, padding=1, key=key2),
+            eqx.nn.Conv2d(
+                hidden_channels, hidden_channels, kernel_size=3, padding=1, key=key2
+            ),
             jax.nn.relu,
-
             # Layer 3: Contract channels back to the original NUM_VARS
             # No activation function here, as we want to predict a raw correction value.
-            eqx.nn.Conv2d(hidden_channels, in_channels, kernel_size=3, padding=1, key=key3),
+            eqx.nn.Conv2d(
+                hidden_channels, in_channels, kernel_size=3, padding=1, key=key3
+            ),
         )
 
     def __call__(self, x: Float[Array, "num_vars h w"]) -> Float[Array, "num_vars h w"]:
@@ -66,15 +65,16 @@ class CorrectorCNN(eqx.Module):
 
         # Add the learned correction to the original input
         return correction
-    
+
+
 @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=['registered_variables', 'config'])
+@partial(jax.jit, static_argnames=["registered_variables", "config"])
 def _cnn_mhd_corrector(
-     primitive_state: STATE_TYPE,
-     config: SimulationConfig,
-     registered_variables: RegisteredVariables,
-     params: SimulationParams,
-     time_step: Float[Array, ""],
+    primitive_state: STATE_TYPE,
+    config: SimulationConfig,
+    registered_variables: RegisteredVariables,
+    params: SimulationParams,
+    time_step: Float[Array, ""],
 ):
     neural_net_params = params.cnn_mhd_corrector_params.network_params
     neural_net_static = config.cnn_mhd_corrector_config.network_static

@@ -8,10 +8,12 @@ from typing import Union
 
 from jf1uids.option_classes.simulation_config import SimulationConfig
 
+
 class StaticIntVector(NamedTuple):
     x: int
     y: int
     z: int
+
 
 class RegisteredVariables(NamedTuple):
     """The registered variables are the variables that are
@@ -24,7 +26,7 @@ class RegisteredVariables(NamedTuple):
     num_vars: int = 3
 
     # Baseline variables
-    
+
     #: Density index
     density_index: int = 0
 
@@ -69,49 +71,75 @@ def get_registered_variables(config: SimulationConfig) -> RegisteredVariables:
     registered_variables = RegisteredVariables()
 
     if config.dimensionality == 2:
-
         # we have two velocity components
-        registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 1)
+        registered_variables = registered_variables._replace(
+            num_vars=registered_variables.num_vars + 1
+        )
 
         # update the velocity index
-        registered_variables = registered_variables._replace(velocity_index = StaticIntVector(1, 2, -1))
+        registered_variables = registered_variables._replace(
+            velocity_index=StaticIntVector(1, 2, -1)
+        )
 
         # TODO: unified MHD approach in 1D/2D/3D
         # magnetic field index
         if config.mhd:
             # TODO: better indexing
-            registered_variables = registered_variables._replace(pressure_index = 3)
-            registered_variables = registered_variables._replace(magnetic_index = StaticIntVector(4, 5, 6))
-            registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 3)
+            registered_variables = registered_variables._replace(pressure_index=3)
+            registered_variables = registered_variables._replace(
+                magnetic_index=StaticIntVector(4, 5, 6)
+            )
+            registered_variables = registered_variables._replace(
+                num_vars=registered_variables.num_vars + 3
+            )
         else:
             # update the pressure index
-            registered_variables = registered_variables._replace(pressure_index = registered_variables.num_vars - 1)
+            registered_variables = registered_variables._replace(
+                pressure_index=registered_variables.num_vars - 1
+            )
 
     if config.dimensionality == 3:
-        
         # we have three velocity components
-        registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 2)
+        registered_variables = registered_variables._replace(
+            num_vars=registered_variables.num_vars + 2
+        )
 
         # update the velocity index to be an array
-        registered_variables = registered_variables._replace(velocity_index = StaticIntVector(1, 2, 3))
+        registered_variables = registered_variables._replace(
+            velocity_index=StaticIntVector(1, 2, 3)
+        )
 
         # update the pressure index
-        registered_variables = registered_variables._replace(pressure_index = registered_variables.num_vars - 1)
+        registered_variables = registered_variables._replace(
+            pressure_index=registered_variables.num_vars - 1
+        )
 
         # update the magnetic field index
         if config.mhd:
-            registered_variables = registered_variables._replace(magnetic_index = StaticIntVector(5, 6, 7))
-            registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 3)
+            registered_variables = registered_variables._replace(
+                magnetic_index=StaticIntVector(5, 6, 7)
+            )
+            registered_variables = registered_variables._replace(
+                num_vars=registered_variables.num_vars + 3
+            )
 
     if config.wind_config.trace_wind_density:
-        registered_variables = registered_variables._replace(wind_density_index = registered_variables.num_vars)
-        registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 1)
-        registered_variables = registered_variables._replace(wind_density_active = True)
+        registered_variables = registered_variables._replace(
+            wind_density_index=registered_variables.num_vars
+        )
+        registered_variables = registered_variables._replace(
+            num_vars=registered_variables.num_vars + 1
+        )
+        registered_variables = registered_variables._replace(wind_density_active=True)
 
     if config.cosmic_ray_config.cosmic_rays:
-        registered_variables = registered_variables._replace(cosmic_ray_n_index = registered_variables.num_vars)
-        registered_variables = registered_variables._replace(num_vars = registered_variables.num_vars + 1)
-        registered_variables = registered_variables._replace(cosmic_ray_n_active = True)
+        registered_variables = registered_variables._replace(
+            cosmic_ray_n_index=registered_variables.num_vars
+        )
+        registered_variables = registered_variables._replace(
+            num_vars=registered_variables.num_vars + 1
+        )
+        registered_variables = registered_variables._replace(cosmic_ray_n_active=True)
 
     # here you can register more variables
 

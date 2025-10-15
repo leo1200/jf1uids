@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
 
+
 def _cosine_taper(k, k0, k1):
     """Returns taper factor in [0,1]: 1 for k<=k0, smooth down to 0 at k>=k1."""
     # If k1 == k0, use a hard cutoff
@@ -11,7 +12,9 @@ def _cosine_taper(k, k0, k1):
     t = jnp.clip(t, 0.0, 1.0)
     return jnp.where(k <= k0, 1.0, 0.5 * (1.0 + jnp.cos(jnp.pi * t)))
 
+
 # k_max <= int(0.7 * Ndim/2)
+
 
 def create_turb_field(
     Ndim,
@@ -36,9 +39,11 @@ def create_turb_field(
     # --- Memory Optimization 1: Broadcasting instead of meshgrid ---
     # Calculate k-space magnitude without creating full kx, ky, kz arrays.
     # JAX will broadcast the 1D arrays to 3D during the operation.
-    k3d_sq = (k1d.reshape(Ndim, 1, 1)**2 +
-              k1d.reshape(1, Ndim, 1)**2 +
-              k1d.reshape(1, 1, Ndim)**2)
+    k3d_sq = (
+        k1d.reshape(Ndim, 1, 1) ** 2
+        + k1d.reshape(1, Ndim, 1) ** 2
+        + k1d.reshape(1, 1, Ndim) ** 2
+    )
 
     # Shard the first large array created. Subsequent element-wise ops
     # will inherit the sharding.
@@ -74,18 +79,21 @@ def create_turb_field(
     # The operation F_conj_flipped[-k] is equivalent to flipping all axes and
     # rolling by one element due to the fftfreq convention. This is much
     # cheaper than a gather operation with explicit index arrays.
-    F_conj_flipped = jnp.roll(jnp.flip(jnp.conj(F), axis=(0, 1, 2)),
-                              shift=1, axis=(0, 1, 2))
+    F_conj_flipped = jnp.roll(
+        jnp.flip(jnp.conj(F), axis=(0, 1, 2)), shift=1, axis=(0, 1, 2)
+    )
     F_sym = 0.5 * (F + F_conj_flipped)
 
     # --- Memory Optimization 3: Find self-conjugate modes without indices ---
     # Self-conjugate modes are where k_i = -k_i (mod N), which occurs at
     # indices 0 and N/2 (for even N). We can build this mask via broadcasting.
     idx_1d = jnp.arange(Ndim)
-    sc_1d = (idx_1d == ((-idx_1d) % Ndim))
-    self_conj_mask = (sc_1d.reshape(Ndim, 1, 1) &
-                      sc_1d.reshape(1, Ndim, 1) &
-                      sc_1d.reshape(1, 1, Ndim))
+    sc_1d = idx_1d == ((-idx_1d) % Ndim)
+    self_conj_mask = (
+        sc_1d.reshape(Ndim, 1, 1)
+        & sc_1d.reshape(1, Ndim, 1)
+        & sc_1d.reshape(1, 1, Ndim)
+    )
 
     # Force imaginary part to be zero at self-conjugate locations
     F_sym = jnp.where(self_conj_mask, jnp.real(F_sym).astype(F_sym.dtype), F_sym)

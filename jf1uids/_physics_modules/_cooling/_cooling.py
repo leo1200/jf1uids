@@ -1,4 +1,5 @@
-# TOWNSEND SCHEME DOES NOT WORK CURRENTLY
+# TOWNSEND SCHEME DOES NOT WORK CURRENTLY,
+# ONLY THE SIMPLE EXPLICIT COOLING IS USED
 
 # For proper cooling something like Grackle
 # might be used. For now we are interested in
@@ -16,22 +17,6 @@
 # and
 # https://iopscience.iop.org/article/10.1088/0067-0049/181/2/391
 
-# where this source is handled with
-# Brents method? (or Joung & Mac Low 2006)
-# see also
-# https://iopscience.iop.org/article/10.3847/1538-4357/abc011
-
-# HERE WE FOLLOW TOWNSEND 2009
-
-# IDEA: find smart way to directly train a neural network for the temporal
-# evolution function and its inverse
-
-# for a test case on stellar wind look at https://www.sciencedirect.com/science/article/pii/S0045793010002914
-
-# Tref (usually the highest temperature in the cooling table, though this is not requisite).
-
-# for cooling to work we also need a unit system
-
 from typing import Tuple
 
 from functools import partial
@@ -40,7 +25,15 @@ import jax
 
 import equinox as eqx
 
-from jf1uids._physics_modules._cooling.cooling_options import COOLING_CURVE_TYPE, NEURAL_NET_COOLING, NEURAL_NET_COOLING_WITH_DENSITY, PIECEWISE_POWER_LAW, SIMPLE_POWER_LAW, CoolingCurveConfig, CoolingParams
+from jf1uids._physics_modules._cooling.cooling_options import (
+    COOLING_CURVE_TYPE,
+    NEURAL_NET_COOLING,
+    NEURAL_NET_COOLING_WITH_DENSITY,
+    PIECEWISE_POWER_LAW,
+    SIMPLE_POWER_LAW,
+    CoolingCurveConfig,
+    CoolingParams,
+)
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import FIELD_TYPE, STATE_TYPE
 
@@ -52,19 +45,22 @@ from jf1uids.option_classes.simulation_params import SimulationParams
 # \tilde{T} = T * k_B / u
 # \tilde{\Lambda} = \lambda / u^2
 
+
 def get_effective_molecular_weights(
-    hydrogen_mass_fraction: float, # X
-    metal_mass_fraction: float, # Z
+    hydrogen_mass_fraction: float,  # X
+    metal_mass_fraction: float,  # Z
 ) -> Tuple[float, float, float]:
     """
-    Calculate the mean molecular weight (mu) 
-    and the effective molecular weights for 
+    Calculate the mean molecular weight (mu)
+    and the effective molecular weights for
     electrons (mu_e), hydrogen (mu_H)
     """
 
     # mean molecular weight
     mu = 1.0 / (
-        2 * hydrogen_mass_fraction + 3 * (1 - hydrogen_mass_fraction - metal_mass_fraction) / 4 + metal_mass_fraction / 2
+        2 * hydrogen_mass_fraction
+        + 3 * (1 - hydrogen_mass_fraction - metal_mass_fraction) / 4
+        + metal_mass_fraction / 2
     )
 
     # effective molecular weight for electrons
@@ -75,11 +71,12 @@ def get_effective_molecular_weights(
 
     return mu, mu_e, mu_H
 
+
 def get_particle_number_density(
-    density: FIELD_TYPE,
-    mean_molecular_weight: float
+    density: FIELD_TYPE, mean_molecular_weight: float
 ) -> FIELD_TYPE:
     return density / mean_molecular_weight
+
 
 def get_pressure_from_temperature(
     density: FIELD_TYPE,
@@ -98,13 +95,11 @@ def get_pressure_from_temperature(
     )
 
     # calculate the particle number density
-    n = get_particle_number_density(
-        density,
-        mu
-    )
+    n = get_particle_number_density(density, mu)
 
     # calculate the pressure
     return n * temperature
+
 
 def get_temperature_from_pressure(
     density: FIELD_TYPE,
@@ -118,20 +113,16 @@ def get_temperature_from_pressure(
 
     # calculate the effective molecular weights
     mu, _, _ = get_effective_molecular_weights(
-        hydrogen_mass_fraction,
-        metal_mass_fraction
+        hydrogen_mass_fraction, metal_mass_fraction
     )
 
     # calculate the particle number density
-    n = get_particle_number_density(
-        density,
-        mu
-    )
+    n = get_particle_number_density(density, mu)
 
     # calculate the temperature
-    return pressure / n # so the density must never be zero
+    return pressure / n  # so the density must never be zero
 
-    
+
 # \Lambda(T)
 def cooling_rate_power_law(
     temperature: FIELD_TYPE,
@@ -141,8 +132,9 @@ def cooling_rate_power_law(
 ):
     return factor * (temperature / reference_temperature) ** exponent
 
+
 # t_cool
-@partial(jax.jit, static_argnames = ("cooling_curve_config",))
+@partial(jax.jit, static_argnames=("cooling_curve_config",))
 def cooling_time(
     density: FIELD_TYPE,
     temperature: FIELD_TYPE,
@@ -150,7 +142,7 @@ def cooling_time(
     metal_mass_fraction: float,
     gamma: float,
     cooling_curve_config: CoolingCurveConfig,
-    cooling_curve_params: COOLING_CURVE_TYPE
+    cooling_curve_params: COOLING_CURVE_TYPE,
 ) -> FIELD_TYPE:
     """
     t_cool = (k * mu_e * mu_H * T) / ((gamma - 1) * rho * mu * Lambda(T))
@@ -171,15 +163,14 @@ def cooling_time(
     )
 
     # calculate the cooling time
-    return (mu_e * mu_H * temperature) / (
-        (gamma - 1) * density * mu * cooling_rate
-    )
+    return (mu_e * mu_H * temperature) / ((gamma - 1) * density * mu * cooling_rate)
+
 
 # Y(T)
 def power_law_temporal_evolution_function(
-    temperature: FIELD_TYPE, # T
-    reference_temperature: float, # T_ref
-    exponent: float, # alpha
+    temperature: FIELD_TYPE,  # T
+    reference_temperature: float,  # T_ref
+    exponent: float,  # alpha
 ) -> FIELD_TYPE:
     """
     1/(1 - alpha) * (1 - (T/T_ref)^(1-alpha)) for alpha != 1
@@ -187,15 +178,17 @@ def power_law_temporal_evolution_function(
     """
     return jax.lax.cond(
         exponent != 1,
-        lambda: (1 / (1 - exponent)) * (1 - (temperature / reference_temperature) ** (1 - exponent)),
-        lambda: -jnp.log(temperature / reference_temperature)
+        lambda: (1 / (1 - exponent))
+        * (1 - (temperature / reference_temperature) ** (1 - exponent)),
+        lambda: -jnp.log(temperature / reference_temperature),
     )
+
 
 # Y^-1(Y)
 def power_law_temporal_evolution_function_inverse(
-    temporal_evolution_function: FIELD_TYPE, # Y
-    reference_temperature: float, # T_ref
-    exponent: float, # alpha
+    temporal_evolution_function: FIELD_TYPE,  # Y
+    reference_temperature: float,  # T_ref
+    exponent: float,  # alpha
 ) -> FIELD_TYPE:
     """
     T_ref * (1 - (1 - alpha) * Y)^(1/(1-alpha)) for alpha != 1
@@ -203,15 +196,17 @@ def power_law_temporal_evolution_function_inverse(
     """
     return jax.lax.cond(
         exponent != 1,
-        lambda: reference_temperature * (1 - (1 - exponent) * temporal_evolution_function) ** (1 / (1 - exponent)),
-        lambda: reference_temperature * jnp.exp(-temporal_evolution_function)
+        lambda: reference_temperature
+        * (1 - (1 - exponent) * temporal_evolution_function) ** (1 / (1 - exponent)),
+        lambda: reference_temperature * jnp.exp(-temporal_evolution_function),
     )
+
 
 # piecewise power law
 @partial(
     jnp.vectorize,
-    excluded=(1, 2, 3),   # don’t vectorize over tables
-    signature="()->()"     # scalar in, scalar out
+    excluded=(1, 2, 3),  # don’t vectorize over tables
+    signature="()->()",  # scalar in, scalar out
 )
 def _evaluate_piecewise_power_law(
     T_in,
@@ -219,7 +214,6 @@ def _evaluate_piecewise_power_law(
     Lambda_table,
     alpha_table,
 ):
-
     def eval_in_range(T_in):
         k = jnp.searchsorted(T_table, T_in) - 1
 
@@ -230,26 +224,23 @@ def _evaluate_piecewise_power_law(
         T_k = T_table[k]
         Lambda_k = Lambda_table[k]
         return Lambda_k * (T_in / T_k) ** alpha_k
-    
+
     return jax.lax.cond(
         # check if T_in is in the table range
         (T_in >= T_table[0]) & (T_in <= T_table[-1]),
         eval_in_range,
-        lambda _: 0.0, # return 0 if out of range
-        T_in
+        lambda _: 0.0,  # return 0 if out of range
+        T_in,
     )
+
 
 @partial(
     jnp.vectorize,
-    excluded=(1, 2, 3, 4),   # don’t vectorize over tables
-    signature="()->()"     # scalar in, scalar out
+    excluded=(1, 2, 3, 4),  # don’t vectorize over tables
+    signature="()->()",  # scalar in, scalar out
 )
 def _piecewise_power_law_temporal_evolution_function(
-    T_in,
-    T_table,
-    Lambda_table,
-    alpha_table,
-    Y_table
+    T_in, T_table, Lambda_table, alpha_table, Y_table
 ):
     def eval_in_range(T_in):
         k = jnp.searchsorted(T_table, T_in) - 1
@@ -263,29 +254,36 @@ def _piecewise_power_law_temporal_evolution_function(
         Y_k = Y_table[k]
         return Y_k + jax.lax.cond(
             alpha_k != 1.0,
-            lambda: 1 / (1 - alpha_k) * Lambda_table[-1] / Lambda_k * T_k / T_table[-1] * (1 - (T_k / T_in) ** (alpha_k - 1)),
-            lambda: Lambda_table[-1] / Lambda_k * T_k / T_table[-1] * jnp.log(T_k / T_in),
+            lambda: 1
+            / (1 - alpha_k)
+            * Lambda_table[-1]
+            / Lambda_k
+            * T_k
+            / T_table[-1]
+            * (1 - (T_k / T_in) ** (alpha_k - 1)),
+            lambda: Lambda_table[-1]
+            / Lambda_k
+            * T_k
+            / T_table[-1]
+            * jnp.log(T_k / T_in),
         )
-    
+
     return jax.lax.cond(
         # check if T_in is in the table range
         (T_in >= T_table[0]) & (T_in <= T_table[-1]),
         eval_in_range,
-        lambda _: 0.0, # return 0 if out of range
-        T_in
+        lambda _: 0.0,  # return 0 if out of range
+        T_in,
     )
+
 
 @partial(
     jnp.vectorize,
-    excluded=(1, 2, 3, 4),   # don’t vectorize over tables
-    signature="()->()"     # scalar in, scalar out
+    excluded=(1, 2, 3, 4),  # don’t vectorize over tables
+    signature="()->()",  # scalar in, scalar out
 )
 def _piecewise_power_law_temporal_evolution_function_inverse(
-    Y_in,
-    T_table,
-    Lambda_table,
-    alpha_table,
-    Y_table
+    Y_in, T_table, Lambda_table, alpha_table, Y_table
 ):
     def eval_in_range(Y_in):
         # k such that Y_k >= Y >= Y_{k+1}
@@ -300,20 +298,32 @@ def _piecewise_power_law_temporal_evolution_function_inverse(
         Y_k = Y_table[k]
         return jax.lax.cond(
             alpha_k != 1.0,
-            lambda: T_k * (1 - (1 - alpha_k) * (Y_in - Y_k) * Lambda_k / Lambda_table[-1] * T_table[-1] / T_k) ** (1 / (1 - alpha_k)),
-            lambda: T_k * jnp.exp(-(Y_in - Y_k) * Lambda_k / Lambda_table[-1] * T_table[-1] / T_k),
+            lambda: T_k
+            * (
+                1
+                - (1 - alpha_k)
+                * (Y_in - Y_k)
+                * Lambda_k
+                / Lambda_table[-1]
+                * T_table[-1]
+                / T_k
+            )
+            ** (1 / (1 - alpha_k)),
+            lambda: T_k
+            * jnp.exp(-(Y_in - Y_k) * Lambda_k / Lambda_table[-1] * T_table[-1] / T_k),
         )
-    
+
     return jax.lax.cond(
         # check if Y_in is in the table range,
         # Y_table is monotonically decreasing
         (Y_in >= Y_table[-1]) & (Y_in <= Y_table[0]),
         eval_in_range,
         lambda _: jnp.where(Y_in < Y_table[-1], T_table[-1], T_table[0]),
-        Y_in
+        Y_in,
     )
 
-@partial(jax.jit, static_argnames = ("cooling_curve_config",))
+
+@partial(jax.jit, static_argnames=("cooling_curve_config",))
 def _cooling_rate(
     temperature: FIELD_TYPE,
     density: FIELD_TYPE,
@@ -325,14 +335,14 @@ def _cooling_rate(
             temperature,
             cooling_curve_params.reference_temperature,
             cooling_curve_params.factor,
-            cooling_curve_params.exponent
+            cooling_curve_params.exponent,
         )
     elif cooling_curve_config.cooling_curve_type == PIECEWISE_POWER_LAW:
         return _evaluate_piecewise_power_law(
             temperature,
             10**cooling_curve_params.log10_T_table,
             10**cooling_curve_params.log10_Lambda_table,
-            cooling_curve_params.alpha_table
+            cooling_curve_params.alpha_table,
         )
     elif cooling_curve_config.cooling_curve_type == NEURAL_NET_COOLING:
         neural_net_params = cooling_curve_params.network_params
@@ -353,9 +363,12 @@ def _cooling_rate(
         return 10 ** model(input_data).flatten()
 
     else:
-        raise ValueError(f"Unknown cooling curve type: {cooling_curve_config.cooling_curve_type}")
-    
-@partial(jax.jit, static_argnames = ("cooling_curve_config",))
+        raise ValueError(
+            f"Unknown cooling curve type: {cooling_curve_config.cooling_curve_type}"
+        )
+
+
+@partial(jax.jit, static_argnames=("cooling_curve_config",))
 def _temporal_evolution_function(
     temperature: FIELD_TYPE,
     cooling_curve_config: CoolingCurveConfig,
@@ -365,7 +378,7 @@ def _temporal_evolution_function(
         return power_law_temporal_evolution_function(
             temperature,
             cooling_curve_params.reference_temperature,
-            cooling_curve_params.exponent
+            cooling_curve_params.exponent,
         )
     elif cooling_curve_config.cooling_curve_type == PIECEWISE_POWER_LAW:
         return _piecewise_power_law_temporal_evolution_function(
@@ -373,12 +386,15 @@ def _temporal_evolution_function(
             10**cooling_curve_params.log10_T_table,
             10**cooling_curve_params.log10_Lambda_table,
             cooling_curve_params.alpha_table,
-            cooling_curve_params.Y_table
+            cooling_curve_params.Y_table,
         )
     else:
-        raise ValueError(f"Unknown cooling curve type: {cooling_curve_config.cooling_curve_type}")
-    
-@partial(jax.jit, static_argnames = ("cooling_curve_config",))
+        raise ValueError(
+            f"Unknown cooling curve type: {cooling_curve_config.cooling_curve_type}"
+        )
+
+
+@partial(jax.jit, static_argnames=("cooling_curve_config",))
 def _temporal_evolution_function_inverse(
     temporal_evolution_function: FIELD_TYPE,
     cooling_curve_config: CoolingCurveConfig,
@@ -388,7 +404,7 @@ def _temporal_evolution_function_inverse(
         return power_law_temporal_evolution_function_inverse(
             temporal_evolution_function,
             cooling_curve_params.reference_temperature,
-            cooling_curve_params.exponent
+            cooling_curve_params.exponent,
         )
     elif cooling_curve_config.cooling_curve_type == PIECEWISE_POWER_LAW:
         return _piecewise_power_law_temporal_evolution_function_inverse(
@@ -396,13 +412,15 @@ def _temporal_evolution_function_inverse(
             10**cooling_curve_params.log10_T_table,
             10**cooling_curve_params.log10_Lambda_table,
             cooling_curve_params.alpha_table,
-            cooling_curve_params.Y_table
+            cooling_curve_params.Y_table,
         )
     else:
-        raise ValueError(f"Unknown cooling curve type: {cooling_curve_config.cooling_curve_type}")
-    
+        raise ValueError(
+            f"Unknown cooling curve type: {cooling_curve_config.cooling_curve_type}"
+        )
 
-@partial(jax.jit, static_argnames = ("cooling_curve_config",))
+
+@partial(jax.jit, static_argnames=("cooling_curve_config",))
 def update_temperature(
     density: FIELD_TYPE,
     temperature: FIELD_TYPE,
@@ -434,24 +452,19 @@ def update_temperature(
 
     # calculate the cooling rate
     cooling_rate = _cooling_rate(
-        temperature,
-        density,
-        cooling_curve_config,
-        cooling_curve_params
+        temperature, density, cooling_curve_config, cooling_curve_params
     )
 
     cooling_rate_reference = _cooling_rate(
         jnp.array([reference_temperature]),
         jnp.array([density]),
         cooling_curve_config,
-        cooling_curve_params
+        cooling_curve_params,
     )
 
     # calculate the temporal evolution function
     temporal_evolution_function = _temporal_evolution_function(
-        temperature,
-        cooling_curve_config,
-        cooling_curve_params
+        temperature, cooling_curve_config, cooling_curve_params
     )
 
     # calculate the new temperature
@@ -467,14 +480,20 @@ def update_temperature(
     )
 
     new_temperature = _temporal_evolution_function_inverse(
-        temporal_evolution_function + cooling_rate_reference / reference_temperature * ((gamma - 1) * density * mu) / (mu_e * mu_H) * time_step,
+        temporal_evolution_function
+        + cooling_rate_reference
+        / reference_temperature
+        * ((gamma - 1) * density * mu)
+        / (mu_e * mu_H)
+        * time_step,
         cooling_curve_config,
-        cooling_curve_params
+        cooling_curve_params,
     )
 
     return new_temperature
 
-@partial(jax.jit, static_argnames = ("cooling_curve_config",))
+
+@partial(jax.jit, static_argnames=("cooling_curve_config",))
 def dtemperature_dt(
     density: FIELD_TYPE,
     temperature: FIELD_TYPE,
@@ -491,10 +510,7 @@ def dtemperature_dt(
 
     # calculate the cooling rate
     cooling_rate = _cooling_rate(
-        temperature,
-        density,
-        cooling_curve_config,
-        cooling_curve_params
+        temperature, density, cooling_curve_config, cooling_curve_params
     )
 
     mu, mu_e, mu_H = get_effective_molecular_weights(
@@ -504,7 +520,8 @@ def dtemperature_dt(
 
     return -(cooling_rate * (gamma - 1) * density * mu) / (mu_e * mu_H)
 
-@partial(jax.jit, static_argnames = ("cooling_curve_config",))
+
+@partial(jax.jit, static_argnames=("cooling_curve_config",))
 def update_temperature_explicit(
     density: FIELD_TYPE,
     temperature: FIELD_TYPE,
@@ -555,7 +572,7 @@ def update_temperature_explicit(
     #         cooling_curve_params
     #     )
     #     return T + dt_cool * k2
-    
+
     # new_temperature = jax.lax.fori_loop(
     #     0, jnp.int32(num_steps_min[0]),
     #     lambda i, T: T_update(T),
@@ -563,17 +580,22 @@ def update_temperature_explicit(
     # )
     # return new_temperature
 
-    return temperature + dtemperature_dt(
-        density,
-        temperature,
-        hydrogen_mass_fraction,
-        metal_mass_fraction,
-        gamma,
-        cooling_curve_config,
-        cooling_curve_params
-    ) * time_step
+    return (
+        temperature
+        + dtemperature_dt(
+            density,
+            temperature,
+            hydrogen_mass_fraction,
+            metal_mass_fraction,
+            gamma,
+            cooling_curve_config,
+            cooling_curve_params,
+        )
+        * time_step
+    )
 
-@partial(jax.jit, static_argnames = ("cooling_curve_config", "registered_variables"))
+
+@partial(jax.jit, static_argnames=("cooling_curve_config", "registered_variables"))
 def update_pressure_by_cooling(
     primitive_state: STATE_TYPE,
     registered_variables: RegisteredVariables,
@@ -581,7 +603,6 @@ def update_pressure_by_cooling(
     simulation_params: SimulationParams,
     time_step: float,
 ) -> STATE_TYPE:
-    
     # get the parameters
     cooling_params = simulation_params.cooling_params
     hydrogen_mass_fraction = cooling_params.hydrogen_mass_fraction
@@ -620,13 +641,13 @@ def update_pressure_by_cooling(
         metal_mass_fraction,
         gamma,
         cooling_curve_config,
-        cooling_params.cooling_curve_params
+        cooling_params.cooling_curve_params,
     )
 
     new_temperature = jnp.where(
         (new_temperature > cooling_params.floor_temperature),
         new_temperature,
-        temperature
+        temperature,
     )
 
     # new_temperature = temperature
@@ -640,7 +661,9 @@ def update_pressure_by_cooling(
     )
 
     # set the new pressure
-    primitive_state = primitive_state.at[registered_variables.pressure_index].set(new_pressure)
+    primitive_state = primitive_state.at[registered_variables.pressure_index].set(
+        new_pressure
+    )
 
     # return the updated primitive state
     return primitive_state
