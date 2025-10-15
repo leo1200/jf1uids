@@ -19,7 +19,7 @@ gamma_gas = 5 / 3
 gamma_cr = 4 / 3
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["registered_variables"])
 def total_energy_from_primitives_with_crs(
     primitive_state: Float[Array, "num_vars num_cells"],
@@ -60,7 +60,7 @@ def total_energy_from_primitives_with_crs(
     return E_tot
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["registered_variables"])
 def gas_pressure_from_primitives_with_crs(
     primitive_state: Float[Array, "num_vars num_cells"],
@@ -88,7 +88,7 @@ def gas_pressure_from_primitives_with_crs(
 
 
 # TODO: make 2D and 3D ready
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["registered_variables"])
 def total_pressure_from_conserved_with_crs(
     conserved_state: Float[Array, "num_vars num_cells"],
@@ -130,7 +130,7 @@ def total_pressure_from_conserved_with_crs(
     return total_pressure
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["registered_variables"])
 def speed_of_sound_crs(
     primitive_state: Float[Array, "num_vars num_cells"],

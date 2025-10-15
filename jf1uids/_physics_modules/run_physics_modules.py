@@ -29,7 +29,7 @@ from jf1uids._physics_modules._stellar_wind.stellar_wind import _wind_injection
 from jf1uids.shock_finder.shock_finder import shock_criteria
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def _run_physics_modules(
     primitive_state: STATE_TYPE,

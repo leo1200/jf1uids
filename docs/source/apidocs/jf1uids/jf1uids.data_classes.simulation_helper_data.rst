@@ -90,7 +90,7 @@ API
 
       .. autodoc2-docstring:: jf1uids.data_classes.simulation_helper_data.HelperData.outer_cell_boundaries
 
-.. py:function:: get_helper_data(config: jf1uids.option_classes.simulation_config.SimulationConfig) -> jf1uids.data_classes.simulation_helper_data.HelperData
+.. py:function:: get_helper_data(config: jf1uids.option_classes.simulation_config.SimulationConfig, sharding: typing.Union[types.NoneType, jax.NamedSharding] = None, padded: bool = False) -> jf1uids.data_classes.simulation_helper_data.HelperData
    :canonical: jf1uids.data_classes.simulation_helper_data.get_helper_data
 
    .. autodoc2-docstring:: jf1uids.data_classes.simulation_helper_data.get_helper_data

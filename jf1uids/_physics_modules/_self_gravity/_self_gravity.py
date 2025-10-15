@@ -62,7 +62,7 @@ from jf1uids.fluid_equations.fluid import (
 from jf1uids.option_classes.simulation_params import SimulationParams
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(
     jax.jit, static_argnames=["axis", "grid_spacing", "registered_variables", "config"]
 )
@@ -326,7 +326,7 @@ def _gravitational_source_term_along_axis(
     return source_term
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def _apply_self_gravity(
     primitive_state: STATE_TYPE,

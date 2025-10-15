@@ -14,5 +14,5 @@ Module contents
 
 .. automodule:: jf1uids.shock_finder
    :members:
-   :undoc-members:
    :show-inheritance:
+   :undoc-members:

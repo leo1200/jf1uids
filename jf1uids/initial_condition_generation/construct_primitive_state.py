@@ -13,7 +13,7 @@ from functools import partial
 from types import NoneType
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["registered_variables", "config", "sharding"])
 def construct_primitive_state(
     config: SimulationConfig,

@@ -26,7 +26,7 @@ from jf1uids.fluid_equations.fluid import (
 )
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def calculate_internal_energy(state, helper_data, gamma, config, registered_variables):
     p = state[registered_variables.pressure_index]
@@ -43,7 +43,7 @@ def calculate_internal_energy(state, helper_data, gamma, config, registered_vari
         return jnp.sum(internal_energy * config.grid_spacing**config.dimensionality)
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def calculate_radial_momentum(state, helper_data, config, registered_variables):
     rho = state[registered_variables.density_index]
@@ -71,7 +71,7 @@ def calculate_radial_momentum(state, helper_data, config, registered_variables):
         return jnp.sum(radial_momentum * config.grid_spacing**config.dimensionality)
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def calculate_kinetic_energy(state, helper_data, config, registered_variables):
     rho = state[registered_variables.density_index]
@@ -85,7 +85,7 @@ def calculate_kinetic_energy(state, helper_data, config, registered_variables):
         return jnp.sum(kinetic_energy * config.grid_spacing**config.dimensionality)
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def calculate_gravitational_energy(
     state, helper_data, gravitational_constant, config, registered_variables
@@ -104,7 +104,7 @@ def calculate_gravitational_energy(
         )
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def calculate_total_energy(
     primitive_state: STATE_TYPE,
@@ -150,7 +150,7 @@ def calculate_total_energy(
         return jnp.sum(energy * config.grid_spacing**config.dimensionality)
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config"])
 def calculate_total_mass(
     primitive_state: STATE_TYPE,

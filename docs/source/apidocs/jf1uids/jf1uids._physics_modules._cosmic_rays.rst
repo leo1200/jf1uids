@@ -15,4 +15,6 @@ Submodules
    :titlesonly:
    :maxdepth: 1
 
+   jf1uids._physics_modules._cosmic_rays.cosmic_ray_options
    jf1uids._physics_modules._cosmic_rays.cr_fluid_equations
+   jf1uids._physics_modules._cosmic_rays.cr_injection

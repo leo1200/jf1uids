@@ -14,7 +14,7 @@ from jaxtyping import Array, Float, jaxtyped
 from functools import partial
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(
     jax.jit, static_argnames=["config", "registered_variables", "flux_direction_index"]
 )

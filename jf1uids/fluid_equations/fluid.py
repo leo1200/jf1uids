@@ -18,7 +18,7 @@ from jf1uids.option_classes.simulation_config import (
 )
 from jf1uids.option_classes.simulation_params import SimulationParams
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def primitive_state_from_conserved(
     conserved_state: STATE_TYPE,
@@ -97,7 +97,7 @@ def primitive_state_from_conserved(
 # ======= Create the conserved state ========
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def conserved_state_from_primitive(
     primitive_state: STATE_TYPE,
@@ -159,7 +159,7 @@ def conserved_state_from_primitive(
 # =============== Fluid physics ===============
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def get_absolute_velocity(
     primitive_state: STATE_TYPE,

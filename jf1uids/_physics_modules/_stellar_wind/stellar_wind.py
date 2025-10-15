@@ -27,7 +27,7 @@ from jf1uids._physics_modules._stellar_wind.stellar_wind_options import (
 from typing import Union
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def _wind_injection(
     primitive_state: STATE_TYPE,
@@ -113,7 +113,7 @@ def _wind_injection(
 # https://arxiv.org/abs/2107.14673
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["num_ghost_cells", "num_injection_cells"])
 def _wind_meo(
     wind_params: WindParams,
@@ -172,7 +172,7 @@ def _wind_meo(
     return primitive_state
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(
     jax.jit,
     static_argnames=[
@@ -241,7 +241,7 @@ def _wind_mei(
 
 
 # not really ei
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(
     jax.jit,
     static_argnames=["num_ghost_cells", "num_injection_cells", "registered_variables"],
@@ -322,7 +322,7 @@ def _wind_ei(
 
 
 # not really ei
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(
     jax.jit,
     static_argnames=["num_ghost_cells", "num_injection_cells", "registered_variables"],
@@ -394,7 +394,7 @@ def dummy_multi_star_wind(
 
 
 # not really ei
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(
     jax.jit,
     static_argnames=["num_ghost_cells", "num_injection_cells", "registered_variables"],
@@ -478,7 +478,7 @@ def _wind_ei3D(
     return primitive_state
 
 
-# @jaxtyped(typechecker=typechecker)
+# # @jaxtyped(typechecker=typechecker)
 # @partial(jax.jit, static_argnames=['num_ghost_cells', 'num_injection_cells', 'registered_variables'])
 # def _wind_ei3D_superres(wind_params: WindParams, primitive_state: STATE_TYPE, dt: Float[Array, ""], config: SimulationConfig, helper_data: HelperData, num_ghost_cells: int, num_injection_cells: int, gamma: Union[float, Float[Array, ""]], registered_variables: RegisteredVariables) -> STATE_TYPE:
 #     """Inject stellar wind into the simulation by an thermal-energy-injection scheme (EI).

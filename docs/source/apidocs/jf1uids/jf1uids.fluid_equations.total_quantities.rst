@@ -19,6 +19,9 @@ Functions
    * - :py:obj:`calculate_internal_energy <jf1uids.fluid_equations.total_quantities.calculate_internal_energy>`
      - .. autodoc2-docstring:: jf1uids.fluid_equations.total_quantities.calculate_internal_energy
           :summary:
+   * - :py:obj:`calculate_radial_momentum <jf1uids.fluid_equations.total_quantities.calculate_radial_momentum>`
+     - .. autodoc2-docstring:: jf1uids.fluid_equations.total_quantities.calculate_radial_momentum
+          :summary:
    * - :py:obj:`calculate_kinetic_energy <jf1uids.fluid_equations.total_quantities.calculate_kinetic_energy>`
      - .. autodoc2-docstring:: jf1uids.fluid_equations.total_quantities.calculate_kinetic_energy
           :summary:
@@ -39,6 +42,11 @@ API
    :canonical: jf1uids.fluid_equations.total_quantities.calculate_internal_energy
 
    .. autodoc2-docstring:: jf1uids.fluid_equations.total_quantities.calculate_internal_energy
+
+.. py:function:: calculate_radial_momentum(state, helper_data, config, registered_variables)
+   :canonical: jf1uids.fluid_equations.total_quantities.calculate_radial_momentum
+
+   .. autodoc2-docstring:: jf1uids.fluid_equations.total_quantities.calculate_radial_momentum
 
 .. py:function:: calculate_kinetic_energy(state, helper_data, config, registered_variables)
    :canonical: jf1uids.fluid_equations.total_quantities.calculate_kinetic_energy

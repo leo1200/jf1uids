@@ -29,7 +29,7 @@ from jf1uids.option_classes.simulation_config import (
 )
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(
     jax.jit, static_argnames=["config", "registered_variables", "flux_direction_index"]
 )
@@ -109,7 +109,7 @@ def _hll_solver(
     return fluxes
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(
     jax.jit,
     static_argnames=[
@@ -261,7 +261,7 @@ def _hllc_solver(
     return fluxes
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(
     jax.jit, static_argnames=["config", "registered_variables", "flux_direction_index"]
 )

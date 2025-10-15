@@ -17,7 +17,7 @@ from jf1uids.option_classes.simulation_config import CARTESIAN, MINMOD, OSHER, D
 from jf1uids._state_evolution.limiters import _double_minmod, _minmod, _superbee, _van_albada_limiter
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=['config', 'axis'])
 def _calculate_limited_gradients(
     primitive_state: STATE_TYPE,

@@ -35,7 +35,7 @@ from jf1uids._state_evolution.limited_gradients import _calculate_limited_gradie
 from jf1uids.option_classes.simulation_params import SimulationParams
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables", "axis"])
 def _reconstruct_at_interface_split(
     primitive_state: STATE_TYPE,
@@ -129,7 +129,7 @@ def _reconstruct_at_interface_split(
     return p_left_interface, p_right_interface
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def _reconstruct_at_interface_unsplit(
     primitive_state: STATE_TYPE,
@@ -394,7 +394,7 @@ def _reconstruct_at_interface_unsplit(
     return primitives_left_interface, primitives_right_interface
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "axis"])
 def _reconstruct_at_interface_unsplit_single(
     primitive_state: STATE_TYPE,

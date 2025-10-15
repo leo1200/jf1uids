@@ -14,7 +14,7 @@ from jaxtyping import jaxtyped
 from functools import partial
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config"])
 def _unpad(state: STATE_TYPE, config: SimulationConfig) -> STATE_TYPE_ALTERED:
     if config.dimensionality == 1:
@@ -60,7 +60,7 @@ def _unpad(state: STATE_TYPE, config: SimulationConfig) -> STATE_TYPE_ALTERED:
     return state
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config"])
 def _pad(state: STATE_TYPE, config: SimulationConfig) -> STATE_TYPE_ALTERED:
     if config.dimensionality == 1:

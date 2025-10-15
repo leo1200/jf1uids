@@ -7,12 +7,13 @@ Submodules
 .. toctree::
    :maxdepth: 4
 
-   jf1uids.initial_condition_generation.turb
+   jf1uids.initial_condition_generation.construct_primitive_state
+   jf1uids.initial_condition_generation.turbulent_ic_generator
 
 Module contents
 ---------------
 
 .. automodule:: jf1uids.initial_condition_generation
    :members:
-   :undoc-members:
    :show-inheritance:
+   :undoc-members:

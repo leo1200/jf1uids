@@ -18,7 +18,7 @@ from jf1uids.option_classes.simulation_config import SimulationConfig
 from jax.numpy.fft import fftn, ifftn
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["grid_spacing", "config"])
 def _compute_gravitational_potential(
     gas_density: FIELD_TYPE,

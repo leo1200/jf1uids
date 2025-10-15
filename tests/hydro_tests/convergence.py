@@ -1,7 +1,7 @@
-# ==== GPU selection ====
-from autocvd import autocvd
-autocvd(num_gpus = 1)
-# =======================
+# # ==== GPU selection ====
+# from autocvd import autocvd
+# autocvd(num_gpus = 1)
+# # =======================
 
 from jf1uids.initial_condition_generation.construct_primitive_state import construct_primitive_state
 from jf1uids.option_classes.simulation_config import DOUBLE_MINMOD, HLLC, BoundarySettings1D

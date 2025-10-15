@@ -52,7 +52,7 @@ from jf1uids.time_stepping._progress_bar import _show_progress
 from timeit import default_timer as timer
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 def time_integration(
     primitive_state: STATE_TYPE,
     config: SimulationConfig,
@@ -197,7 +197,7 @@ def time_integration(
 @partial(
     jax.jit, static_argnames=["config", "registered_variables", "snapshot_callable"]
 )
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 def _time_integration(
     state: Union[STATE_TYPE, StateStruct],
     config: SimulationConfig,

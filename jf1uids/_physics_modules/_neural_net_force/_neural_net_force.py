@@ -32,7 +32,7 @@ class ForceNet(eqx.Module):
         return self.mlp(xyt)
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def _neural_net_force(
     primitive_state: STATE_TYPE,

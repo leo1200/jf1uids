@@ -17,5 +17,5 @@ Module contents
 
 .. automodule:: jf1uids.fluid_equations
    :members:
-   :undoc-members:
    :show-inheritance:
+   :undoc-members:

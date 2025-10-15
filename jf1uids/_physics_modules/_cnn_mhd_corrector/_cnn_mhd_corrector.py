@@ -67,7 +67,7 @@ class CorrectorCNN(eqx.Module):
         return correction
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["registered_variables", "config"])
 def _cnn_mhd_corrector(
     primitive_state: STATE_TYPE,

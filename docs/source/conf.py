@@ -45,12 +45,12 @@ extensions = [
 ]
 
 
-apidoc_module_dir = '../../jf1uids'
+apidoc_module_dir = '../jf1uids'
 apidoc_output_dir = 'source'
 apidoc_separate_modules = True
 
 autodoc2_packages = [
-    "../../jf1uids",
+    "../jf1uids",
 ]
 
 autodoc2_hidden_objects = ["inherited", "private"]

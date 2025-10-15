@@ -30,7 +30,7 @@ from jf1uids.option_classes.simulation_config import (
 )
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(
     jax.jit, static_argnames=["config", "registered_variables", "flux_direction_index"]
 )

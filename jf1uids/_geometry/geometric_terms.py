@@ -21,7 +21,7 @@ from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids._state_evolution.limited_gradients import _calculate_limited_gradients
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def _pressure_nozzling_source(
     primitive_state: STATE_TYPE,

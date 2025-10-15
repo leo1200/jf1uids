@@ -14,5 +14,5 @@ Module contents
 
 .. automodule:: jf1uids.units
    :members:
-   :undoc-members:
    :show-inheritance:
+   :undoc-members:

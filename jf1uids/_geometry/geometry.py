@@ -9,7 +9,7 @@ from typing import Union
 from jf1uids.option_classes.simulation_config import CYLINDRICAL, SPHERICAL
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["geometry"])
 def _r_hat_alpha(
     r: Float[Array, "num_cells"], dr: Union[float, Float[Array, ""]], geometry: int
@@ -22,7 +22,7 @@ def _r_hat_alpha(
         raise ValueError("Unknown geometry / not for cartesian coordinates")
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["geometry"])
 def _center_of_volume(
     r: Float[Array, "num_cells"], dr: Union[float, Float[Array, ""]], geometry: int

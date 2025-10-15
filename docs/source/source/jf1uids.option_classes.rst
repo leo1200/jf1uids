@@ -15,5 +15,5 @@ Module contents
 
 .. automodule:: jf1uids.option_classes
    :members:
-   :undoc-members:
    :show-inheritance:
+   :undoc-members:

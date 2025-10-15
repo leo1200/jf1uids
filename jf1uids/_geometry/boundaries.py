@@ -18,7 +18,7 @@ from jf1uids.option_classes.simulation_config import (
     SimulationConfig,
 )
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["axis", "set_index", "get_index"])
 def _set_along_axis(
     primitive_state: STATE_TYPE, axis: int, set_index: int, get_index: int
@@ -39,7 +39,7 @@ def _set_along_axis(
     return primitive_state
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(
     jax.jit, static_argnames=["axis", "set_index", "get_index", "var_index", "factor"]
 )
@@ -69,7 +69,7 @@ def _set_specific_var_along_axis(
     return primitive_state
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "type_handled"])
 def _boundary_handler(
     primitive_state: STATE_TYPE,
@@ -265,7 +265,7 @@ def _boundary_handler(
     return primitive_state
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["axis", "num_ghost_cells"])
 def _open_right_boundary(
     primitive_state: STATE_TYPE, num_ghost_cells: int, axis: int
@@ -279,7 +279,7 @@ def _open_right_boundary(
     return primitive_state
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["axis", "num_ghost_cells"])
 def _open_left_boundary(
     primitive_state: STATE_TYPE, num_ghost_cells: int, axis: int
@@ -293,7 +293,7 @@ def _open_left_boundary(
     return primitive_state
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["axis", "num_ghost_cells"])
 def _periodic_boundaries(
     primitive_state: STATE_TYPE, num_ghost_cells: int, axis: int
@@ -319,7 +319,7 @@ def _periodic_boundaries(
     return primitive_state
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["axis", "num_ghost_cells"])
 def _reflective_left_boundary(
     primitive_state: STATE_TYPE, num_ghost_cells: int, axis: int
@@ -337,7 +337,7 @@ def _reflective_left_boundary(
     return primitive_state
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["axis", "num_ghost_cells"])
 def _reflective_right_boundary(
     primitive_state: STATE_TYPE, num_ghost_cells: int, axis: int
@@ -355,7 +355,7 @@ def _reflective_right_boundary(
     return primitive_state
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @jax.jit
 def _reflective_left_boundary1d(
     primitive_state: Float[Array, "num_vars num_cells"],
@@ -370,7 +370,7 @@ def _reflective_left_boundary1d(
     return primitive_state
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @jax.jit
 def _reflective_right_boundary1d(
     primitive_state: Float[Array, "num_vars num_cells"],
@@ -385,7 +385,7 @@ def _reflective_right_boundary1d(
     return primitive_state
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(
     jax.jit,
     static_argnames=[

@@ -47,7 +47,7 @@ from jf1uids.option_classes.simulation_params import SimulationParams
 # -------------------------------------------------------------
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables", "axis"])
 def _evolve_state_along_axis(
     primitive_state: STATE_TYPE,
@@ -159,7 +159,7 @@ def _evolve_state_along_axis(
     return primitive_state
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def _evolve_gas_state_split(
     primitive_state: STATE_TYPE,
@@ -330,7 +330,7 @@ def _evolve_gas_state_split(
 # -------------------------------------------------------------
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def _evolve_gas_state_unsplit_inner(
     primitive_state: STATE_TYPE,
@@ -405,7 +405,7 @@ def _evolve_gas_state_unsplit_inner(
     return primitive_state
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def _evolve_gas_state_unsplit(
     primitive_state: STATE_TYPE,
@@ -483,7 +483,7 @@ def _evolve_gas_state_unsplit(
 # -------------------------------------------------------------
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def _evolve_state(
     primitive_state: STATE_TYPE,

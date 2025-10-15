@@ -13,5 +13,6 @@ Submodules
    :titlesonly:
    :maxdepth: 1
 
-   jf1uids.data_classes.simulation_helper_data
    jf1uids.data_classes.simulation_snapshot_data
+   jf1uids.data_classes.simulation_helper_data
+   jf1uids.data_classes.simulation_state_struct

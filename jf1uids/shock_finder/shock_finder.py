@@ -72,7 +72,7 @@ def shock_sensor(pressure: FIELD_TYPE) -> FIELD_TYPE:
     return shock_sensors
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["registered_variables", "config"])
 def shock_criteria(
     primitive_state: STATE_TYPE,

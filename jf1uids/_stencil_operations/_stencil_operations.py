@@ -15,7 +15,7 @@ from jaxtyping import Array, Float, jaxtyped
 from typing import Tuple, Union
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["shift", "axis"])
 def custom_roll(input_array: jnp.ndarray, shift: int, axis: int) -> jnp.ndarray:
     i = (-shift) % input_array.shape[axis]
@@ -28,7 +28,7 @@ def custom_roll(input_array: jnp.ndarray, shift: int, axis: int) -> jnp.ndarray:
     )
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["indices", "axis"])
 def _stencil_add(
     input_array: jnp.ndarray,

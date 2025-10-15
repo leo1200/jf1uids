@@ -32,7 +32,7 @@ from jf1uids._physics_modules.run_physics_modules import _run_physics_modules
 
 
 # TODO: merge duplicate code in this and hll.py
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(
     jax.jit, static_argnames=["registered_variables", "config", "flux_direction_index"]
 )
@@ -89,7 +89,7 @@ def get_wave_speeds(
     return max_wave_speed
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def _cfl_time_step(
     primitive_state: STATE_TYPE,
@@ -214,7 +214,7 @@ def _cfl_time_step(
         return jnp.minimum(dt, dt_max)
 
 
-@jaxtyped(typechecker=typechecker)
+# @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
 def _source_term_aware_time_step(
     primitive_state: STATE_TYPE,

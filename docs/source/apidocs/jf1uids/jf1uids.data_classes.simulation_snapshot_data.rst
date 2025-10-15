@@ -44,6 +44,13 @@ API
 
       .. autodoc2-docstring:: jf1uids.data_classes.simulation_snapshot_data.SnapshotData.states
 
+   .. py:attribute:: final_state
+      :canonical: jf1uids.data_classes.simulation_snapshot_data.SnapshotData.final_state
+      :type: jax.numpy.ndarray
+      :value: None
+
+      .. autodoc2-docstring:: jf1uids.data_classes.simulation_snapshot_data.SnapshotData.final_state
+
    .. py:attribute:: total_mass
       :canonical: jf1uids.data_classes.simulation_snapshot_data.SnapshotData.total_mass
       :type: jax.numpy.ndarray
@@ -78,6 +85,13 @@ API
       :value: None
 
       .. autodoc2-docstring:: jf1uids.data_classes.simulation_snapshot_data.SnapshotData.gravitational_energy
+
+   .. py:attribute:: radial_momentum
+      :canonical: jf1uids.data_classes.simulation_snapshot_data.SnapshotData.radial_momentum
+      :type: jax.numpy.ndarray
+      :value: None
+
+      .. autodoc2-docstring:: jf1uids.data_classes.simulation_snapshot_data.SnapshotData.radial_momentum
 
    .. py:attribute:: runtime
       :canonical: jf1uids.data_classes.simulation_snapshot_data.SnapshotData.runtime
