@@ -31,6 +31,7 @@ from corrector_src.data.load_sim import (
     filepath_state,
     prepare_initial_state,
 )
+from corrector_src.data.dataset import dataset
 
 import equinox as eqx
 import matplotlib.pyplot as plt
@@ -52,10 +53,10 @@ def training_loop(cfg):
     )
     # Training configuration
     training_config = TrainingConfig(
-        compute_intermediate_losses=True,
-        n_look_behind=n_look_behind,
-        loss_weights=None,
-        use_relative_error=False,
+        # compute_intermediate_losses=True,
+        # n_look_behind=n_look_behind,
+        # loss_weights=None,
+        # use_relative_error=False,
     )
     training_params = TrainingParams(loss_calculation_times=loss_timesteps)
     loss_function = mse_loss
@@ -101,30 +102,56 @@ def training_loop(cfg):
 
     gt_cfg_data = cfg.data
     gt_cfg_data.debug = False
-    ground_truth, _ = integrate_blast(cfg.data, None, rng_seed, downscale=True)
-    print("gt_shape:", jnp.shape(ground_truth))
+    dataset_creator = dataset(gt_cfg_data.scenarios, gt_cfg_data)
+    if not cfg.data.generate_data_on_fly and len(gt_cfg_data.scenarios) == 1:
+        # ground_truth, _ = integrate_blast(cfg.data, None, rng_seed, downscale=True)
+        (
+            ground_truth,
+            (
+                initial_state_lr,
+                initial_config_lr,
+                initial_params_lr,
+                initial_helper_data_lr,
+                initial_registered_variables_lr,
+            ),
+        ) = dataset_creator.train_initializator(
+            downscale=cfg.data.downscaling_factor, rng_seed=rng_seed
+        )
+        print("gt_shape:", jnp.shape(ground_truth))
+    initial_config_lr = initial_config_lr._replace(
+        cnn_mhd_corrector_config=cnn_mhd_corrector_config
+    )
 
     for i in range(epochs):
-        # if cfg.data.generate_data_on_fly:
-        #     ground_truth, rng_seed = integrate_blast(cfg.data, downscale=True)
-
-        initial_state, config, params, helper_data, registered_variables = (
-            prepare_initial_state(
-                cfg_data=cfg.data,
-                rng_seed=rng_seed,
+        if cfg.data.generate_data_on_fly:
+            (
+                ground_truth,
+                (
+                    initial_state_lr,
+                    initial_config_lr,
+                    initial_params_lr,
+                    initial_helper_data_lr,
+                    initial_registered_variables_lr,
+                ),
+            ) = dataset_creator.train_initializator(
+                resolution=cfg.data.hr_res,
+                downscale=cfg.data.downscaling_factor,
+                rng_seed=None,
+                # scenario selection if needed
                 cnn_mhd_corrector_config=cnn_mhd_corrector_config,
                 cnn_mhd_corrector_params=cnn_mhd_corrector_params,
-                downscale=True,
             )
-        )
-
+        else:
+            initial_params_lr = initial_params_lr._replace(
+                cnn_mhd_corrector_params=cnn_mhd_corrector_params
+            )
         time_train = time.time()
         losses, new_network_params, opt_state, _ = time_integration(
-            primitive_state=initial_state,
-            config=config,
-            params=params,
-            helper_data=helper_data,
-            registered_variables=registered_variables,
+            primitive_state=initial_state_lr,
+            config=initial_config_lr,
+            params=initial_params_lr,
+            helper_data=initial_helper_data_lr,
+            registered_variables=initial_registered_variables_lr,
             optimizer=optimizer,
             loss_function=loss_function,
             opt_state=opt_state,

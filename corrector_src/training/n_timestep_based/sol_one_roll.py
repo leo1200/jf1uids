@@ -3,7 +3,9 @@ each new snapshot is saved onto a lag_data which takes that snapshot and the las
 with those and the reference ground truth the loss is computed and the optimization is called
 in practice doesnt work due to several reasons:
     to get the same states to the ground truth the fixed timestep is used
-    as we are comparing snapshot to snapshot is very memory requiring"""
+    as we are comparing snapshot to snapshot is very memory requiring
+after some proper anlyisis this approach is basically the same as the n_timetstep_based with the difference of rolling the snapshot data
+which makes it even more computationaly costly and expensive"""
 
 import jax
 import jax.numpy as jnp

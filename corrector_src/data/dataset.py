@@ -66,7 +66,7 @@ class dataset:
 
     def _init_mhd_blast(self, resolution: int, **overrides):
         state_tuple = blast.randomized_initial_blast_state(
-            resolution, cfg_data=self.cfg_data
+            resolution, cfg_data=self.cfg_data, rng_seed=overrides.get("rng_seed")
         )
         return self._apply_overrides_to_sim_tuple(state_tuple, **overrides)
 
@@ -167,10 +167,21 @@ class dataset:
         self,
         resolution: Optional[int] = None,
         scenario: Optional[str | int] = None,
+        rng_seed: Optional[int] = None,
         downscale_factor: Optional[int] = False,
+        cnn_mhd_corrector_config: Optional[CNNMHDconfig] = None,
+        cnn_mhd_corrector_params: Optional[CNNMHDParams] = None,
     ) -> np.ndarray:
-        initial_state, config, params, helper_data, registered_variables = (
-            self.return_initializator(resolution, scenario)
+        """
+        integrates a simulation and returns the states with the config, resolution, and seed given"""
+        initial_state, config, params, helper_data, registered_variables, rng_seed = (
+            self.sim_initializator(
+                resolution,
+                scenario,
+                rng_seed,
+                cnn_mhd_corrector_config,
+                cnn_mhd_corrector_params,
+            )
         )
 
         config = finalize_config(config, initial_state.shape)
@@ -182,7 +193,189 @@ class dataset:
         if downscale_factor is not None:
             states = downaverage_states(states, downscale_factor)
 
-        return states
+        return states, (
+            initial_state,
+            config,
+            params,
+            helper_data,
+            registered_variables,
+            rng_seed,
+        )
+
+    def hr_lr_initializator(
+        self,
+        resolution: Optional[int] = None,
+        downscale: Optional[int] = None,
+        scenario: Optional[str | int] = None,
+        rng_seed: Optional[str | int | float] = None,
+        cnn_mhd_corrector_config: Optional[CNNMHDconfig] = None,
+        cnn_mhd_corrector_params: Optional[CNNMHDParams] = None,
+        **overrides,
+    ) -> Tuple[
+        Tuple[
+            np.ndarray,
+            SimulationConfig,
+            SimulationParams,
+            HelperData,
+            RegisteredVariables,
+        ],
+        Tuple[
+            np.ndarray,
+            SimulationConfig,
+            SimulationParams,
+            HelperData,
+            RegisteredVariables,
+        ],
+    ]:
+        """returns hr-lr pair of (state, config, params, helper_data, registered_vars)"""
+
+        if isinstance(scenario, str) and scenario not in self.scenario_list:
+            raise NameError(f"scenario should be in list {self.scenario_list}")
+        if scenario is None:
+            scenario = random.choice(self.scenario_list)
+
+        resolution = resolution or self.default_resolution
+        downscale = downscale or self.default_downscaling_factor
+
+        # Include RNG override only (CNN parameters are for LR only)
+        if rng_seed is not None:
+            overrides["rng_seed"] = rng_seed
+
+        # Dispatch dynamically to get HR state
+        if scenario not in self._scenario_dispatch:
+            raise ValueError(f"Unknown scenario: {scenario}")
+
+        (
+            initial_state_hr,
+            config_hr,
+            params_hr,
+            helper_data_hr,
+            registered_variables_hr,
+            rng_seed,
+        ) = self._scenario_dispatch[scenario](resolution=resolution, **overrides)
+
+        # Downscale for LR state
+        initial_state_lr = downaverage_state(
+            state=initial_state_hr, downsample_factor=downscale
+        )
+        config_lr = finalize_config(
+            config_hr._replace(num_cells=resolution // downscale),
+            initial_state_lr.shape,
+        )
+        helper_data_lr = get_helper_data(config_lr)
+        registered_variables_lr = get_registered_variables(config_lr)
+        params_lr = params_hr  # params independent of config
+
+        # Apply CNN overrides ONLY to LR state
+        if cnn_mhd_corrector_config is not None:
+            config_lr = config_lr._replace(
+                cnn_mhd_corrector_config=cnn_mhd_corrector_config
+            )
+        if cnn_mhd_corrector_params is not None:
+            params_lr = params_lr._replace(
+                cnn_mhd_corrector_params=cnn_mhd_corrector_params
+            )
+
+        return (
+            (
+                initial_state_hr,
+                config_hr,
+                params_hr,
+                helper_data_hr,
+                registered_variables_hr,
+            ),
+            (
+                initial_state_lr,
+                config_lr,
+                params_lr,
+                helper_data_lr,
+                registered_variables_lr,
+            ),
+        )
+
+    def train_initializator(
+        self,
+        resolution: Optional[int] = None,
+        downscale: Optional[int] = None,
+        scenario: Optional[str | int] = None,
+        rng_seed: Optional[str | int | float] = None,
+        cnn_mhd_corrector_config: Optional[CNNMHDconfig] = None,
+        cnn_mhd_corrector_params: Optional[CNNMHDParams] = None,
+        **overrides,
+    ) -> Tuple[
+        np.ndarray,
+        Tuple[
+            np.ndarray,
+            SimulationConfig,
+            SimulationParams,
+            HelperData,
+            RegisteredVariables,
+        ],
+    ]:
+        """function tailored to use while training the cnn_mhd_corrector_config
+        returns hr states (DOWNSCALED if downscale is given) and lr  state, config, params, helper_data, registered_vars
+        *if the corrector is given it will only be applied to the lr configuration and parameters"""
+
+        if isinstance(scenario, str) and scenario not in self.scenario_list:
+            raise NameError(f"scenario should be in list {self.scenario_list}")
+        if scenario is None:
+            scenario = random.choice(self.scenario_list)
+
+        resolution = resolution or self.default_resolution
+        downscale = downscale or self.default_downscaling_factor
+        # Include RNG override only (CNN parameters are for LR only)
+        if rng_seed is not None:
+            overrides["rng_seed"] = rng_seed
+
+        # Dispatch dynamically to get HR state
+        if scenario not in self._scenario_dispatch:
+            raise ValueError(f"Unknown scenario: {scenario}")
+
+        (
+            hr_states,
+            (
+                initial_state_hr,
+                config_hr,
+                params_hr,
+                helper_data_hr,
+                registered_variables_hr,
+                rng_seed,
+            ),
+        ) = self.initialize_integrate(
+            resolution=resolution,
+            scenario=scenario,
+            rng_seed=rng_seed,
+            downscale_factor=downscale,
+        )
+        initial_state_lr = hr_states[0]
+        config_lr = finalize_config(
+            config_hr._replace(num_cells=resolution // downscale),
+            initial_state_lr.shape,
+        )
+        helper_data_lr = get_helper_data(config_lr)
+        registered_variables_lr = get_registered_variables(config_lr)
+        params_lr = params_hr  # params independent of config
+
+        # Apply CNN overrides ONLY to LR state
+        if cnn_mhd_corrector_config is not None:
+            config_lr = config_lr._replace(
+                cnn_mhd_corrector_config=cnn_mhd_corrector_config
+            )
+        if cnn_mhd_corrector_params is not None:
+            params_lr = params_lr._replace(
+                cnn_mhd_corrector_params=cnn_mhd_corrector_params
+            )
+
+        return (
+            hr_states,
+            (
+                initial_state_lr,
+                config_lr,
+                params_lr,
+                helper_data_lr,
+                registered_variables_lr,
+            ),
+        )
 
     def randomized_turbulent_initial_state(
         self,
@@ -343,95 +536,4 @@ class dataset:
             helper_data,
             registered_variables,
             rng_seed,
-        )
-
-    def train_initializator(
-        self,
-        resolution: Optional[int] = None,
-        downscale: Optional[int] = None,
-        scenario: Optional[str | int] = None,
-        rng_seed: Optional[str | int | float] = None,
-        cnn_mhd_corrector_config: Optional[CNNMHDconfig] = None,
-        cnn_mhd_corrector_params: Optional[CNNMHDParams] = None,
-        **overrides,
-    ) -> Tuple[
-        Tuple[
-            np.ndarray,
-            SimulationConfig,
-            SimulationParams,
-            HelperData,
-            RegisteredVariables,
-        ],
-        Tuple[
-            np.ndarray,
-            SimulationConfig,
-            SimulationParams,
-            HelperData,
-            RegisteredVariables,
-        ],
-    ]:
-        """returns hr-lr pair of (state, config, params, helper_data, registered_vars)"""
-
-        if isinstance(scenario, str) and scenario not in self.scenario_list:
-            raise NameError(f"scenario should be in list {self.scenario_list}")
-        if scenario is None:
-            scenario = random.choice(self.scenario_list)
-
-        resolution = resolution or self.default_resolution
-        downscale = downscale or self.default_downscaling_factor
-
-        # Include RNG override only (CNN parameters are for LR only)
-        if rng_seed is not None:
-            overrides["rng_seed"] = rng_seed
-
-        # Dispatch dynamically to get HR state
-        if scenario not in self._scenario_dispatch:
-            raise ValueError(f"Unknown scenario: {scenario}")
-
-        (
-            initial_state_hr,
-            config_hr,
-            params_hr,
-            helper_data_hr,
-            registered_variables_hr,
-            rng_seed,
-        ) = self._scenario_dispatch[scenario](resolution=resolution, **overrides)
-
-        # Downscale for LR state
-        initial_state_lr = downaverage_state(
-            state=initial_state_hr, downsample_factor=downscale
-        )
-        config_lr = finalize_config(
-            config_hr._replace(num_cells=resolution // downscale),
-            initial_state_lr.shape,
-        )
-        helper_data_lr = get_helper_data(config_lr)
-        registered_variables_lr = get_registered_variables(config_lr)
-        params_lr = params_hr  # params independent of config
-
-        # Apply CNN overrides ONLY to LR state
-        if cnn_mhd_corrector_config is not None:
-            config_lr = config_lr._replace(
-                cnn_mhd_corrector_config=cnn_mhd_corrector_config
-            )
-        if cnn_mhd_corrector_params is not None:
-            params_lr = params_lr._replace(
-                cnn_mhd_corrector_params=cnn_mhd_corrector_params
-            )
-
-        return (
-            (
-                initial_state_hr,
-                config_hr,
-                params_hr,
-                helper_data_hr,
-                registered_variables_hr,
-            ),
-            (
-                initial_state_lr,
-                config_lr,
-                params_lr,
-                helper_data_lr,
-                registered_variables_lr,
-            ),
         )

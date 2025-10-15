@@ -72,34 +72,34 @@ def create_config(
 
 
 class TrainingConfig(NamedTuple):
-    # Intermediate loss computation settings
-    downscale_factor: int = 2
-    compute_intermediate_losses: bool = True
-    n_look_behind: int = 10
+    # # Intermediate loss computation settings
+    # downscale_factor: int = 2
+    # compute_intermediate_losses: bool = True
+    # n_look_behind: int = 10
 
-    # Loss function and related settings
-    loss_weights: Optional[Dict[str, float]] = None
-    use_relative_error: bool = False
+    # # Loss function and related settings
+    # loss_weights: Optional[Dict[str, float]] = None
+    # use_relative_error: bool = False
 
-    # Ground truth data
-    ground_truth_snapshots: Optional[jnp.ndarray] = None
+    # # Ground truth data
+    # ground_truth_snapshots: Optional[jnp.ndarray] = None
 
-    # Training state tracking
-    accumulated_loss: float = 0.0
-    loss_count: int = 0
+    # # Optional spatial mask for loss computation
+    # loss_mask: Optional[jnp.ndarray] = None
 
-    # Optional spatial mask for loss computation
-    loss_mask: Optional[jnp.ndarray] = None
+    # # Downscaling method for ground truth
+    # downscale_method: str = "average"
 
-    # Downscaling method for ground truth
-    downscale_method: str = "average"
-
-    current_checkpoint_total: int = 0
-    current_checkpoint_chunk: int = 0
+    # current_checkpoint_total: int = 0
+    # current_checkpoint_chunk: int = 0
     current_loss_index: int = 0
 
     exact_end_time: bool = True
-    return_full_sim: bool = True
+
+    accumulate_grads: bool = True
+
+    debug_training: bool = True
+    # return_full_sim: bool = True
 
 
 class TrainingParams(NamedTuple):

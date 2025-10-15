@@ -152,6 +152,13 @@ def randomized_initial_blast_state(
         num_cells: the resolution of the simulation
         cfg_data: the configuration dictionary
         rng_seed: the randomizer seed (should be an int)
+    Returns:
+        initial_state: the initial state
+        config: The sim config
+        params:
+        helper_data:
+        registered_variables:
+        rng_seed:
     """
 
     adiabatic_index = 5 / 3

@@ -317,25 +317,32 @@ def _time_integration(
 
         def train_step(carry, loss_index):
             """Performs one step of gradient descent."""
+
             if config.return_snapshots or config.activate_snapshot_callback:
-                (
-                    time,
-                    primitive_state,
-                    snapshot_data,
-                    network_params,
-                    opt_state,
-                ) = carry
-                carry_loss = (
-                    time,
-                    primitive_state,
-                    snapshot_data,
-                )
+                if training_config.accumulate_grads:
+                    (
+                        time,
+                        primitive_state,
+                        snapshot_data,
+                        network_params,
+                        opt_state,
+                        accum_grads,
+                    ) = carry
+                    carry_loss = (time, primitive_state, snapshot_data)
+                else:
+                    time, primitive_state, snapshot_data, network_params, opt_state = (
+                        carry
+                    )
+                    carry_loss = (time, primitive_state, snapshot_data)
             else:
-                time, primitive_state, network_params, opt_state = carry
-                carry_loss = (
-                    time,
-                    primitive_state,
-                )
+                if training_config.accumulate_grads:
+                    time, primitive_state, network_params, opt_state, accum_grads = (
+                        carry
+                    )
+                    carry_loss = (time, primitive_state)
+                else:
+                    time, primitive_state, network_params, opt_state = carry
+                    carry_loss = (time, primitive_state)
 
             def condition_loss(carry):
                 if config.return_snapshots or config.activate_snapshot_callback:
@@ -671,38 +678,149 @@ def _time_integration(
                     time, final_state = carry
 
                 final_state = _unpad(final_state, config)
-                loss = loss_function(
-                    target_data[training_config.current_loss_index], final_state
-                )
+                loss = loss_function(target_data[loss_index], final_state)
                 return loss, carry
 
             (loss_value, carry_loss), grads = eqx.filter_value_and_grad(
                 loss_fn, has_aux=True
             )(network_params, carry_loss)
-            updates, opt_state = optimizer.update(grads, opt_state, network_params)
-            network_params_updated = eqx.apply_updates(network_params, updates)
+            if training_config.accumulate_grads:
+                scale = 1.0  # / len(training_params.loss_calculation_times)
+                accum_grads = jax.tree_util.tree_map(
+                    lambda a, g: a + scale * g, accum_grads, grads
+                )
+                is_last = loss_index == (
+                    len(training_params.loss_calculation_times) - 1
+                )
+                if training_config.debug_training:
+
+                    def grad_norm(grads):
+                        return jnp.sqrt(
+                            sum(
+                                jnp.vdot(g, g) for g in jax.tree_util.tree_leaves(grads)
+                            )
+                        )
+
+                    jax.debug.print(
+                        "grad norm at state {} = {} \n current total grads {}",
+                        loss_index,
+                        grad_norm(grads),
+                        grad_norm(accum_grads),
+                    )
+
+                def apply_update(args):
+                    network_params, opt_state, grads = args
+                    updates, new_opt_state = optimizer.update(
+                        grads, opt_state, network_params
+                    )
+                    new_net = eqx.apply_updates(network_params, updates)
+                    new_grads = jax.tree_util.tree_map(
+                        lambda x: jnp.zeros_like(x), grads
+                    )
+                    return new_net, new_opt_state, new_grads
+
+                def skip_update(args):
+                    return args
+
+                network_params, opt_state, accum_grads = jax.lax.cond(
+                    is_last,
+                    apply_update,
+                    skip_update,
+                    (network_params, opt_state, accum_grads),
+                )
+
+            else:
+                # Normal update after each loss
+                updates, opt_state = optimizer.update(grads, opt_state, network_params)
+                network_params = eqx.apply_updates(network_params, updates)
+            # if config.return_snapshots or config.activate_snapshot_callback:
+            #     time, primitive_state, snapshot_data = carry_loss
+            #     carry = (
+            #         time,
+            #         primitive_state,
+            #         snapshot_data,
+            #         network_params,
+            #         opt_state,
+            #     )
+            # else:
+            #     time, primitive_state = carry_loss
+
+            #     carry = time, primitive_state, network_params, opt_state
+
             if config.return_snapshots or config.activate_snapshot_callback:
                 time, primitive_state, snapshot_data = carry_loss
-                carry = (
-                    time,
-                    primitive_state,
-                    snapshot_data,
-                    network_params_updated,
-                    opt_state,
-                )
+                if training_config.accumulate_grads:
+                    carry = (
+                        time,
+                        primitive_state,
+                        snapshot_data,
+                        network_params,
+                        opt_state,
+                        accum_grads,
+                    )
+                else:
+                    carry = (
+                        time,
+                        primitive_state,
+                        snapshot_data,
+                        network_params,
+                        opt_state,
+                    )
             else:
                 time, primitive_state = carry_loss
-
-                carry = time, primitive_state, network_params_updated, opt_state
+                if training_config.accumulate_grads:
+                    carry = (
+                        time,
+                        primitive_state,
+                        network_params,
+                        opt_state,
+                        accum_grads,
+                    )
+                else:
+                    carry = (time, primitive_state, network_params, opt_state)
 
             return carry, loss_value
 
     initial_network_params = params.cnn_mhd_corrector_params.network_params
 
     if config.return_snapshots or config.activate_snapshot_callback:
-        carry = (0.0, primitive_state, snapshot_data, initial_network_params, opt_state)
+        if training_config.accumulate_grads:
+            carry = (
+                0.0,  # time
+                primitive_state,
+                snapshot_data,
+                initial_network_params,
+                opt_state,
+                jax.tree_util.tree_map(
+                    lambda x: jnp.zeros_like(x), initial_network_params
+                ),
+            )
+        else:
+            carry = (
+                0.0,
+                primitive_state,
+                snapshot_data,
+                initial_network_params,
+                opt_state,
+            )
     else:
-        carry = (0.0, primitive_state, initial_network_params, opt_state)
+        if training_config.accumulate_grads:
+            carry = (
+                0.0,
+                primitive_state,
+                initial_network_params,
+                opt_state,
+                jax.tree_util.tree_map(
+                    lambda x: jnp.zeros_like(x), initial_network_params
+                ),
+            )
+        else:
+            carry = (
+                0.0,
+                primitive_state,
+                initial_network_params,
+                opt_state,
+            )
 
     carry, losses = jax.lax.scan(
         train_step,
@@ -711,9 +829,15 @@ def _time_integration(
     )
 
     if config.return_snapshots or config.activate_snapshot_callback:
-        time, state, snapshot_data, network_params, opt_state = carry
+        if training_config.accumulate_grads:
+            time, state, snapshot_data, network_params, opt_state, accum_grads = carry
+        else:
+            time, state, snapshot_data, network_params, opt_state = carry
     else:
-        time, state, network_params, opt_state = carry
+        if training_config.accumulate_grads:
+            time, state, network_params, opt_state, accum_grads = carry
+        else:
+            time, state, network_params, opt_state = carry
 
     if config.return_snapshots or config.activate_snapshot_callback:
         if config.return_snapshots:

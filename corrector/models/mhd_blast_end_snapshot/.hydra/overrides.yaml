@@ -1,0 +1,2 @@
+- training.epochs=1000
+- data.snapshot_timepoints=[0.34]

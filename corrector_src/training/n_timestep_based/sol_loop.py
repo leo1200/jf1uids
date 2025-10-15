@@ -21,7 +21,9 @@ import jax.numpy as jnp
 import jax
 
 
-from corrector_src.training.solver_in_loop_train_tbt import time_integration_training_tbt
+from corrector_src.training.n_timestep_based.sol_one import (
+    time_integration_training_tbt,
+)
 
 from corrector_src.training.training_config import TrainingConfig
 from corrector_src.model._cnn_mhd_corrector import CorrectorCNN
@@ -89,35 +91,31 @@ def training_loop(cfg):
                 rng_seed,
                 cnn_mhd_corrector_config,
                 cnn_mhd_corrector_params,
-                downscale=True
+                downscale=True,
             )
         )
 
         initial_state_hr, config_hr, params_hr, helper_data_hr, registered_variables = (
-            prepare_initial_state(
-                cfg.data,
-                rng_seed,
-                None,
-                None,
-                downscale=False
-            )
+            prepare_initial_state(cfg.data, rng_seed, None, None, downscale=False)
         )
 
         time_train = time.time()
         if cfg.training.debug:
-            err, (losses, new_network_params, opt_state) = time_integration_training_tbt(
-                initial_state_hr=initial_state_hr,
-                config_hr=config_hr,
-                config_lr=config_lr,
-                params=params,
-                helper_data_hr=helper_data_hr,
-                helper_data_lr=helper_data_lr,
-                registered_variables=registered_variables,
-                training_config=training_config,
-                optimizer=optimizer,
-                opt_state=opt_state,
-                loss_function=loss_function,
-                save_full_sim=False,
+            err, (losses, new_network_params, opt_state) = (
+                time_integration_training_tbt(
+                    initial_state_hr=initial_state_hr,
+                    config_hr=config_hr,
+                    config_lr=config_lr,
+                    params=params,
+                    helper_data_hr=helper_data_hr,
+                    helper_data_lr=helper_data_lr,
+                    registered_variables=registered_variables,
+                    training_config=training_config,
+                    optimizer=optimizer,
+                    opt_state=opt_state,
+                    loss_function=loss_function,
+                    save_full_sim=False,
+                )
             )
 
             err.throw()

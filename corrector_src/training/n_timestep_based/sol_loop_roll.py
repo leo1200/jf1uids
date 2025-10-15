@@ -60,10 +60,12 @@ def training_loop(cfg):
 
     # Training configuration
     training_config = TrainingConfig(
-        compute_intermediate_losses=True,
-        n_look_behind=n_look_behind,
-        loss_weights=None,
-        use_relative_error=False,
+        # compute_intermediate_losses=True,
+        # n_look_behind=n_look_behind,
+        # loss_weights=None,
+        # use_relative_error=False,
+        exact_end_time=True,
+        accumulate_gradients=True,
     )
     loss_function = mse_loss
 
