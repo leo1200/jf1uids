@@ -1,3 +1,6 @@
+# This tests follows the one presented in Fig. 12 in
+# https://doi.org/10.48550/arXiv.2004.10542
+
 # ==== GPU selection ====
 from autocvd import autocvd
 autocvd(num_gpus = 1)
@@ -19,7 +22,7 @@ from jf1uids import SimulationParams
 from jf1uids import time_integration
 from jf1uids.initial_condition_generation.construct_primitive_state import construct_primitive_state
 from jf1uids import get_registered_variables
-from jf1uids.option_classes.simulation_config import finalize_config
+from jf1uids.option_classes.simulation_config import DOUBLE_MINMOD, HLLC_LM, finalize_config
 import numpy as np
 from matplotlib.colors import LogNorm
 
@@ -44,7 +47,7 @@ def run_blast_simulation(num_cells, B0, theta, phi):
         dimensionality = 3,
         box_size = box_size, 
         num_cells = num_cells,
-        limiter = MINMOD,
+        limiter = DOUBLE_MINMOD,
         riemann_solver = HLL,
         exact_end_time = True,
     )
@@ -98,7 +101,7 @@ def run_blast_simulation(num_cells, B0, theta, phi):
 
     return initial_state, config, registered_variables, params, helper_data
 
-num_cells = 128
+num_cells = 300
 B0 = 100 / jnp.sqrt(4 * jnp.pi)
 theta = jnp.pi / 2
 phi = jnp.pi / 4
@@ -189,6 +192,26 @@ fig.colorbar(im, cax=cbar, label='B^2/2')
 axs[1, 1].set_title('magnetic pressure slice')
 axs[1, 1].set_xlabel('x')
 axs[1, 1].set_ylabel('y')
+
+# 0, 2: |B|^2 / 2 along the diagonal from the center
+diag_indices = jnp.arange(num_cells // 2, num_cells)
+B_diag = magnetic_pressure[diag_indices, diag_indices, num_cells//2]
+r_diag = jnp.sqrt((diag_indices - num_cells//2)**2 + (diag_indices - num_cells//2)**2) * (config.box_size / num_cells)
+axs[0, 2].plot(r_diag, B_diag)
+axs[0, 2].set_ylabel('|B|^2 / 2')
+axs[0, 2].set_xlabel('r')
+axs[0, 2].set_xlim(0, 0.3)
+axs[0, 2].set_ylim(180, 270)
+axs[0, 2].set_title('|B|^2 / 2 along diagonal')
+
+# density along the vertical centerline
+density_center = density[:, num_cells//2, num_cells//2]
+axs[1, 2].plot(jnp.linspace(0, config.box_size, num_cells), density_center)
+axs[1, 2].set_ylabel('density')
+axs[1, 2].set_xlabel('z')
+axs[1, 2].set_xlim(0.5, 1.0)
+axs[1, 2].set_ylim(0.0, 1.5)
+axs[1, 2].set_title('rho along vertical centerline')
 
 plt.tight_layout()
 plt.savefig('figures/mhd_blast3D.png', dpi=300)
