@@ -11,3 +11,12 @@ class CNNMHDconfig(NamedTuple):
 
 class CNNMHDParams(NamedTuple):
     network_params: Union[PyTree, NoneType] = None
+
+
+class CorrectorConfig(NamedTuple):
+    corrector: bool = False
+    network_static: Union[PyTree, NoneType] = None
+
+
+class CorrectorParams(NamedTuple):
+    network_params: Union[PyTree, NoneType] = None

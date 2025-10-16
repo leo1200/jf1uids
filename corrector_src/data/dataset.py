@@ -32,10 +32,12 @@ import astropy.constants as c
 from corrector_src.utils.downaverage import downaverage_states, downaverage_state
 
 import corrector_src.data.blast_creation as blast
-import corrector_src.data.turbulence_creation as turb
-from corrector_src.model._cnn_mhd_corrector_options import (
-    CNNMHDParams,
-    CNNMHDconfig,
+
+from jf1uids._physics_modules._cnn_mhd_corrector._cnn_mhd_corrector_options import (
+    # CorrectorParams,
+    # CorrectorConfig,
+    CorrectorParams,
+    CorrectorConfig,
 )
 from omegaconf import OmegaConf
 import numpy as np
@@ -103,24 +105,20 @@ class dataset:
     ]:
         """
         Takes a standard simulation tuple and applies optional overrides like
-        cnn_mhd_corrector_config, cnn_mhd_corrector_params, or any future dynamic fields.
+        corrector_config, corrector_params, or any future dynamic fields.
         """
         state, config, params, helper, reg_vars, seed = sim_tuple
 
         if (
-            "cnn_mhd_corrector_config" in overrides
-            and overrides["cnn_mhd_corrector_config"] is not None
+            "corrector_config" in overrides
+            and overrides["corrector_config"] is not None
         ):
-            config = config._replace(
-                cnn_mhd_corrector_config=overrides["cnn_mhd_corrector_config"]
-            )
+            config = config._replace(corrector_config=overrides["corrector_config"])
         if (
-            "cnn_mhd_corrector_params" in overrides
-            and overrides["cnn_mhd_corrector_params"] is not None
+            "corrector_params" in overrides
+            and overrides["corrector_params"] is not None
         ):
-            params = params._replace(
-                cnn_mhd_corrector_params=overrides["cnn_mhd_corrector_params"]
-            )
+            params = params._replace(corrector_params=overrides["corrector_params"])
 
         return state, config, params, helper, reg_vars, seed
 
@@ -129,8 +127,8 @@ class dataset:
         resolution: Optional[int] = None,
         scenario: Optional[str | int] = None,
         rng_seed: Optional[str | int | float] = None,
-        cnn_mhd_corrector_config: Optional[CNNMHDconfig] = None,
-        cnn_mhd_corrector_params: Optional[CNNMHDParams] = None,
+        corrector_config: Optional[CorrectorConfig] = None,
+        corrector_params: Optional[CorrectorParams] = None,
         **overrides,
     ) -> Tuple[
         np.ndarray,
@@ -150,10 +148,10 @@ class dataset:
         resolution = resolution or self.default_resolution
 
         # Include CNN overrides automatically
-        if cnn_mhd_corrector_config is not None:
-            overrides["cnn_mhd_corrector_config"] = cnn_mhd_corrector_config
-        if cnn_mhd_corrector_params is not None:
-            overrides["cnn_mhd_corrector_params"] = cnn_mhd_corrector_params
+        if corrector_config is not None:
+            overrides["corrector_config"] = corrector_config
+        if corrector_params is not None:
+            overrides["corrector_params"] = corrector_params
         if rng_seed is not None:
             overrides["rng_seed"] = rng_seed
 
@@ -169,8 +167,8 @@ class dataset:
         scenario: Optional[str | int] = None,
         rng_seed: Optional[int] = None,
         downscale_factor: Optional[int] = False,
-        cnn_mhd_corrector_config: Optional[CNNMHDconfig] = None,
-        cnn_mhd_corrector_params: Optional[CNNMHDParams] = None,
+        corrector_config: Optional[CorrectorConfig] = None,
+        corrector_params: Optional[CorrectorParams] = None,
     ) -> np.ndarray:
         """
         integrates a simulation and returns the states with the config, resolution, and seed given"""
@@ -179,8 +177,8 @@ class dataset:
                 resolution,
                 scenario,
                 rng_seed,
-                cnn_mhd_corrector_config,
-                cnn_mhd_corrector_params,
+                corrector_config,
+                corrector_params,
             )
         )
 
@@ -208,8 +206,8 @@ class dataset:
         downscale: Optional[int] = None,
         scenario: Optional[str | int] = None,
         rng_seed: Optional[str | int | float] = None,
-        cnn_mhd_corrector_config: Optional[CNNMHDconfig] = None,
-        cnn_mhd_corrector_params: Optional[CNNMHDParams] = None,
+        corrector_config: Optional[CorrectorConfig] = None,
+        corrector_params: Optional[CorrectorParams] = None,
         **overrides,
     ) -> Tuple[
         Tuple[
@@ -267,14 +265,10 @@ class dataset:
         params_lr = params_hr  # params independent of config
 
         # Apply CNN overrides ONLY to LR state
-        if cnn_mhd_corrector_config is not None:
-            config_lr = config_lr._replace(
-                cnn_mhd_corrector_config=cnn_mhd_corrector_config
-            )
-        if cnn_mhd_corrector_params is not None:
-            params_lr = params_lr._replace(
-                cnn_mhd_corrector_params=cnn_mhd_corrector_params
-            )
+        if corrector_config is not None:
+            config_lr = config_lr._replace(corrector_config=corrector_config)
+        if corrector_params is not None:
+            params_lr = params_lr._replace(corrector_params=corrector_params)
 
         return (
             (
@@ -299,8 +293,8 @@ class dataset:
         downscale: Optional[int] = None,
         scenario: Optional[str | int] = None,
         rng_seed: Optional[str | int | float] = None,
-        cnn_mhd_corrector_config: Optional[CNNMHDconfig] = None,
-        cnn_mhd_corrector_params: Optional[CNNMHDParams] = None,
+        corrector_config: Optional[CorrectorConfig] = None,
+        corrector_params: Optional[CorrectorParams] = None,
         **overrides,
     ) -> Tuple[
         np.ndarray,
@@ -312,7 +306,7 @@ class dataset:
             RegisteredVariables,
         ],
     ]:
-        """function tailored to use while training the cnn_mhd_corrector_config
+        """function tailored to use while training the corrector_config
         returns hr states (DOWNSCALED if downscale is given) and lr  state, config, params, helper_data, registered_vars
         *if the corrector is given it will only be applied to the lr configuration and parameters"""
 
@@ -357,14 +351,10 @@ class dataset:
         params_lr = params_hr  # params independent of config
 
         # Apply CNN overrides ONLY to LR state
-        if cnn_mhd_corrector_config is not None:
-            config_lr = config_lr._replace(
-                cnn_mhd_corrector_config=cnn_mhd_corrector_config
-            )
-        if cnn_mhd_corrector_params is not None:
-            params_lr = params_lr._replace(
-                cnn_mhd_corrector_params=cnn_mhd_corrector_params
-            )
+        if corrector_config is not None:
+            config_lr = config_lr._replace(corrector_config=corrector_config)
+        if corrector_params is not None:
+            params_lr = params_lr._replace(corrector_params=corrector_params)
 
         return (
             hr_states,

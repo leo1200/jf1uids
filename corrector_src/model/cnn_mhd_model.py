@@ -6,6 +6,11 @@ from jaxtyping import Array, Float, PRNGKeyArray
 from functools import partial
 
 from jax.experimental import checkify
+from jf1uids._physics_modules._mhd._vector_maths import curl2D, curl3D, divergence3D
+from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfig
+from jf1uids.option_classes.simulation_params import SimulationParams
+import jax.numpy as jnp
 
 
 class CorrectorCNN(eqx.Module):
@@ -34,11 +39,42 @@ class CorrectorCNN(eqx.Module):
             ]
         )
 
-    def __call__(self, x: Float[Array, "num_vars h w"]) -> Float[Array, "num_vars h w"]:
+    def __call__(
+        self,
+        primitive_state: STATE_TYPE,
+        config: SimulationConfig,
+        registered_variables: RegisteredVariables,
+        params: SimulationParams,
+        time_step: Float[Array, ""],
+    ):
         """
         The forward pass of the model.
         """
         # Pass the input through the network to get the correction term
-        correction = self.layers(x)
-        # Add the learned correction to the original input
-        return correction
+        correction = self.layers(primitive_state)
+        electric_field_correction = correction[-3:, ...]
+        if config.dimensionality == 2:
+            magnetic_field_correction = curl2D(
+                electric_field_correction, config.grid_spacing
+            )
+        elif config.dimensionality == 3:
+            magnetic_field_correction = curl3D(
+                electric_field_correction, config.grid_spacing
+            )
+
+        correction = correction.at[-3:, ...].set(magnetic_field_correction)
+
+        # update the primitive state with the correction
+        primitive_state = primitive_state + correction * time_step
+
+        # ensure that the pressure is larger than a minimum value
+        p_min = 1e-12
+        primitive_state = primitive_state.at[registered_variables.pressure_index].set(
+            jnp.maximum(primitive_state[registered_variables.pressure_index], p_min)
+        )
+        rho_min = 1e-12
+        primitive_state = primitive_state.at[registered_variables.density_index].set(
+            jnp.maximum(primitive_state[registered_variables.density_index], rho_min)
+        )
+
+        return primitive_state

@@ -1,16 +1,21 @@
 from typing import NamedTuple
 import jax.numpy as jnp
 
-from jf1uids._physics_modules._cnn_mhd_corrector._cnn_mhd_corrector_options import CNNMHDconfig
+from jf1uids._physics_modules._cnn_mhd_corrector._cnn_mhd_corrector_options import (
+    CorrectorParams,
+)
 from jf1uids._physics_modules._cooling.cooling_options import CoolingParams
 from jf1uids._physics_modules._cosmic_rays.cosmic_ray_options import CosmicRayParams
-from jf1uids._physics_modules._neural_net_force._neural_net_force_options import NeuralNetForceParams
+from jf1uids._physics_modules._neural_net_force._neural_net_force_options import (
+    NeuralNetForceParams,
+)
 from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindParams
+
 
 class SimulationParams(NamedTuple):
     """
     Different from the simulation configuration, the simulation parameters
-    do not require recompilation when changed. The simulation can be 
+    do not require recompilation when changed. The simulation can be
     differentiated with respect to them.
     """
 
@@ -22,7 +27,7 @@ class SimulationParams(NamedTuple):
     gravitational_constant: float = 1.0
 
     #: The adiabatic index of the gas.
-    gamma: float = 5/3
+    gamma: float = 5 / 3
 
     #: The maximum time step.
     dt_max: float = 0.001
@@ -48,4 +53,6 @@ class SimulationParams(NamedTuple):
     neural_net_force_params: NeuralNetForceParams = NeuralNetForceParams()
 
     #: The parameters of the CNN MHD corrector module.
-    cnn_mhd_corrector_params: CNNMHDconfig = CNNMHDconfig()
+    # cnn_mhd_corrector_params: CNNMHDconfig = CNNMHDconfig()
+
+    corrector_params: CorrectorParams = CorrectorParams()

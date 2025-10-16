@@ -353,7 +353,7 @@ def _time_integration(
 
             def loss_fn(network_parameters, carry):
                 updated_params = params._replace(
-                    cnn_mhd_corrector_params=params.cnn_mhd_corrector_params._replace(
+                    corrector_params=params.corrector_params._replace(
                         network_params=network_parameters
                     )
                 )
@@ -781,7 +781,7 @@ def _time_integration(
 
             return carry, loss_value
 
-    initial_network_params = params.cnn_mhd_corrector_params.network_params
+    initial_network_params = params.corrector_params.network_params
 
     if config.return_snapshots or config.activate_snapshot_callback:
         if training_config.accumulate_grads:

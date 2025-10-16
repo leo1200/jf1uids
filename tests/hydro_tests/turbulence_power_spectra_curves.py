@@ -272,71 +272,131 @@ def get_power_spectra(num_cells, snapshots, t_final, z_level):
     )
 
 
-fig, axs = plt.subplots(2, len(resolutions), figsize=(15, 8))
-spectrums = []
+# fig, axs = plt.subplots(2, len(resolutions), figsize=(15, 8))
+# spectrums = []
 
-# --- Precompute all data ---
+# # --- Precompute all data ---
+# for i, resolution in enumerate(resolutions):
+#     spectrum, k, time_points, vel_states = get_power_spectra(
+#         num_cells=resolution, snapshots=snapshots, t_final=t_final, z_level=z_level[i]
+#     )
+
+#     # --- Top row: velocity field ---
+#     ax_vel = axs[0, i]
+#     im = ax_vel.imshow(
+#         vel_states[0],
+#         cmap="plasma",
+#         origin="lower",
+#         vmin=0,
+#         vmax=1,
+#     )
+#     ax_vel.set_title(f"Velocity field (z={z_level[i]})")
+#     ax_vel.axis("off")
+
+#     # --- Bottom row: power spectrum ---
+#     ax_spec = axs[1, i]
+#     ax_spec.plot(k[0], k[0] ** -2, label=r"$k^{-2}$ reference", linestyle="--")
+
+#     (line,) = ax_spec.plot([], [], lw=2, label=r"$P_{1D}(k_\parallel)$")
+
+#     ax_spec.set_xscale("log")
+#     ax_spec.set_yscale("log")
+#     ax_spec.set_xlabel("k")
+#     ax_spec.set_ylabel("P(k)")
+#     ax_spec.set_ylim(1e-6, 1e-1)
+#     ax_spec.set_xlim(min(k[0]), max(k[0]))
+#     ax_spec.set_title(f"Power spectrum {resolution}")
+#     ax_spec.legend()
+
+#     spectrums.append(
+#         {
+#             "line": line,
+#             "im": im,
+#             "data": spectrum,
+#             "k": k,
+#             "vel": vel_states,
+#             "time_points": time_points,
+#         }
+#     )
+
+# title = fig.suptitle(f"t = {spectrums[0]['time_points'][0]:.2f}")
+
+
+# # --- Animation setup ---
+# def init():
+#     for spec in spectrums:
+#         spec["line"].set_data([], [])
+#         spec["im"].set_array(spec["vel"][0])
+#     return [s["line"] for s in spectrums] + [s["im"] for s in spectrums] + [title]
+
+
+# def animate(j):
+#     for spec in spectrums:
+#         spec["line"].set_data(spec["k"][j], spec["data"][j])
+#         spec["im"].set_array(spec["vel"][j])
+#     title.set_text(f"t = {spectrums[0]['time_points'][j]:.2f}")
+#     return [s["line"] for s in spectrums] + [s["im"] for s in spectrums] + [title]
+
+
+# ani = animation.FuncAnimation(
+#     fig,
+#     animate,
+#     init_func=init,
+#     frames=len(spectrums[0]["time_points"]),
+#     interval=100,
+#     blit=False,
+# )
+
+# ani.save("turb_power_spectra.mp4", writer=animation.FFMpegWriter(fps=10, bitrate=1800))
+# plt.tight_layout(rect=[0, 0, 1, 0.95])
+# plt.show()
+
+spectrums = []
 for i, resolution in enumerate(resolutions):
     spectrum, k, time_points, vel_states = get_power_spectra(
         num_cells=resolution, snapshots=snapshots, t_final=t_final, z_level=z_level[i]
     )
+    spectrums.append({
+        "data": spectrum,
+        "k": k,
+        "label": f"{resolution}³ cells",
+        "time_points": time_points
+    })
 
-    # --- Top row: velocity field ---
-    ax_vel = axs[0, i]
-    im = ax_vel.imshow(
-        vel_states[0],
-        cmap="plasma",
-        origin="lower",
-        vmin=0,
-        vmax=1,
-    )
-    ax_vel.set_title(f"Velocity field (z={z_level[i]})")
-    ax_vel.axis("off")
+# --- Single plot for all spectra ---
+fig, ax = plt.subplots(figsize=(8, 6))
 
-    # --- Bottom row: power spectrum ---
-    ax_spec = axs[1, i]
-    ax_spec.plot(k[0], k[0] ** -2, label=r"$k^{-2}$ reference", linestyle="--")
+lines = []
+for spec in spectrums:
+    (line,) = ax.plot([], [], lw=2, label=spec["label"])
+    lines.append(line)
 
-    (line,) = ax_spec.plot([], [], lw=2, label=r"$P_{1D}(k_\parallel)$")
+# --- k^-2 reference line ---
+k_ref = spectrums[0]["k"][0]  # use k from first resolution
+P_ref = k_ref ** -2
+ref_line, = ax.plot(k_ref, P_ref, "k--", label=r"$k^{-2}$ reference")
 
-    ax_spec.set_xscale("log")
-    ax_spec.set_yscale("log")
-    ax_spec.set_xlabel("k")
-    ax_spec.set_ylabel("P(k)")
-    ax_spec.set_ylim(1e-6, 1e-1)
-    ax_spec.set_xlim(min(k[0]), max(k[0]))
-    ax_spec.set_title(f"Power spectrum {resolution}")
-    ax_spec.legend()
-
-    spectrums.append(
-        {
-            "line": line,
-            "im": im,
-            "data": spectrum,
-            "k": k,
-            "vel": vel_states,
-            "time_points": time_points,
-        }
-    )
-
-title = fig.suptitle(f"t = {spectrums[0]['time_points'][0]:.2f}")
-
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlabel("k")
+ax.set_ylabel("P(k)")
+ax.set_ylim(1e-6, 1e-1)
+ax.set_title("Power spectra for all resolutions")
+ax.legend()
+title = ax.text(0.5, 1.05, "", transform=ax.transAxes, ha="center")
 
 # --- Animation setup ---
 def init():
-    for spec in spectrums:
-        spec["line"].set_data([], [])
-        spec["im"].set_array(spec["vel"][0])
-    return [s["line"] for s in spectrums] + [s["im"] for s in spectrums] + [title]
-
+    for line in lines:
+        line.set_data([], [])
+    title.set_text(f"t = {spectrums[0]['time_points'][0]:.2f}")
+    return lines + [title]
 
 def animate(j):
-    for spec in spectrums:
-        spec["line"].set_data(spec["k"][j], spec["data"][j])
-        spec["im"].set_array(spec["vel"][j])
+    for line, spec in zip(lines, spectrums):
+        line.set_data(spec["k"][j], spec["data"][j])
     title.set_text(f"t = {spectrums[0]['time_points'][j]:.2f}")
-    return [s["line"] for s in spectrums] + [s["im"] for s in spectrums] + [title]
-
+    return lines + [title]
 
 ani = animation.FuncAnimation(
     fig,
@@ -347,6 +407,5 @@ ani = animation.FuncAnimation(
     blit=False,
 )
 
-ani.save("turb_power_spectra.mp4", writer=animation.FFMpegWriter(fps=10, bitrate=1800))
-plt.tight_layout(rect=[0, 0, 1, 0.95])
+ani.save("combined_spectra_with_ref.mp4", writer=animation.FFMpegWriter(fps=10, bitrate=1800))
 plt.show()

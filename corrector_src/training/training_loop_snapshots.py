@@ -16,13 +16,15 @@ import jax.numpy as jnp
 import jax
 
 
-from corrector_src.training.sol_one_training_snapshots import time_integration
-
+from corrector_src.training.sol_one_training_snapshots import time_integration_train
+from jf1uids import time_integration
 from corrector_src.training.training_config import TrainingConfig, TrainingParams
-from corrector_src.model._cnn_mhd_corrector import CorrectorCNN
+from corrector_src.model.cnn_mhd_model import CorrectorCNN
 from corrector_src.model._cnn_mhd_corrector_options import (
     CNNMHDParams,
     CNNMHDconfig,
+    CorrectorConfig,
+    CorrectorParams,
 )
 from corrector_src.training.loss import mse_loss
 from corrector_src.data.load_sim import (
@@ -66,10 +68,8 @@ def training_loop(cfg):
     model = instantiate(cfg.models, key=key)
 
     neural_net_params, neural_net_static = eqx.partition(model, eqx.is_array)
-    cnn_mhd_corrector_config = CNNMHDconfig(
-        cnn_mhd_corrector=True, network_static=neural_net_static
-    )
-    cnn_mhd_corrector_params = CNNMHDParams(network_params=neural_net_params)
+    corrector_config = CorrectorConfig(corrector=True, network_static=neural_net_static)
+    corrector_params = CorrectorParams(network_params=neural_net_params)
     optimizer = optax.chain(
         # optax.clip_by_global_norm(1.0),
         optax.adam(float(cfg.training.learning_rate)),
@@ -103,6 +103,10 @@ def training_loop(cfg):
     gt_cfg_data = cfg.data
     gt_cfg_data.debug = False
     dataset_creator = dataset(gt_cfg_data.scenarios, gt_cfg_data)
+    if cfg.training.early_stopping:
+        best_loss = float("inf")
+        best_params = neural_net_params
+
     if not cfg.data.generate_data_on_fly and len(gt_cfg_data.scenarios) == 1:
         # ground_truth, _ = integrate_blast(cfg.data, None, rng_seed, downscale=True)
         (
@@ -118,9 +122,21 @@ def training_loop(cfg):
             downscale=cfg.data.downscaling_factor, rng_seed=rng_seed
         )
         print("gt_shape:", jnp.shape(ground_truth))
-    initial_config_lr = initial_config_lr._replace(
-        cnn_mhd_corrector_config=cnn_mhd_corrector_config
-    )
+        initial_config_lr = initial_config_lr._replace(
+            corrector_config=corrector_config
+        )
+
+    # def validate_model(network_params, cfg_data, corrector_config, corrector_params):
+    #     cfg_data.use_specific_snapshot_timepoints = True
+    #     cfg_data.snapshot_timepoints = np.linspace(0.0, cfg_data.t_end, 100).tolist()
+    #     ground_truth, lr_sim = dataset_creator.train_initializator(
+    #         resolution=cfg.data.hr_res,
+    #         downscale=cfg.data.downscaling_factor,
+    #         rng_seed=None,
+    #         # scenario selection if needed
+    #         corrector_config=corrector_config,
+    #         corrector_params=corrector_params,
+    #     )
 
     for i in range(epochs):
         if cfg.data.generate_data_on_fly:
@@ -138,15 +154,15 @@ def training_loop(cfg):
                 downscale=cfg.data.downscaling_factor,
                 rng_seed=None,
                 # scenario selection if needed
-                cnn_mhd_corrector_config=cnn_mhd_corrector_config,
-                cnn_mhd_corrector_params=cnn_mhd_corrector_params,
+                corrector_config=corrector_config,
+                corrector_params=corrector_params,
             )
         else:
             initial_params_lr = initial_params_lr._replace(
-                cnn_mhd_corrector_params=cnn_mhd_corrector_params
+                corrector_params=corrector_params
             )
         time_train = time.time()
-        losses, new_network_params, opt_state, _ = time_integration(
+        losses, new_network_params, opt_state, _ = time_integration_train(
             primitive_state=initial_state_lr,
             config=initial_config_lr,
             params=initial_params_lr,
@@ -167,9 +183,7 @@ def training_loop(cfg):
             break
         snapshot_losses.append(losses.flatten())
         epoch_losses.append(np.mean(losses))
-        cnn_mhd_corrector_params = cnn_mhd_corrector_params._replace(
-            network_params=new_network_params
-        )
+        corrector_params = corrector_params._replace(network_params=new_network_params)
         print(f"epoch {i} time_train {time_train} loss {epoch_losses[-1]}")
 
     snapshot_losses = np.array(snapshot_losses)
