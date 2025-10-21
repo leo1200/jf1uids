@@ -103,6 +103,7 @@ def training_loop(cfg):
     gt_cfg_data = cfg.data
     gt_cfg_data.debug = False
     dataset_creator = dataset(gt_cfg_data.scenarios, gt_cfg_data)
+
     if cfg.training.early_stopping:
         best_loss = float("inf")
         best_params = neural_net_params

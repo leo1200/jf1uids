@@ -28,7 +28,7 @@ from jf1uids.fluid_equations.fluid import (
     get_absolute_velocity,
     total_energy_from_primitives,
 )
-
+from jf1uids._physics_modules._cooling.cooling_options import CoolingConfig
 from jf1uids import get_registered_variables
 from jf1uids.option_classes import WindConfig
 
@@ -69,6 +69,11 @@ resolutions = [256, 180, 120, 60]
 t_final = 6e4
 snapshots = 40
 z_level = [r // 2 for r in resolutions]
+cooling = True
+
+animation_name = "combined_spectra_with_ref"
+if cooling:
+    animation_name += "_cooling"
 
 
 def run_turbulent_simulation(
@@ -87,7 +92,10 @@ def run_turbulent_simulation(
     num_cells = num_cells
 
     wanted_rms = 50 * u.km / u.s
-
+    if cooling:
+        cooling_config = CoolingConfig(cooling=True)
+    else:
+        cooling_config = CoolingConfig(cooling=False)
     # setup simulation config
     config = SimulationConfig(
         runtime_debugging=False,
@@ -117,6 +125,7 @@ def run_turbulent_simulation(
         riemann_solver=HYBRID_HLLC,
         return_snapshots=True,
         num_snapshots=num_snapshots,
+        cooling_config=cooling_config,
     )
 
     helper_data = get_helper_data(config)
@@ -356,12 +365,14 @@ for i, resolution in enumerate(resolutions):
     spectrum, k, time_points, vel_states = get_power_spectra(
         num_cells=resolution, snapshots=snapshots, t_final=t_final, z_level=z_level[i]
     )
-    spectrums.append({
-        "data": spectrum,
-        "k": k,
-        "label": f"{resolution}³ cells",
-        "time_points": time_points
-    })
+    spectrums.append(
+        {
+            "data": spectrum,
+            "k": k,
+            "label": f"{resolution}³ cells",
+            "time_points": time_points,
+        }
+    )
 
 # --- Single plot for all spectra ---
 fig, ax = plt.subplots(figsize=(8, 6))
@@ -373,8 +384,8 @@ for spec in spectrums:
 
 # --- k^-2 reference line ---
 k_ref = spectrums[0]["k"][0]  # use k from first resolution
-P_ref = k_ref ** -2
-ref_line, = ax.plot(k_ref, P_ref, "k--", label=r"$k^{-2}$ reference")
+P_ref = k_ref**-2
+(ref_line,) = ax.plot(k_ref, P_ref, "k--", label=r"$k^{-2}$ reference")
 
 ax.set_xscale("log")
 ax.set_yscale("log")
@@ -385,6 +396,7 @@ ax.set_title("Power spectra for all resolutions")
 ax.legend()
 title = ax.text(0.5, 1.05, "", transform=ax.transAxes, ha="center")
 
+
 # --- Animation setup ---
 def init():
     for line in lines:
@@ -392,11 +404,13 @@ def init():
     title.set_text(f"t = {spectrums[0]['time_points'][0]:.2f}")
     return lines + [title]
 
+
 def animate(j):
     for line, spec in zip(lines, spectrums):
         line.set_data(spec["k"][j], spec["data"][j])
     title.set_text(f"t = {spectrums[0]['time_points'][j]:.2f}")
     return lines + [title]
+
 
 ani = animation.FuncAnimation(
     fig,
@@ -407,5 +421,5 @@ ani = animation.FuncAnimation(
     blit=False,
 )
 
-ani.save("combined_spectra_with_ref.mp4", writer=animation.FFMpegWriter(fps=10, bitrate=1800))
+ani.save(animation_name + ".mp4", writer=animation.FFMpegWriter(fps=10, bitrate=1800))
 plt.show()

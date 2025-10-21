@@ -147,5 +147,4 @@ def get_registered_variables(config: SimulationConfig) -> RegisteredVariables:
         registered_variables = registered_variables._replace(cosmic_ray_n_active=True)
 
     # here you can register more variables
-
     return registered_variables
