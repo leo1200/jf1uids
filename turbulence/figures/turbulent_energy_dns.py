@@ -1,6 +1,17 @@
 from autocvd import autocvd
 
-autocvd(num_gpus=3)
+num_gpus = 1
+multi_gpu = num_gpus > 1
+split_turb = (2, 2, 1)
+split_training = (1, 2, 2, 1)
+assert sum(x for x in split_turb if x > 1) == num_gpus or num_gpus == 1, (
+    f"Sum of splits {sum(x for x in split_turb if x > 1)} != num_gpus ({num_gpus})"
+)
+assert sum(x for x in split_training if x > 1) == num_gpus or num_gpus == 1, (
+    f"Sum of splits {sum(x for x in split_training if x > 1)} != num_gpus ({num_gpus})"
+)
+
+autocvd(num_gpus=num_gpus)
 
 import os
 
@@ -38,14 +49,7 @@ from jf1uids.option_classes.simulation_config import (
     XAXIS,
     YAXIS,
     ZAXIS,
-)
-
-
-# jf1uids constants
-from jf1uids.option_classes.simulation_config import (
     BACKWARDS,
-    FORWARDS,
-    HLL,
     HLLC,
     MINMOD,
     OSHER,
@@ -54,6 +58,8 @@ from jf1uids.option_classes.simulation_config import (
     BoundarySettings1D,
 )
 
+
+# jf1uids constants
 # units
 from jf1uids import CodeUnits
 from astropy import units as u
@@ -65,6 +71,7 @@ resolution = 600
 multi_gpu = True
 split_turb = (3, 1, 1)
 split_training = (1, 3, 1, 1)
+
 
 def randomized_turbulent_initial_state(
     num_cells: int,

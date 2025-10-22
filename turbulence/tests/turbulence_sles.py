@@ -1,3 +1,7 @@
+"""
+didnt manage it to get it working, assumed jf1uids had an energy conserving scheme
+"""
+
 from autocvd import autocvd
 
 num_gpus = 1

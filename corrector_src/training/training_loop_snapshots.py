@@ -16,17 +16,19 @@ import jax.numpy as jnp
 import jax
 
 
-from corrector_src.training.sol_one_training_snapshots import time_integration_train
-from jf1uids import time_integration
+from corrector_src.training.sol_one_training_snapshots import (
+    time_integration as time_integration_train,
+)
 from corrector_src.training.training_config import TrainingConfig, TrainingParams
 from corrector_src.model.cnn_mhd_model import CorrectorCNN
+from corrector_src.model.fno_hd_force_corrector import TurbulenceSGSForceCorrectorFNO
 from corrector_src.model._cnn_mhd_corrector_options import (
     CNNMHDParams,
     CNNMHDconfig,
     CorrectorConfig,
     CorrectorParams,
 )
-from corrector_src.training.loss import mse_loss
+import corrector_src.loss.sgs_turb_loss as loss
 from corrector_src.data.load_sim import (
     load_states,
     integrate_blast,
@@ -42,6 +44,7 @@ import time
 import hydra
 from hydra.utils import get_original_cwd
 from hydra.utils import instantiate
+from omegaconf import OmegaConf
 
 
 @hydra.main(version_base=None, config_path="../../configs", config_name="config")
@@ -50,7 +53,7 @@ def training_loop(cfg):
     epochs = cfg.training.epochs
     n_look_behind = cfg.training.n_look_behind
     loss_timesteps = jnp.array(cfg.data.snapshot_timepoints)
-    assert loss_timesteps.any() > cfg.data.t_end, (
+    assert not (loss_timesteps > cfg.data.t_end).any(), (
         "found value greater than the end time in the snapshot timepoints"
     )
     # Training configuration
@@ -61,13 +64,46 @@ def training_loop(cfg):
         # use_relative_error=False,
     )
     training_params = TrainingParams(loss_calculation_times=loss_timesteps)
-    loss_function = mse_loss
 
-    # Initialize model and optimizer
+    def loss_function(predicted, ground_truth, config, registered_variables, params):
+        total = 0.0
+        components = {}
+
+        if cfg.training.mse_loss > 0:
+            components["mse"] = loss.mse_loss(predicted, ground_truth)
+            total += cfg.training.mse_loss * components["mse"]
+
+        # if cfg.training.spectral_energy_loss > 0: need to jit the pkl functionalities
+        #     components["spectral"] = loss.spectral_energy_loss(
+        #         predicted, ground_truth, config, registered_variables, params
+        #     )
+        #     total += cfg.training.spectral_energy_loss * components["spectral"]
+
+        if cfg.training.rate_of_strain_loss > 0:
+            components["strain"] = loss.rate_of_strain_loss(
+                predicted, ground_truth, config, registered_variables
+            )
+            total += cfg.training.rate_of_strain_loss * components["strain"]
+
+        return total
+
+    # ─── Creating Model And Optimizer ─────────────────────────────────────
+
+    model_cfg = OmegaConf.to_container(cfg.models, resolve=True)
+    model_name = model_cfg.pop("_name_", None)
+
     key = jax.random.PRNGKey(cfg.training.rng_key)
-    model = instantiate(cfg.models, key=key)
+    model = instantiate(model_cfg, key=key)
 
     neural_net_params, neural_net_static = eqx.partition(model, eqx.is_array)
+    trainable_params = sum(
+        x.size
+        for x in jax.tree_util.tree_leaves(eqx.filter(neural_net_params, eqx.is_array))
+    )
+    print(
+        f"Initialized model '{model_name}' successfully with # of params {trainable_params}"
+    )
+
     corrector_config = CorrectorConfig(corrector=True, network_static=neural_net_static)
     corrector_params = CorrectorParams(network_params=neural_net_params)
     optimizer = optax.chain(
@@ -101,9 +137,9 @@ def training_loop(cfg):
     #         ground_truth = load_states(filepath)
 
     gt_cfg_data = cfg.data
-    gt_cfg_data.debug = False
+    # gt_cfg_data.debug = False
     dataset_creator = dataset(gt_cfg_data.scenarios, gt_cfg_data)
-
+    print(f"using data {dataset_creator.scenario_list}")
     if cfg.training.early_stopping:
         best_loss = float("inf")
         best_params = neural_net_params
@@ -138,26 +174,30 @@ def training_loop(cfg):
     #         corrector_config=corrector_config,
     #         corrector_params=corrector_params,
     #     )
-
+    is_nan_in_hr_data = True
     for i in range(epochs):
         if cfg.data.generate_data_on_fly:
-            (
-                ground_truth,
+            while is_nan_in_hr_data:
                 (
-                    initial_state_lr,
-                    initial_config_lr,
-                    initial_params_lr,
-                    initial_helper_data_lr,
-                    initial_registered_variables_lr,
-                ),
-            ) = dataset_creator.train_initializator(
-                resolution=cfg.data.hr_res,
-                downscale=cfg.data.downscaling_factor,
-                rng_seed=None,
-                # scenario selection if needed
-                corrector_config=corrector_config,
-                corrector_params=corrector_params,
-            )
+                    ground_truth,
+                    (
+                        initial_state_lr,
+                        initial_config_lr,
+                        initial_params_lr,
+                        initial_helper_data_lr,
+                        initial_registered_variables_lr,
+                    ),
+                ) = dataset_creator.train_initializator(
+                    resolution=cfg.data.hr_res,
+                    downscale=cfg.data.downscaling_factor,
+                    rng_seed=None,
+                    # scenario selection if needed
+                    corrector_config=corrector_config,
+                    corrector_params=corrector_params,
+                )
+                is_nan_in_hr_data = jnp.any(jnp.isnan(ground_truth))
+                if is_nan_in_hr_data:
+                    print("found nan in hr_data repeating the calculation")
         else:
             initial_params_lr = initial_params_lr._replace(
                 corrector_params=corrector_params
@@ -211,7 +251,7 @@ def training_loop(cfg):
     plt.close()
 
     final_model = eqx.combine(new_network_params, neural_net_static)
-    eqx.tree_serialise_leaves("cnn_model.eqx", final_model)
+    eqx.tree_serialise_leaves(f"{model_name}.eqx", final_model)
     np.savez(
         "losses.npz",
         n_look_behind=np.array(n_look_behind),

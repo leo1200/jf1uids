@@ -1,3 +1,4 @@
 _target_: corrector_src.model.cnn_mhd_model.CorrectorCNN
+__name__: "cnn"
 in_channels: 8
 hidden_channels: 16

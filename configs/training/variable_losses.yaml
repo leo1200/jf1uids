@@ -1,0 +1,11 @@
+epochs : 300
+n_look_behind : 10
+learning_rate: 1e-3
+return_full_sim : False
+return_full_sim_epoch_interval : 10
+rng_key : 60
+debug: False
+mse_loss: 1
+spectral_energy_loss: 0.01
+rate_of_strain_loss: 0.01
+early_stopping: False

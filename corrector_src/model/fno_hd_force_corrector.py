@@ -1,12 +1,18 @@
 import jax
 import equinox as eqx
+from jaxtyping import Array, Float, PRNGKeyArray
 import jax.numpy as jnp
 
-# equinox_spectral_conv3d.py
-import math
-from typing import Optional
+# Simulation framework imports
+from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfig
+from jf1uids.option_classes.simulation_params import SimulationParams
 
-from jaxtyping import Array, Float, PRNGKeyArray
+# Physics utilities
+from jf1uids._physics_modules._mhd._vector_maths import curl2D, curl3D
+from typing import Optional
+import math
+from jf1uids.time_stepping._utils import _unpad
 
 
 class SpectralConv3d(eqx.Module):
@@ -42,7 +48,7 @@ class SpectralConv3d(eqx.Module):
         modes3: int,
         shifting_modes: int = 0,
         *,
-        key: Optional[jax.random.KeyArray] = None,
+        key: Optional[PRNGKeyArray] = None,
     ):
         if key is None:
             key = jax.random.PRNGKey(0)
@@ -63,7 +69,7 @@ class SpectralConv3d(eqx.Module):
             k_r, k_i = jax.random.split(key)
             r = jax.random.normal(k_r, shape)
             i = jax.random.normal(k_i, shape)
-            return (scale * (r + 1j * i)).astype(jnp.complex64)
+            return scale * (r + 1j * i)  # not supported in jax .astype(jnp.complex64)
 
         wshape = (
             self.in_channels,
@@ -82,7 +88,7 @@ class SpectralConv3d(eqx.Module):
         # x_ft_region: (batch, in_c, kx, ky, kz)
         # w: (in_c, out_c, kx, ky, kz)
         # returns (batch, out_c, kx, ky, kz)
-        return jnp.einsum("bixyz,ioxyz->boxyz", x_ft_region, w)
+        return jnp.einsum("ixyz,ioxyz->oxyz", x_ft_region, w)
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """
@@ -95,14 +101,11 @@ class SpectralConv3d(eqx.Module):
         out: jnp.ndarray
             shape (batch, out_channels, nx, ny, nz) real-valued output.
         """
-        assert x.ndim == 5, "input must be (batch, in_c, nx, ny, nz)"
-        batch, in_c, nx, ny, nz = x.shape
+        in_c, nx, ny, nz = x.shape
         assert in_c == self.in_channels
 
         # rfftn keeps kz >= 0 (last axis reduced to nz//2 + 1)
-        x_ft = jnp.fft.rfftn(
-            x, axes=(-3, -2, -1)
-        )  # shape: (b, in_c, nx, ny, nz//2 + 1)
+        x_ft = jnp.fft.rfftn(x, axes=(-3, -2, -1))  # shape: (in_c, nx, ny, nz//2 + 1)
 
         # compute how many modes we'll actually use (bounded by available spectrum)
         # note: for nx, we treat available kx indices as nx (full signed range), but usable positive half is nx//2
@@ -129,7 +132,7 @@ class SpectralConv3d(eqx.Module):
 
         # prepare out FT buffer at the same resolution as if we would call irfftn with the original sizes
         out_ft = jnp.zeros(
-            (batch, self.out_channels, nx, ny, nz // 2 + 1), dtype=jnp.complex64
+            (self.out_channels, nx, ny, nz // 2 + 1), dtype=jnp.complex64
         )
 
         # Quadrant 1: (+kx, +ky)
@@ -182,7 +185,7 @@ class FNO3dLayer(eqx.Module):
         modes3: int,
         shifting_modes: int = 0,
         *,
-        key: jax.random.KeyArray = None,
+        key: PRNGKeyArray = None,
     ):
         if key is None:
             key = jax.random.PRNGKey(0)
@@ -200,40 +203,39 @@ class FNO3dLayer(eqx.Module):
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """
-        x: (batch, in_channels, nx, ny, nz)
-        returns: (batch, out_channels, nx, ny, nz)
+        x: (in_channels, nx, ny, nz)
+        returns: (out_channels, nx, ny, nz)
         """
         # spectral convolution
         x_spec = self.spectral_conv(x)
 
         # pointwise linear
-        x_lin = (
-            jnp.einsum("bixyz,io->boxyz", x, self.w) + self.b[None, :, None, None, None]
-        )
+        x_lin = jnp.einsum("ixyz,io->oxyz", x, self.w) + self.b[:, None, None, None]
 
         return x_spec + x_lin
 
 
 class FNO(eqx.Module):
-    layers: list
-    activation: callable = eqx.static_field()
+    layers: eqx.nn.Sequential
+    activation: callable = eqx.field(static=True)
 
     def __init__(
         self,
         in_channels: int,
         hidden_channels: int,
+        out_channels: int,
         n_fourier_layers: int,
         fourier_modes: int,
         shifting_modes: int,
-        key: jax.random.KeyArray,
+        key: PRNGKeyArray,
         activation=jax.nn.gelu,
     ):
         self.activation = activation
         keys = jax.random.split(key, n_fourier_layers + 2)
-        self.layers = []
+        layers = []
 
         # Initial Conv3d layer
-        self.layers.append(
+        layers.append(
             eqx.nn.Conv3d(
                 in_channels=in_channels,
                 out_channels=hidden_channels,
@@ -245,7 +247,7 @@ class FNO(eqx.Module):
 
         # Fourier layers with residual connections
         for i in range(n_fourier_layers):
-            self.layers.append(
+            layers.append(
                 FNO3dLayer(
                     in_channels=hidden_channels,
                     out_channels=hidden_channels,
@@ -258,15 +260,16 @@ class FNO(eqx.Module):
             )
 
         # Final Conv3d layer
-        self.layers.append(
+        layers.append(
             eqx.nn.Conv3d(
                 in_channels=hidden_channels,
-                out_channels=in_channels,
+                out_channels=out_channels,
                 kernel_size=3,
                 padding=1,
                 key=keys[-1],
             )
         )
+        self.layers = eqx.nn.Sequential(layers=layers)
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         out = self.layers[0](x)
@@ -277,3 +280,132 @@ class FNO(eqx.Module):
             out = self.activation(out + y)
         out = self.layers[-1](out)
         return out
+
+
+class TurbulenceSGSForceCorrectorFNO(eqx.Module):
+    """
+    A turbulence subgrid-scale (SGS) force corrector that uses an FNO-based model
+    to compute corrections to the primitive state.
+
+    The model learns to predict a correction field ,
+    from which a magnetic correction is derived via curl operations.
+    """
+
+    fno: FNO
+    cambridge_approach: bool = True  # from paper 10.1017/jfm.2022.738
+
+    def __init__(
+        self,
+        # dimensionality: int,
+        # out_channels: int,
+        hidden_channels: int,
+        n_fourier_layers: int,
+        fourier_modes: int,
+        shifting_modes: int,
+        *,
+        key: PRNGKeyArray,
+    ):
+        """Initialize the FNO-based turbulence corrector."""
+        if self.cambridge_approach:
+            in_channels = 6  # 3 velocities + 3 pressure gradients
+        else:
+            in_channels = 4  # 3 velocities + presure
+            # should i add the density though???
+
+        self.fno = FNO(
+            in_channels=in_channels,
+            hidden_channels=hidden_channels,
+            out_channels=3,  # for the moment just going to ouput a 3D force field
+            n_fourier_layers=n_fourier_layers,
+            fourier_modes=fourier_modes,
+            shifting_modes=shifting_modes,
+            key=key,
+        )
+
+    def preprocessing(
+        self,
+        primitive_state: STATE_TYPE,
+        config: SimulationConfig,
+        registered_variables: RegisteredVariables,
+    ) -> Array:
+        """Extracts velocity components and pressure gradients."""
+        vel_idx = registered_variables.velocity_index
+        p_idx = registered_variables.pressure_index
+        nc = config.num_ghost_cells
+        # Extract velocity field (u, v, w)
+        velocity = primitive_state[vel_idx, ...]
+        p = primitive_state[p_idx, ...]
+
+        if not self.cambridge_approach:
+            # return primitive_state (in case i decide to also return the density)
+            return jnp.stack([velocity, p], axis=0)
+
+        # Compute pressure gradients ∇p using central differences
+        dx = config.grid_spacing
+
+        grad_p = []
+        grad_px = (p[2 * nc :, nc:-nc, nc:-nc] - p[: -2 * nc, nc:-nc, nc:-nc]) / (
+            2 * dx
+        )
+        grad_py = (p[nc:-nc, 2 * nc :, nc:-nc] - p[nc:-nc, : -2 * nc, nc:-nc]) / (
+            2 * dx
+        )
+        grad_pz = (
+            (p[nc:-nc, nc:-nc, 2 * nc :] - p[nc:-nc, nc:-nc, : -2 * nc]) / (2 * dx)
+            if config.dimensionality == 3
+            else jnp.zeros_like(grad_px)
+        )
+        grad_p = jnp.stack([grad_px, grad_py, grad_pz], axis=0)
+        velocity = velocity[:, nc:-nc, nc:-nc, nc:-nc]
+        inputs = jnp.concatenate([velocity, grad_p], axis=0)
+        return inputs
+
+    def postprocessing(
+        self,
+        primitive_state: STATE_TYPE,
+        registered_variables: RegisteredVariables,
+    ):
+        return primitive_state
+
+    def __call__(
+        self,
+        primitive_state: STATE_TYPE,
+        config: SimulationConfig,
+        registered_variables: RegisteredVariables,
+        params: SimulationParams,
+        time_step: Float[Array, ""],
+    ):
+        """
+        Compute SGS force corrections to the primitive state.
+
+        Args:
+            primitive_state: [C, X, Y, Z] array (C = physical variables)
+            config: Simulation configuration
+            registered_variables: Registered variable indices
+            params: Simulation parameters
+            time_step: Simulation time step (scalar)
+        """
+
+        # === Preprocessing ===
+        x = self.preprocessing(
+            primitive_state=primitive_state,
+            config=config,
+            registered_variables=registered_variables,
+        )
+
+        # === FNO Forward Pass ===
+        forces = self.fno(x)
+
+        # === Postprocessing ===
+        x = self.postprocessing(
+            primitive_state=primitive_state, registered_variables=registered_variables
+        )
+        # === Apply correction ===
+
+        nc = config.num_ghost_cells
+        for i, v_index in enumerate(registered_variables.velocity_index):
+            primitive_state = primitive_state.at[v_index, nc:-nc, nc:-nc, nc:-nc].add(
+                forces[i] * time_step
+            )
+
+        return primitive_state

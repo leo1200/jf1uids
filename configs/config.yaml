@@ -1,11 +1,11 @@
 defaults:
   - _self_
-  - training: basic_training
-  - data: data
-  - models: cnn
+  - training: variable_losses
+  - data: turbulence
+  - models: fno
 
 experiment:
-  name: "experiment_1"
+  name: "turbulence_force_corrector"
 
 data:
   debug: ${training.debug}
@@ -14,6 +14,6 @@ hydra:
   job:
     chdir: true
   run:
-    dir: experiments/${experiment.name}/${now:%Y-%m-%d}_${now:%H-%M-%S}_${training.n_look_behind}
+    dir: experiments/${experiment.name}/${now:%Y-%m-%d}_${now:%H-%M-%S}
   sweep:
     dir: experiments/${experiment.name}/multirun/${now:%Y-%m-%d}_${now:%H-%M-%S}_nlook_${training.n_look_behind}
