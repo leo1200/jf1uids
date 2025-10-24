@@ -13,7 +13,7 @@ from jf1uids.option_classes.simulation_config import STATE_TYPE
 # jf1uids classes
 from jf1uids._physics_modules._cosmic_rays.cosmic_ray_options import CosmicRayParams
 from jf1uids.data_classes.simulation_helper_data import HelperData
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.variable_registry.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import SimulationConfig
 
 # jf1uids constants

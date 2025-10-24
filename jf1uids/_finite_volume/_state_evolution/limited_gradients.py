@@ -14,7 +14,7 @@ from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.option_classes.simulation_config import CARTESIAN, MINMOD, OSHER, DOUBLE_MINMOD, SUPERBEE, SPHERICAL, STATE_TYPE, STATE_TYPE_ALTERED, VAN_ALBADA, VAN_ALBADA_PP, SimulationConfig
 
 # limiter imports
-from jf1uids._state_evolution.limiters import _double_minmod, _minmod, _superbee, _van_albada_limiter
+from jf1uids._finite_volume._state_evolution.limiters import _double_minmod, _minmod, _superbee, _van_albada_limiter
 
 
 # @jaxtyped(typechecker=typechecker)

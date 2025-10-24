@@ -1,7 +1,7 @@
 from typing import Union
-from jf1uids.fluid_equations.euler import _euler_flux
-from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, speed_of_sound
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids._fluid_equations._fluxes import _euler_flux
+from jf1uids._fluid_equations._equations import conserved_state_from_primitive, speed_of_sound
+from jf1uids.variable_registry.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfig
 
 

@@ -1,4 +1,4 @@
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.variable_registry.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import FIELD_TYPE, STATE_TYPE, SimulationConfig
 
 from typing import Union

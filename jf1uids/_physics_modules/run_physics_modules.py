@@ -18,7 +18,7 @@ from jf1uids._physics_modules._neural_net_force._neural_net_force import (
 )
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids._geometry.boundaries import _boundary_handler
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.variable_registry.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import (
     SPHERICAL,
     STATE_TYPE,

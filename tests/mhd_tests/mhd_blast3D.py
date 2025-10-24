@@ -28,7 +28,7 @@ from jf1uids.option_classes.simulation_config import DOUBLE_MINMOD, HLLC_LM, LAX
 import numpy as np
 from matplotlib.colors import LogNorm
 
-from jf1uids._physics_modules._mhd._magnetic_field_update import magnetic_update
+from jf1uids._finite_volume._magnetic_update._magnetic_field_update import magnetic_update
 
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 

@@ -25,7 +25,7 @@ from jf1uids.option_classes import WindConfig
 from jf1uids._physics_modules._cooling.cooling_options import EXPLICIT_COOLING, IMPLICIT_COOLING, NEURAL_NET_COOLING, PIECEWISE_POWER_LAW, SIMPLE_POWER_LAW, CoolingConfig, CoolingCurveConfig, CoolingNetConfig, CoolingNetParams, CoolingParams, PiecewisePowerLawParams, SimplePowerLawParams
 
 from jf1uids import get_helper_data
-from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, primitive_state_from_conserved
+from jf1uids._fluid_equations._equations import conserved_state_from_primitive, primitive_state_from_conserved
 from jf1uids import get_registered_variables
 from jf1uids.option_classes.simulation_config import BACKWARDS, FORWARDS, finalize_config
 

@@ -11,15 +11,15 @@ from typing import Union
 # general jf1uids
 from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import speed_of_sound_crs
 from jf1uids._stencil_operations._stencil_operations import _stencil_add
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.variable_registry.registered_variables import RegisteredVariables
 
 # fluid stuff
-from jf1uids.fluid_equations.fluid import (
+from jf1uids._fluid_equations._equations import (
     conserved_state_from_primitive,
     get_absolute_velocity,
     speed_of_sound,
 )
-from jf1uids.fluid_equations.euler import _euler_flux
+from jf1uids._fluid_equations._fluxes import _euler_flux
 from jf1uids.option_classes.simulation_config import (
     AM_HLLC,
     HLLC_LM,

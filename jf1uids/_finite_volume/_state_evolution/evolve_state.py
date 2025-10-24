@@ -12,12 +12,12 @@ from beartype import beartype as typechecker
 from typing import Union
 
 # general jf1uids imports
-from jf1uids._riemann_solver._riemann_solver import _riemann_solver
-from jf1uids._physics_modules._mhd._magnetic_field_update import magnetic_update
+from jf1uids._finite_volume._riemann_solver._riemann_solver import _riemann_solver
+from jf1uids._finite_volume._magnetic_update._magnetic_field_update import magnetic_update
 from jf1uids._physics_modules._self_gravity._self_gravity import _apply_self_gravity
 from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.data_classes.simulation_helper_data import HelperData
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.variable_registry.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import (
     CARTESIAN,
     RK2_SSP,
@@ -29,17 +29,17 @@ from jf1uids.option_classes.simulation_config import (
 )
 
 from jf1uids._geometry.geometric_terms import _pressure_nozzling_source
-from jf1uids._state_evolution.reconstruction import (
+from jf1uids._finite_volume._state_evolution.reconstruction import (
     _reconstruct_at_interface_split,
     _reconstruct_at_interface_unsplit,
     _reconstruct_at_interface_unsplit_single,
 )
 from jf1uids._geometry.boundaries import _boundary_handler
-from jf1uids.fluid_equations.fluid import (
+from jf1uids._fluid_equations._equations import (
     primitive_state_from_conserved,
     conserved_state_from_primitive,
 )
-from jf1uids._riemann_solver._lax_friedrichs import _lax_friedrichs_solver
+from jf1uids._finite_volume._riemann_solver._lax_friedrichs import _lax_friedrichs_solver
 from jf1uids.option_classes.simulation_params import SimulationParams
 
 # -------------------------------------------------------------
@@ -486,7 +486,7 @@ def _evolve_gas_state_unsplit(
 
 # @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
-def _evolve_state(
+def _evolve_state_fv(
     primitive_state: STATE_TYPE,
     dt: Float[Array, ""],
     gamma: Union[float, Float[Array, ""]],

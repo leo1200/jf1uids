@@ -11,7 +11,7 @@ from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import (
     total_energy_from_primitives_with_crs,
     total_pressure_from_conserved_with_crs,
 )
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.variable_registry.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import (
     STATE_TYPE,
     SimulationConfig,

@@ -21,7 +21,7 @@ from jf1uids.option_classes.simulation_config import (
 
 # initialization functions
 from jf1uids.data_classes.simulation_helper_data import get_helper_data
-from jf1uids.fluid_equations.registered_variables import get_registered_variables
+from jf1uids.variable_registry.registered_variables import get_registered_variables
 from jf1uids.option_classes.simulation_config import finalize_config
 from jf1uids.initial_condition_generation.construct_primitive_state import construct_primitive_state
 

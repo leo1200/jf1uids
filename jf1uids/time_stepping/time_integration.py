@@ -22,23 +22,23 @@ from jf1uids.option_classes.simulation_config import BACKWARDS, FORWARDS, STATE_
 # jf1uids containers
 from jf1uids.option_classes.simulation_config import SimulationConfig
 from jf1uids.data_classes.simulation_helper_data import HelperData, get_helper_data
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.variable_registry.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_params import SimulationParams
 from jf1uids.data_classes.simulation_snapshot_data import SnapshotData
 
 # jf1uids functions
-from jf1uids._state_evolution.evolve_state import _evolve_state
+from jf1uids._finite_volume._state_evolution.evolve_state import _evolve_state_fv
 from jf1uids._physics_modules.run_physics_modules import _run_physics_modules
-from jf1uids.time_stepping._timestep_estimator import (
+from jf1uids._finite_volume._timestep_estimation._timestep_estimator import (
     _cfl_time_step,
     _source_term_aware_time_step,
 )
-from jf1uids.fluid_equations.total_quantities import (
+from jf1uids._fluid_equations.total_quantities import (
     calculate_internal_energy,
     calculate_radial_momentum,
     calculate_total_mass,
 )
-from jf1uids.fluid_equations.total_quantities import (
+from jf1uids._fluid_equations.total_quantities import (
     calculate_total_energy,
     calculate_kinetic_energy,
     calculate_gravitational_energy,
@@ -601,7 +601,7 @@ def _time_integration(
         )
 
         # EVOLVE THE STATE
-        primitive_state = _evolve_state(
+        primitive_state = _evolve_state_fv(
             primitive_state,
             dt,
             params.gamma,

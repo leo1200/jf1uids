@@ -5,17 +5,17 @@ import jax
 from equinox.internal._loop.checkpointed import checkpointed_while_loop
 
 from jf1uids._geometry.boundaries import _boundary_handler
-from jf1uids._physics_modules._mhd._vector_maths import (
+from jf1uids._finite_volume._magnetic_update._vector_maths import (
     cross,
     curl2D,
     curl3D,
     divergence2D,
 )
-from jf1uids.fluid_equations.fluid import (
+from jf1uids._fluid_equations._equations import (
     pressure_from_energy,
     total_energy_from_primitives,
 )
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.variable_registry.registered_variables import RegisteredVariables
 
 # runtime debugging
 from jax.experimental import checkify

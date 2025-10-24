@@ -15,6 +15,10 @@ from jaxtyping import Array, Float
 
 # ===================== constant definition =====================
 
+# solver modes
+FINITE_VOLUME = 0
+FINITE_DIFFERENCE = 1
+
 # differentiation modes
 FORWARDS = 0
 BACKWARDS = 1
@@ -141,7 +145,12 @@ class SimulationConfig(NamedTuple):
     the simulation where changes necessitate recompilation.
     """
 
-    # Simulation parameters
+    # Static simulation parameters
+
+    #: Basic solver mode, either finite volume or finite difference.
+    #: FINITE_DIFFERENCE is for now only planned for the HOW_MHD
+    #: scheme (Jeongbhin Seo, Dongsu Ryu, 2023).
+    solver_mode: int = FINITE_VOLUME
 
     #: Debug runtime errors, throws exceptions
     #: on e.g. negative pressure or density.

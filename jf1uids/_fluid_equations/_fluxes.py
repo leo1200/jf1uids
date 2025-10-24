@@ -9,11 +9,11 @@ from typing import Union
 from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import (
     total_energy_from_primitives_with_crs,
 )
-from jf1uids.fluid_equations.fluid import (
+from jf1uids._fluid_equations._equations import (
     get_absolute_velocity,
     total_energy_from_primitives,
 )
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.variable_registry.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfig
 
 

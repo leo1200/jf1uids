@@ -21,10 +21,10 @@ from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import speed_of_so
 from jf1uids._physics_modules._self_gravity._poisson_solver import (
     _compute_gravitational_potential,
 )
-from jf1uids._riemann_solver._riemann_solver import _riemann_solver
+from jf1uids._finite_volume._riemann_solver._riemann_solver import _riemann_solver
 from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.data_classes.simulation_helper_data import HelperData
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.variable_registry.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import (
     DONOR_ACCOUNTING,
     HLLC_LM,
@@ -48,13 +48,13 @@ from jf1uids.option_classes.simulation_config import (
 
 # jf1uids functions
 from jf1uids._geometry.boundaries import _boundary_handler
-from jf1uids._riemann_solver.hll import _hll_solver, _hllc_solver
-from jf1uids._state_evolution.reconstruction import (
+from jf1uids._finite_volume._riemann_solver.hll import _hll_solver, _hllc_solver
+from jf1uids._finite_volume._state_evolution.reconstruction import (
     _reconstruct_at_interface_split,
     _reconstruct_at_interface_unsplit,
 )
-from jf1uids.fluid_equations.euler import _euler_flux
-from jf1uids.fluid_equations.fluid import (
+from jf1uids._fluid_equations._fluxes import _euler_flux
+from jf1uids._fluid_equations._equations import (
     conserved_state_from_primitive,
     primitive_state_from_conserved,
     speed_of_sound,

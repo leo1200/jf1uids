@@ -37,9 +37,9 @@ from jf1uids._physics_modules._cooling.cooling_options import (
     CoolingCurveConfig,
     CoolingParams,
 )
-from jf1uids._state_evolution.limited_gradients import _calculate_limited_gradients
+from jf1uids._finite_volume._state_evolution.limited_gradients import _calculate_limited_gradients
 from jf1uids.data_classes.simulation_helper_data import HelperData
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.variable_registry.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import FIELD_TYPE, STATE_TYPE, SimulationConfig
 
 import jax.numpy as jnp

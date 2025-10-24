@@ -9,7 +9,7 @@ from beartype import beartype as typechecker
 from typing import Union
 
 # jf1uids classes
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.variable_registry.registered_variables import RegisteredVariables
 
 # NOTE: currently only supports 1d setups, TODO: generalize
 

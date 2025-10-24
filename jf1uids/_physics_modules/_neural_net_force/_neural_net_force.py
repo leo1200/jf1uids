@@ -11,7 +11,7 @@ from beartype import beartype as typechecker
 from typing import Tuple, Union
 
 from jf1uids.data_classes.simulation_helper_data import HelperData
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.variable_registry.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import STATE_TYPE, SimulationConfig
 from jf1uids.option_classes.simulation_params import SimulationParams
 

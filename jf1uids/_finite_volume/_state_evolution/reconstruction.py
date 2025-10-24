@@ -13,7 +13,7 @@ from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import speed_of_so
 from jf1uids._physics_modules._self_gravity._poisson_solver import (
     _compute_gravitational_potential,
 )
-from jf1uids._state_evolution.limiters import _van_albada_limiter, _minmod
+from jf1uids._finite_volume._state_evolution.limiters import _van_albada_limiter, _minmod
 from jf1uids._stencil_operations._stencil_operations import _stencil_add
 from jf1uids.option_classes.simulation_config import (
     CARTESIAN,
@@ -25,13 +25,13 @@ from jf1uids.option_classes.simulation_config import (
     SimulationConfig,
 )
 from jf1uids.data_classes.simulation_helper_data import HelperData
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids.variable_registry.registered_variables import RegisteredVariables
 
 # speed of sound calculation
-from jf1uids.fluid_equations.fluid import speed_of_sound
+from jf1uids._fluid_equations._equations import speed_of_sound
 
 # limited gradients
-from jf1uids._state_evolution.limited_gradients import _calculate_limited_gradients
+from jf1uids._finite_volume._state_evolution.limited_gradients import _calculate_limited_gradients
 from jf1uids.option_classes.simulation_params import SimulationParams
 
 

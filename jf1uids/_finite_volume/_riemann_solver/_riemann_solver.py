@@ -10,13 +10,13 @@ from typing import Union
 
 # general jf1uids
 from jf1uids._physics_modules._cosmic_rays.cr_fluid_equations import speed_of_sound_crs
-from jf1uids._riemann_solver._lax_friedrichs import _lax_friedrichs_solver
-from jf1uids._riemann_solver.hll import _am_hllc_solver, _hll_solver, _hllc_solver
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
+from jf1uids._finite_volume._riemann_solver._lax_friedrichs import _lax_friedrichs_solver
+from jf1uids._finite_volume._riemann_solver.hll import _am_hllc_solver, _hll_solver, _hllc_solver
+from jf1uids.variable_registry.registered_variables import RegisteredVariables
 
 # fluid stuff
-from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, speed_of_sound
-from jf1uids.fluid_equations.euler import _euler_flux
+from jf1uids._fluid_equations._equations import conserved_state_from_primitive, speed_of_sound
+from jf1uids._fluid_equations._fluxes import _euler_flux
 from jf1uids.option_classes.simulation_config import (
     AM_HLLC,
     HLL,
