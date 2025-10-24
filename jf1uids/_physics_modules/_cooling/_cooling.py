@@ -27,15 +27,20 @@ import equinox as eqx
 
 from jf1uids._physics_modules._cooling.cooling_options import (
     COOLING_CURVE_TYPE,
+    EXPLICIT_COOLING,
+    IMPLICIT_COOLING,
     NEURAL_NET_COOLING,
     NEURAL_NET_COOLING_WITH_DENSITY,
     PIECEWISE_POWER_LAW,
     SIMPLE_POWER_LAW,
+    CoolingConfig,
     CoolingCurveConfig,
     CoolingParams,
 )
+from jf1uids._state_evolution.limited_gradients import _calculate_limited_gradients
+from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import FIELD_TYPE, STATE_TYPE
+from jf1uids.option_classes.simulation_config import FIELD_TYPE, STATE_TYPE, SimulationConfig
 
 import jax.numpy as jnp
 
@@ -594,15 +599,62 @@ def update_temperature_explicit(
         * time_step
     )
 
+@partial(jax.jit, static_argnames=("cooling_curve_config",))
+def update_temperature_implicit(
+    density: FIELD_TYPE,
+    temperature: FIELD_TYPE,
+    time_step: float,
+    hydrogen_mass_fraction: float,
+    metal_mass_fraction: float,
+    gamma: float,
+    cooling_curve_config: CoolingCurveConfig,
+    cooling_curve_params: COOLING_CURVE_TYPE,
+) -> FIELD_TYPE:
 
-@partial(jax.jit, static_argnames=("cooling_curve_config", "registered_variables"))
+    def implicit_eq(T_new):
+        return (temperature
+        + dtemperature_dt(
+            density,
+            T_new,
+            hydrogen_mass_fraction,
+            metal_mass_fraction,
+            gamma,
+            cooling_curve_config,
+            cooling_curve_params,
+        ) * time_step)
+
+    # use a simple fixed point iteration
+    # - maybe do newton or bisection method later
+    max_iter = 50
+    tol = 1e-6
+
+    def cond_fun(state):
+        i, T_old = state
+        T_candidate = implicit_eq(T_old)
+        diff = jnp.max(jnp.abs(T_candidate - T_old))
+        return (i < max_iter) & (diff > tol)
+
+    def body_fun(state):
+        i, T_old = state
+        T_new = implicit_eq(T_old)
+        return (i + 1, T_new)
+
+    state = (0, temperature)
+    _, T_final = jax.lax.while_loop(cond_fun, body_fun, state)
+    return T_final
+
+
+@partial(jax.jit, static_argnames=("cooling_config", "registered_variables"))
 def update_pressure_by_cooling(
     primitive_state: STATE_TYPE,
     registered_variables: RegisteredVariables,
-    cooling_curve_config: CoolingCurveConfig,
+    cooling_config: CoolingConfig,
     simulation_params: SimulationParams,
     time_step: float,
 ) -> STATE_TYPE:
+    
+    cooling_curve_config = cooling_config.cooling_curve_config
+
     # get the parameters
     cooling_params = simulation_params.cooling_params
     hydrogen_mass_fraction = cooling_params.hydrogen_mass_fraction
@@ -621,28 +673,28 @@ def update_pressure_by_cooling(
         metal_mass_fraction,
     )
 
-    # update the temperature
-    # new_temperature = update_temperature(
-    #     density,
-    #     temperature,
-    #     time_step,
-    #     hydrogen_mass_fraction,
-    #     metal_mass_fraction,
-    #     gamma,
-    #     cooling_curve_config,
-    #     cooling_params.cooling_curve_params
-    # )
-
-    new_temperature = update_temperature_explicit(
-        density,
-        temperature,
-        time_step,
-        hydrogen_mass_fraction,
-        metal_mass_fraction,
-        gamma,
-        cooling_curve_config,
-        cooling_params.cooling_curve_params,
-    )
+    if cooling_config.cooling_method == IMPLICIT_COOLING:
+        new_temperature = update_temperature_implicit(
+            density,
+            temperature,
+            time_step,
+            hydrogen_mass_fraction,
+            metal_mass_fraction,
+            gamma,
+            cooling_curve_config,
+            cooling_params.cooling_curve_params,
+        )
+    elif cooling_config.cooling_method == EXPLICIT_COOLING:
+        new_temperature = update_temperature_explicit(
+            density,
+            temperature,
+            time_step,
+            hydrogen_mass_fraction,
+            metal_mass_fraction,
+            gamma,
+            cooling_curve_config,
+            cooling_params.cooling_curve_params,
+        )
 
     new_temperature = jnp.where(
         (new_temperature > cooling_params.floor_temperature),
@@ -664,6 +716,127 @@ def update_pressure_by_cooling(
     primitive_state = primitive_state.at[registered_variables.pressure_index].set(
         new_pressure
     )
+
+    # return the updated primitive state
+    return primitive_state
+
+@partial(jax.jit, static_argnames = ("config", "registered_variables"))
+def first_order_pressure_update(
+    primitive_state: STATE_TYPE,
+    registered_variables: RegisteredVariables,
+    config: SimulationConfig,
+    helper_data: HelperData,
+    simulation_params: SimulationParams,
+    time_step: float,
+) -> STATE_TYPE:
+    # dP/dt_cooling = -(gamma - 1) n_e n_H Lambda(T)
+    # with n_e = rho / mu_e, n_H = rho / mu_H
+
+    cooling_curve_config = config.cooling_config.cooling_curve_config
+
+    # get the parameters
+    cooling_params = simulation_params.cooling_params
+    hydrogen_mass_fraction = cooling_params.hydrogen_mass_fraction
+    metal_mass_fraction = cooling_params.metal_mass_fraction
+    gamma = simulation_params.gamma
+
+    # get the density and pressure
+    density = primitive_state[registered_variables.density_index]
+    pressure = primitive_state[registered_variables.pressure_index]
+
+    # get the temperature
+    temperature = get_temperature_from_pressure(
+        density,
+        pressure,
+        hydrogen_mass_fraction,
+        metal_mass_fraction,
+    )
+
+    # get the molecular weights
+    mu, mu_e, mu_H = get_effective_molecular_weights(
+        hydrogen_mass_fraction,
+        metal_mass_fraction,
+    )
+
+    # get limited gradients, support only 1d for now
+    # make cartesion approximation for now
+    # only along x axis for now
+    limited_gradients = _calculate_limited_gradients(primitive_state, config, helper_data, axis = 1)
+
+    # density gradient
+    density_gradient = limited_gradients[registered_variables.density_index]
+
+    # pressure gradient
+    pressure_gradient = limited_gradients[registered_variables.pressure_index]
+
+    # temperature gradient
+    # n = density / mu, T = P / n = P * mu / density
+    temperature_gradient = (pressure_gradient * density - pressure * density_gradient) * mu / density**2
+
+    # finite difference approximation to the cooling rate gradient
+    cooling_rate_gradient = 1/config.grid_spacing * (
+        _cooling_rate(
+            temperature + 0.5 * config.grid_spacing * temperature_gradient,
+            density + 0.5 * config.grid_spacing * density_gradient,
+            cooling_curve_config,
+            cooling_params.cooling_curve_params
+        ) - _cooling_rate(
+            temperature - 0.5 * config.grid_spacing * temperature_gradient,
+            density - 0.5 * config.grid_spacing * density_gradient,
+            cooling_curve_config,
+            cooling_params.cooling_curve_params
+        )
+    )
+
+    # get the cooling rate
+    cooling_rate = _cooling_rate(
+        temperature,
+        density,
+        cooling_curve_config,
+        cooling_params.cooling_curve_params
+    )
+
+    # update the pressure, 0th order currently
+    new_pressure = (
+        pressure - (gamma - 1) / (mu_e * mu_H) * time_step * (
+            density**2 * cooling_rate # 0th order
+            + 1/12 * config.grid_spacing ** 2 * cooling_rate * density_gradient ** 2
+            + 1/6 * config.grid_spacing ** 2 * density * cooling_rate_gradient * density_gradient
+        )
+    )
+
+    # jax.debug.print("mean correction = {corr}, 0th-order = {zeroth}", corr = jnp.mean(
+    #     (+ 1/12 * config.grid_spacing ** 2 * cooling_rate * density_gradient ** 2
+    #     + 1/6 * config.grid_spacing ** 2 * density * cooling_rate_gradient * density_gradient)
+    # ), zeroth = jnp.mean(
+    #     density**2 * cooling_rate
+    # ))
+
+    # calculate the new temperature
+    new_temperature = get_temperature_from_pressure(
+        density,
+        new_pressure,
+        hydrogen_mass_fraction,
+        metal_mass_fraction,
+    )
+
+    # apply the temperature floor
+    new_temperature = jnp.where(
+        (new_temperature > cooling_params.floor_temperature),
+        new_temperature,
+        temperature
+    )
+
+    # recalculate the pressure
+    new_pressure = get_pressure_from_temperature(
+        density,
+        new_temperature,
+        hydrogen_mass_fraction,
+        metal_mass_fraction,
+    )
+
+    # set the new pressure
+    primitive_state = primitive_state.at[registered_variables.pressure_index].set(new_pressure)
 
     # return the updated primitive state
     return primitive_state

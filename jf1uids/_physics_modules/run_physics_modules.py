@@ -9,7 +9,7 @@ from beartype import beartype as typechecker
 from jf1uids._physics_modules._cnn_mhd_corrector._cnn_mhd_corrector import (
     _cnn_mhd_corrector,
 )
-from jf1uids._physics_modules._cooling._cooling import update_pressure_by_cooling
+from jf1uids._physics_modules._cooling._cooling import first_order_pressure_update, update_pressure_by_cooling
 from jf1uids._physics_modules._cosmic_rays.cr_injection import (
     inject_crs_at_strongest_shock,
 )
@@ -96,10 +96,18 @@ def _run_physics_modules(
         primitive_state = update_pressure_by_cooling(
             primitive_state,
             registered_variables,
-            config.cooling_config.cooling_curve_config,
+            config.cooling_config,
             params,
             dt,
         )
+        # primitive_state = first_order_pressure_update(
+        #     primitive_state,
+        #     registered_variables,
+        #     config,
+        #     helper_data,
+        #     params,
+        #     dt
+        # )
 
     if config.neural_net_force_config.neural_net_force:
         primitive_state = _neural_net_force(

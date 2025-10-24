@@ -1,6 +1,8 @@
 # This tests follows the one presented in Fig. 12 in
 # https://doi.org/10.48550/arXiv.2004.10542
 
+# TODO: test if Lax-Friedrichs flux removes the problem of the "small waves"
+
 # ==== GPU selection ====
 from autocvd import autocvd
 autocvd(num_gpus = 1)
@@ -22,9 +24,11 @@ from jf1uids import SimulationParams
 from jf1uids import time_integration
 from jf1uids.initial_condition_generation.construct_primitive_state import construct_primitive_state
 from jf1uids import get_registered_variables
-from jf1uids.option_classes.simulation_config import DOUBLE_MINMOD, HLLC_LM, finalize_config
+from jf1uids.option_classes.simulation_config import DOUBLE_MINMOD, HLLC_LM, LAX_FRIEDRICHS, VAN_ALBADA_PP, finalize_config
 import numpy as np
 from matplotlib.colors import LogNorm
+
+from jf1uids._physics_modules._mhd._magnetic_field_update import magnetic_update
 
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
@@ -47,9 +51,23 @@ def run_blast_simulation(num_cells, B0, theta, phi):
         dimensionality = 3,
         box_size = box_size, 
         num_cells = num_cells,
-        limiter = DOUBLE_MINMOD,
+        limiter = MINMOD,
         riemann_solver = HLL,
         exact_end_time = True,
+        boundary_settings = BoundarySettings(
+            BoundarySettings1D(
+                left_boundary = PERIODIC_BOUNDARY,
+                right_boundary = PERIODIC_BOUNDARY
+            ),
+            BoundarySettings1D(
+                left_boundary = PERIODIC_BOUNDARY,
+                right_boundary = PERIODIC_BOUNDARY
+            ),
+            BoundarySettings1D(
+                left_boundary = PERIODIC_BOUNDARY,
+                right_boundary = PERIODIC_BOUNDARY
+            )
+        ),
     )
 
     helper_data = get_helper_data(config)
@@ -101,7 +119,7 @@ def run_blast_simulation(num_cells, B0, theta, phi):
 
     return initial_state, config, registered_variables, params, helper_data
 
-num_cells = 300
+num_cells = 192
 B0 = 100 / jnp.sqrt(4 * jnp.pi)
 theta = jnp.pi / 2
 phi = jnp.pi / 4
@@ -116,8 +134,6 @@ if run_simulation:
     jnp.save('data/mhd_blast3D.npy', final_state)
 else:
     final_state = jnp.load('data/mhd_blast3D.npy')
-
-print(registered_variables)
 
 # plot
 density = final_state[registered_variables.density_index]
@@ -205,7 +221,7 @@ axs[0, 2].set_ylim(180, 270)
 axs[0, 2].set_title('|B|^2 / 2 along diagonal')
 
 # density along the vertical centerline
-density_center = density[:, num_cells//2, num_cells//2]
+density_center = density[num_cells//2, num_cells//2, :]
 axs[1, 2].plot(jnp.linspace(0, config.box_size, num_cells), density_center)
 axs[1, 2].set_ylabel('density')
 axs[1, 2].set_xlabel('z')

@@ -1,7 +1,7 @@
 from autocvd import autocvd
+autocvd(num_gpus = 1)
 
 from jf1uids.initial_condition_generation.construct_primitive_state import construct_primitive_state
-autocvd(num_gpus = 1)
 
 from jf1uids._physics_modules._cooling._cooling import get_pressure_from_temperature, get_temperature_from_pressure
 from jf1uids._physics_modules._cooling._cooling_tables import schure_cooling
@@ -22,7 +22,7 @@ from jf1uids import WindParams
 from jf1uids import SimulationConfig
 from jf1uids import SimulationParams
 from jf1uids.option_classes import WindConfig
-from jf1uids._physics_modules._cooling.cooling_options import NEURAL_NET_COOLING, PIECEWISE_POWER_LAW, SIMPLE_POWER_LAW, CoolingConfig, CoolingCurveConfig, CoolingNetConfig, CoolingNetParams, CoolingParams, PiecewisePowerLawParams, SimplePowerLawParams
+from jf1uids._physics_modules._cooling.cooling_options import EXPLICIT_COOLING, IMPLICIT_COOLING, NEURAL_NET_COOLING, PIECEWISE_POWER_LAW, SIMPLE_POWER_LAW, CoolingConfig, CoolingCurveConfig, CoolingNetConfig, CoolingNetParams, CoolingParams, PiecewisePowerLawParams, SimplePowerLawParams
 
 from jf1uids import get_helper_data
 from jf1uids.fluid_equations.fluid import conserved_state_from_primitive, primitive_state_from_conserved
@@ -53,11 +53,12 @@ from matplotlib.gridspec import GridSpec
 
 # options
 plot_problem_setting = True
-run_simulation = False
+run_simulation = True
 train_model = False
 run_high_res_for_error_plot = False
 low_res = 500
-high_res_s = [500, 1000, 2000, 10000, 100000]
+high_res_s = [500, 1000, 2000]
+color_s = ["blue", "orange", "green"]
 num_epochs_corr = [350]
 domain_size = 1.0
 r_inj = 0.01 * domain_size
@@ -199,6 +200,7 @@ def setup_simulation(num_cells, cooling_curve_type, cooling_curve_params, return
         ),
         cooling_config = CoolingConfig(
             cooling = cooling,
+            cooling_method = IMPLICIT_COOLING,
             cooling_curve_config = CoolingCurveConfig(
                 cooling_curve_type = cooling_curve_type,
                 cooling_net_config = CoolingNetConfig(
@@ -362,8 +364,8 @@ for high_res in high_res_s:
 if plot_problem_setting:
 
     # one ax with cooling, one without
-    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-    for high_res in high_res_s:
+    fig, axs = plt.subplots(2, 4, figsize=(18, 9))
+    for high_res, color in zip(high_res_s, color_s):
 
         num_cells = high_res
         
@@ -381,6 +383,8 @@ if plot_problem_setting:
         # load from file
         final_state = jnp.load(f"data/reference_states_no_cooling{high_res}.npy", allow_pickle=True)[-1]
 
+        plot_profiles(axs[0, :], final_state, registered_variables, helper_data, code_units, label = f"jf1uids, {high_res} cells", color = color)
+
         # setup simulation with cooling
         initial_state, config, params, helper_data, registered_variables = setup_simulation(
             num_cells = num_cells,
@@ -394,10 +398,8 @@ if plot_problem_setting:
         # final_state = time_integration(initial_state, config, params, helper_data, registered_variables)
         final_state = jnp.load(f"data/reference_states{high_res}.npy", allow_pickle=True)[-1]
 
-    axs[0].set_title("without cooling")
-    axs[1].set_title("with cooling")
-    axs[0].legend()
-    axs[1].legend()
+        plot_profiles(axs[1, :], final_state, registered_variables, helper_data, code_units, label = f"jf1uids, {high_res} cells", color = color)
+
     plt.tight_layout()
     plt.savefig("figures/problem_setting.svg")
 

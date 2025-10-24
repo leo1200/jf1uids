@@ -238,6 +238,9 @@ class SimulationConfig(NamedTuple):
     #: The number of timesteps for the fixed timestep mode.
     num_timesteps: int = 1000
 
+    #: Use a maximum timestep in adaptive timestep mode.
+    use_max_adaptive_timestep: bool = True
+
     #: The differentiation mode one whats to use
     #: the solver in (forwards or backwards).
     differentiation_mode: int = FORWARDS

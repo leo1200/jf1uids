@@ -1,7 +1,7 @@
 import os
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
 
-multi_gpu = False
+multi_gpu = True
 
 if multi_gpu:
     # ==== GPU selection ====
@@ -42,7 +42,7 @@ from jf1uids.option_classes import WindConfig
 from jf1uids.option_classes.simulation_config import BACKWARDS, DONOR_ACCOUNTING, HLL, HLLC, MINMOD, OSHER, PERIODIC_BOUNDARY, SIMPLE_SOURCE_TERM, VARAXIS, XAXIS, YAXIS, ZAXIS, BoundarySettings, BoundarySettings1D, SnapshotSettings
 
 from jf1uids._physics_modules._cooling._cooling_tables import schure_cooling
-from jf1uids._physics_modules._cooling.cooling_options import PIECEWISE_POWER_LAW, CoolingConfig, CoolingCurveConfig, CoolingParams
+from jf1uids._physics_modules._cooling.cooling_options import IMPLICIT_COOLING, PIECEWISE_POWER_LAW, CoolingConfig, CoolingCurveConfig, CoolingParams
 
 # units
 from jf1uids import CodeUnits
@@ -58,6 +58,8 @@ from jf1uids.initial_condition_generation.turbulent_ic_generator import create_t
 
 from jf1uids.option_classes.simulation_config import DOUBLE_MINMOD, FORWARDS, HYBRID_HLLC
 
+from jf1uids.option_classes.simulation_config import finalize_config
+
 
 print("👷 Setting up simulation...")
 
@@ -66,7 +68,7 @@ gamma = 5/3
 
 # spatial domain
 box_size = 1.0
-num_cells = 128
+num_cells = 64
 
 # activate stellar wind
 stellar_wind = True
@@ -76,7 +78,7 @@ turbulence = True
 wanted_rms = 50 * u.km / u.s
 
 # cooling
-cooling = False
+cooling = True
 
 # mhd
 mhd = True
@@ -123,34 +125,17 @@ config = SimulationConfig(
         return_states = False,
         return_final_state = True
     ),
-    self_gravity = True,
-    self_gravity_version = SIMPLE_SOURCE_TERM,
     num_snapshots = 5,
     cooling_config = CoolingConfig(
         cooling = cooling,
+        cooling_method = IMPLICIT_COOLING,
         cooling_curve_config = CoolingCurveConfig(
             cooling_curve_type = PIECEWISE_POWER_LAW
-        )
-    ),
-    boundary_settings =  BoundarySettings(
-        BoundarySettings1D(
-            left_boundary = PERIODIC_BOUNDARY,
-            right_boundary = PERIODIC_BOUNDARY
-        ),
-        BoundarySettings1D(
-            left_boundary = PERIODIC_BOUNDARY,
-            right_boundary = PERIODIC_BOUNDARY
-        ),
-        BoundarySettings1D(
-            left_boundary = PERIODIC_BOUNDARY,
-            right_boundary = PERIODIC_BOUNDARY
         )
     ),
 )
 
 registered_variables = get_registered_variables(config)
-
-from jf1uids.option_classes.simulation_config import finalize_config
 
 code_length = 3 * u.parsec
 code_mass = 1 * u.M_sun
@@ -159,7 +144,6 @@ code_units = CodeUnits(code_length, code_mass, code_velocity)
 
 # time domain
 C_CFL = 0.4
-# 2.5
 
 t_final = 1.0 * 1e4 * u.yr
 t_end = t_final.to(code_units.code_time).value

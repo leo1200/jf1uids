@@ -9,6 +9,10 @@ PIECEWISE_POWER_LAW = 2
 NEURAL_NET_COOLING = 3
 NEURAL_NET_COOLING_WITH_DENSITY = 4
 
+EXPLICIT_COOLING = 1
+IMPLICIT_COOLING = 2
+
+
 class SimplePowerLawParams(NamedTuple):
     factor: float = 1.0
     exponent: float = 1.0
@@ -38,6 +42,7 @@ class CoolingCurveConfig(NamedTuple):
 
 class CoolingConfig(NamedTuple):
     cooling: bool = False
+    cooling_method: int = IMPLICIT_COOLING
     cooling_curve_config: CoolingCurveConfig = CoolingCurveConfig()
 
 class CoolingParams(NamedTuple):

@@ -7,6 +7,7 @@ from functools import partial
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
 from typing import Union
+from jf1uids._physics_modules._stellar_wind.stellar_wind import _wind_injection
 from jf1uids.option_classes.simulation_config import STATE_TYPE, UNSPLIT
 
 # jf1uids containers
@@ -211,7 +212,10 @@ def _cfl_time_step(
         # calculate the time step
         dt = C_CFL * grid_spacing / max_wave_speed
 
-        return jnp.minimum(dt, dt_max)
+        if config.use_max_adaptive_timestep:
+            dt = jnp.minimum(dt, dt_max)
+        
+        return dt
 
 
 # @jaxtyped(typechecker=typechecker)
@@ -251,15 +255,27 @@ def _source_term_aware_time_step(
         params.C_cfl,
     )
 
-    hypothetical_new_state = _run_physics_modules(
-        primitive_state,
-        dt,
-        config,
-        params,
-        helper_data,
-        registered_variables,
-        current_time,
+    # independent of config.use_max_adaptive_timestep
+    dt = jnp.minimum(dt, params.dt_max)
+
+    # ONLY ADD THE STELLAR WIND SOURCE TERM
+    # DO NOT RUN ALL PHYSICS MODULES HERE
+
+    # TODO: HOW TO HANDLE FURTHER SOURCE TERMS?
+
+    hypothetical_new_state = _wind_injection(
+        primitive_state, dt, config, params, helper_data, registered_variables
     )
+
+    # hypothetical_new_state = _run_physics_modules(
+    #     primitive_state,
+    #     dt,
+    #     config,
+    #     params,
+    #     helper_data,
+    #     registered_variables,
+    #     current_time,
+    # )
 
     dt = _cfl_time_step(
         hypothetical_new_state,

@@ -39,7 +39,7 @@ from astropy.constants import m_p
 from jf1uids._physics_modules._stellar_wind.weaver import Weaver
 
 # turbulence
-from jf1uids.initial_condition_generation.turbulent_ic_generatorulent_ic_generator import create_turb_field
+from jf1uids.initial_condition_generation.turbulent_ic_generator import create_turb_field
 
 from jf1uids.option_classes.simulation_config import FORWARDS
 

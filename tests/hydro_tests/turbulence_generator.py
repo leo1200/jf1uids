@@ -49,7 +49,7 @@ from jf1uids.option_classes.simulation_config import PERIODIC_BOUNDARY, Boundary
 
 
 # turbulent ic setup
-from jf1uids.initial_condition_generation.turbulent_ic_generatorulent_ic_generator import create_turb_field
+from jf1uids.initial_condition_generation.turbulent_ic_generator import create_turb_field
 
 # main simulation function
 from jf1uids import time_integration

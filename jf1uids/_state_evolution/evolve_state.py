@@ -353,7 +353,7 @@ def _evolve_gas_state_unsplit_inner(
     # the proper multidimensional limiting
     if config.limiter == VAN_ALBADA_PP:
         # get left and right states along all dimensions
-        primitives_left_interface, primitives_right_interface = _reconstruct_at_interface_unsplit(
+        pls, prs = _reconstruct_at_interface_unsplit(
             primitive_state,
             dt,
             gamma,
@@ -367,8 +367,8 @@ def _evolve_gas_state_unsplit_inner(
         primitive_state = _boundary_handler(primitive_state, config)
 
         if config.limiter == VAN_ALBADA_PP:
-            primitives_left_interface = primitives_left_interface[axis - 1]
-            primitives_right_interface = primitives_right_interface[axis - 1]
+            primitives_left_interface = pls[axis - 1]
+            primitives_right_interface = prs[axis - 1]
         else:
             primitives_left_interface, primitives_right_interface = (
                 _reconstruct_at_interface_unsplit_single(
@@ -386,6 +386,7 @@ def _evolve_gas_state_unsplit_inner(
             registered_variables,
             axis,
         )
+
         # update the conserved variables
         conserved_change = (
             1

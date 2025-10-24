@@ -8,6 +8,7 @@ package-lock.json
 
 tests/cooling_corrector/data
 tests/mhd_tests/data
+tests/lancaster/data
 
 tests/cooling_corrector/models
 
