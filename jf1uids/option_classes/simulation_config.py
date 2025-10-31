@@ -96,9 +96,6 @@ FIELD_TYPE = Union[
     Float[Array, "num_cells_x num_cells_y num_cells_z"],
 ]
 
-# =============================================================
-
-
 class SnapshotSettings(NamedTuple):
     """Settings for the snapshot output of the simulation."""
 

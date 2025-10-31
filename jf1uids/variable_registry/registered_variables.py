@@ -6,7 +6,7 @@ from jaxtyping import Array, Float, Int
 
 from typing import Union
 
-from jf1uids.option_classes.simulation_config import SimulationConfig
+from jf1uids.option_classes.simulation_config import XAXIS, YAXIS, ZAXIS, SimulationConfig
 
 
 class StaticIntVector(NamedTuple):
@@ -14,13 +14,40 @@ class StaticIntVector(NamedTuple):
     y: int
     z: int
 
+# =============================================================
+
+"""
+We perform simulations in multiple spatial dimensions. To an axis,
+e.g. the x-axis, corresponds the axis in the array storing the state
+(along which e.g. x varies) but also fields in the state related
+to that axis, e.g. the x-velocity or the x-magnetic field component.
+
+A common pattern will be a loop over the spatial dimensions where
+we exactly need to know this information.
+"""
+
+class AxisInfo(NamedTuple):
+    # corresponding axis in the array
+    axis_in_array: int
+
+    # corresponding field indices
+    velocity_index: int
+    magnetic_index: int
+
+# =============================================================
+
 
 class RegisteredVariables(NamedTuple):
-    """The registered variables are the variables that are
+    """
+    The registered variables are the variables that are
     stored in the state array. The order of the variables
     in the state array is important and should be consistent
     throughout the code.
     """
+
+    #: Axes information. For now only
+    #: implemented for 3D simulations.
+    axes_info: tuple[AxisInfo, ...] = ()
 
     #: Number of variables
     num_vars: int = 3
@@ -34,11 +61,21 @@ class RegisteredVariables(NamedTuple):
     velocity_index: Union[int, StaticIntVector] = 1
     # in e.g. 3D, we have three velocity components, each with its own index
 
+    #: Momentum density index, same as velocity index
+    #: introduced for readability when dealing with
+    #: the conserved state
+    momentum_index: Union[int, StaticIntVector] = 1
+
     #: Magnetic field index
     magnetic_index: Union[int, StaticIntVector] = -1
 
-    #: Energy index
+    #: Pressure index
     pressure_index: int = 2
+
+    #: Energy index, same as pressure index
+    #: introduced for readability when dealing with
+    #: the conserved state.
+    energy_index: int = 2
 
     # Additional variables, these
     # have to be registered
@@ -140,6 +177,30 @@ def get_registered_variables(config: SimulationConfig) -> RegisteredVariables:
             num_vars=registered_variables.num_vars + 1
         )
         registered_variables = registered_variables._replace(cosmic_ray_n_active=True)
+
+    # axes info
+    if config.dimensionality == 3 and config.mhd:
+        axes_info = (
+            AxisInfo(
+                axis_in_array=XAXIS,
+                velocity_index=registered_variables.velocity_index.x,
+                magnetic_index=registered_variables.magnetic_index.x,
+            ),
+            AxisInfo(
+                axis_in_array=YAXIS,
+                velocity_index=registered_variables.velocity_index.y,
+                magnetic_index=registered_variables.magnetic_index.y,
+            ),
+            AxisInfo(
+                axis_in_array=ZAXIS,
+                velocity_index=registered_variables.velocity_index.z,
+                magnetic_index=registered_variables.magnetic_index.z,
+            ),
+        )
+        registered_variables = registered_variables._replace(axes_info=axes_info)
+
+    registered_variables = registered_variables._replace(momentum_index=registered_variables.velocity_index)
+    registered_variables = registered_variables._replace(energy_index=registered_variables.pressure_index)
 
     # here you can register more variables
 

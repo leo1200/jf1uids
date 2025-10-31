@@ -466,6 +466,7 @@ def _wind_ei3D(
         primitive_state[registered_variables.velocity_index.x] ** 2
         + primitive_state[registered_variables.velocity_index.y] ** 2
         + primitive_state[registered_variables.velocity_index.z] ** 2
+        + 1e-20
     )
     dp_dt = pressure_from_energy(dE_dt, updated_density, u, gamma)
 
