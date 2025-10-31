@@ -66,6 +66,13 @@ class dataset:
             "turbulence_mhd": self._init_turbulence_mhd,
         }
 
+        if self.cfg_data.use_specific_snapshot_timepoints and self.cfg_data.snapshot_timepoints is not None:
+            self.cfg_data.num_snapshots = len(self.cfg_data.snapshot_timepoints)
+            print(f"Returning snapshots with specific snapshots {self.cfg_data.snapshot_timepoints}")
+        elif self.cfg_data.return_snapshots: 
+            print(f"Returning {self.cfg_data.num_snapshots} snapshots")
+
+
     def _init_mhd_blast(self, resolution: int, **overrides):
         state_tuple = blast.randomized_initial_blast_state(
             resolution, cfg_data=self.cfg_data, rng_seed=overrides.get("rng_seed")
@@ -147,13 +154,14 @@ class dataset:
 
         resolution = resolution or self.default_resolution
 
-        # Include CNN overrides automatically
-        if corrector_config is not None:
-            overrides["corrector_config"] = corrector_config
-        if corrector_params is not None:
-            overrides["corrector_params"] = corrector_params
-        if rng_seed is not None:
-            overrides["rng_seed"] = rng_seed
+        # Update overrides
+        overrides.update({
+            k: v for k, v in {
+                "corrector_config": corrector_config,
+                "corrector_params": corrector_params,
+                "rng_seed": rng_seed,
+            }.items() if v is not None
+        })
 
         # Dispatch dynamically
         if scenario not in self._scenario_dispatch:
@@ -166,10 +174,11 @@ class dataset:
         resolution: Optional[int] = None,
         scenario: Optional[str | int] = None,
         rng_seed: Optional[int] = None,
-        downscale_factor: Optional[int] = False,
+        downscale_factor: Optional[int] = None,
         corrector_config: Optional[CorrectorConfig] = None,
         corrector_params: Optional[CorrectorParams] = None,
-    ) -> np.ndarray:
+    )-> Tuple[np.ndarray, Tuple[np.ndarray, SimulationConfig, SimulationParams, HelperData, RegisteredVariables, int]]:
+
         """
         integrates a simulation and returns the states with the config, resolution, and seed given"""
         initial_state, config, params, helper_data, registered_variables, rng_seed = (
@@ -399,8 +408,9 @@ class dataset:
             differentiation_mode=BACKWARDS,
             riemann_solver=HLL,
             limiter=0,
-            return_snapshots=True,
+            return_snapshots=self.cfg_data.return_snapshots,
             num_snapshots=self.cfg_data.num_snapshots,
+            use_specific_snapshot_timepoints=self.cfg_data.use_specific_snapshot_timepoints,
             boundary_settings=BoundarySettings(),
             num_checkpoints=self.cfg_data.num_checkpoints,
             # boundary_settings=BoundarySettings(
@@ -434,6 +444,8 @@ class dataset:
             dt_max=dt_max,
             gamma=adiabatic_index,
             t_end=t_end,
+            snapshot_timepoints=jnp.array(self.cfg_data.snapshot_timepoints),
+
         )
 
         # homogeneous initial state

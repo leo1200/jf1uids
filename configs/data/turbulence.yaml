@@ -1,6 +1,5 @@
-hr_res : 200
+hr_res : 160
 downscaling_factor : 2
-num_snapshots: 80
 num_checkpoints: 10
 num_timesteps: 1000
 generate_data_on_fly: True
@@ -8,7 +7,8 @@ precomputed_data : False
 fixed_timestep: False
 dt_max: 0.1
 t_end: 1.0
-snapshot_timepoints: [0.5, 1.0]
+snapshot_timepoints: [1.0]
+num_snapshots: 1
 use_specific_snapshot_timepoints: True
 return_snapshots: True
 scenarios: [1]      

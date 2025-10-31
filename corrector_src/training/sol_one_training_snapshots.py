@@ -209,7 +209,16 @@ def _time_integration(
     helper_data_pad: HelperData,
     registered_variables: RegisteredVariables,
     optimizer: optax.GradientTransformation,
-    loss_function: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray],
+    loss_function: Callable[
+        [
+            jnp.ndarray,
+            jnp.ndarray,
+            SimulationConfig,
+            RegisteredVariables,
+            SimulationParams,
+        ],
+        jnp.ndarray,
+    ],
     opt_state: optax.OptState,
     target_data: jnp.ndarray,
     snapshot_callable=None,
@@ -627,6 +636,11 @@ def _time_integration(
                         registered_variables,
                         time + dt,
                     )
+                    # jax.debug.print(
+                    #     "nans in state after run_physics {nans}",
+                    #     nans=jnp.any(jnp.isnan(state)),
+                    # )
+
                     state = _evolve_state(
                         state,
                         dt,
@@ -637,6 +651,10 @@ def _time_integration(
                         helper_data_pad,
                         registered_variables,
                     )
+                    # jax.debug.print(
+                    #     "nans in state after evolve_state {nans}",
+                    #     nans=jnp.any(jnp.isnan(state)),
+                    # )
 
                     time += dt
 
@@ -687,18 +705,27 @@ def _time_integration(
                     time, final_state = carry
 
                 final_state = _unpad(final_state, config)
-                loss = loss_function(
+                # jax.debug.print(
+                #     "nans in final state {nans}, nans in target {nans_target}, target_data_shape {shape}, loss_index {index}",
+                #     nans=jnp.any(jnp.isnan(final_state)),
+                #     nans_target=jnp.any(jnp.isnan(target_data[loss_index])),
+                #     shape=target_data.shape,
+                #     index=loss_index,
+                # )
+                total_loss, loss_components = loss_function(
                     target_data[loss_index],
                     final_state,
                     config,
                     registered_variables,
                     params,
                 )
-                return loss, carry
+                return total_loss, loss_components, carry
 
-            (loss_value, carry_loss), grads = eqx.filter_value_and_grad(
-                loss_fn, has_aux=True
-            )(network_params, carry_loss)
+            (total_loss, loss_components, carry_loss), grads = (
+                eqx.filter_value_and_grad(loss_fn, has_aux=True)(
+                    network_params, carry_loss
+                )
+            )
             if training_config.accumulate_grads:
                 scale = 1.0  # / len(training_params.loss_calculation_times)
                 accum_grads = jax.tree_util.tree_map(
@@ -794,7 +821,7 @@ def _time_integration(
                 else:
                     carry = (time, primitive_state, network_params, opt_state)
 
-            return carry, loss_value
+            return carry, jnp.array(loss_components.values())
 
     initial_network_params = params.corrector_params.network_params
 

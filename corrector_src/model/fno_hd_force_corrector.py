@@ -67,9 +67,10 @@ class SpectralConv3d(eqx.Module):
         def _init_complex(key, shape):
             # real + 1j * imag both normal(0,1) scaled
             k_r, k_i = jax.random.split(key)
-            r = jax.random.normal(k_r, shape)
-            i = jax.random.normal(k_i, shape)
-            return scale * (r + 1j * i)  # not supported in jax .astype(jnp.complex64)
+            r = jax.random.normal(k_r, shape, dtype=jnp.float32)
+            i = jax.random.normal(k_i, shape, dtype=jnp.float32)
+            c = (scale * (r + 1j * i)).astype(jnp.complex64)
+            return c  # not supported in jax .astype(jnp.complex64)
 
         wshape = (
             self.in_channels,

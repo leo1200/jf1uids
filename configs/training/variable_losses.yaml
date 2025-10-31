@@ -8,4 +8,4 @@ debug: False
 mse_loss: 1
 spectral_energy_loss: 0.01
 rate_of_strain_loss: 0.01
-early_stopping: False
+early_stopping: True
