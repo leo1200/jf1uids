@@ -35,9 +35,9 @@ def _b_squared3D(
     registered_variables: RegisteredVariables,
 ) -> FIELD_TYPE:
     return (
-        primitive_state[registered_variables.magnetic_field_index.x] ** 2
-        + primitive_state[registered_variables.magnetic_field_index.y] ** 2
-        + primitive_state[registered_variables.magnetic_field_index.z] ** 2
+        primitive_state[registered_variables.magnetic_index.x] ** 2
+        + primitive_state[registered_variables.magnetic_index.y] ** 2
+        + primitive_state[registered_variables.magnetic_index.z] ** 2
     )
 
 
@@ -62,11 +62,10 @@ def total_energy_from_primitives_mhd(rho, u_squared, p, b_squared, gamma):
     return p / (gamma - 1) + 0.5 * rho * u_squared + 0.5 * b_squared
 
 
-@partial(jax.jit, static_argnames=["config", "registered_variables"])
+@partial(jax.jit, static_argnames=["registered_variables"])
 def conserved_state_from_primitive_mhd(
     primitive_state: STATE_TYPE,
     gamma: Union[float, Float[Array, ""]],
-    config: SimulationConfig,
     registered_variables: RegisteredVariables,
 ) -> STATE_TYPE:
     """
@@ -102,11 +101,10 @@ def conserved_state_from_primitive_mhd(
     return conserved_state
 
 
-@partial(jax.jit, static_argnames=["config", "registered_variables"])
+@partial(jax.jit, static_argnames=["registered_variables"])
 def primitive_state_from_conserved_mhd(
     conserved_state: STATE_TYPE,
     gamma: Union[float, Float[Array, ""]],
-    config: SimulationConfig,
     registered_variables: RegisteredVariables,
 ) -> STATE_TYPE:
     """

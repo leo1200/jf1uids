@@ -15,9 +15,11 @@ from typing import Union
 from jax.experimental import checkify
 
 # jf1uids constants
+from jf1uids._finite_difference._state_evolution._evolve_state import _evolve_state_fd
+from jf1uids._finite_difference._timestep_estimation._timestep_estimator import _cfl_time_step_fd
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.data_classes.simulation_state_struct import StateStruct
-from jf1uids.option_classes.simulation_config import BACKWARDS, FORWARDS, STATE_TYPE
+from jf1uids.option_classes.simulation_config import BACKWARDS, FINITE_DIFFERENCE, FINITE_VOLUME, FORWARDS, STATE_TYPE
 
 # jf1uids containers
 from jf1uids.option_classes.simulation_config import SimulationConfig
@@ -550,20 +552,33 @@ def _time_integration(
 
         # determine the time step size
         if not config.fixed_timestep:
-            if config.source_term_aware_timestep:
-                dt = jax.lax.stop_gradient(
-                    _source_term_aware_time_step(
-                        primitive_state,
-                        config,
-                        params,
-                        helper_data_pad,
-                        registered_variables,
-                        time,
+            if config.solver_mode == FINITE_VOLUME:
+                if config.source_term_aware_timestep:
+                    dt = jax.lax.stop_gradient(
+                        _source_term_aware_time_step(
+                            primitive_state,
+                            config,
+                            params,
+                            helper_data_pad,
+                            registered_variables,
+                            time,
+                        )
                     )
-                )
-            else:
+                else:
+                    dt = jax.lax.stop_gradient(
+                        _cfl_time_step(
+                            primitive_state,
+                            config.grid_spacing,
+                            params.dt_max,
+                            params.gamma,
+                            config,
+                            registered_variables,
+                            params.C_cfl,
+                        )
+                    )
+            elif config.solver_mode == FINITE_DIFFERENCE:
                 dt = jax.lax.stop_gradient(
-                    _cfl_time_step(
+                    _cfl_time_step_fd(
                         primitive_state,
                         config.grid_spacing,
                         params.dt_max,
@@ -601,16 +616,28 @@ def _time_integration(
         )
 
         # EVOLVE THE STATE
-        primitive_state = _evolve_state_fv(
-            primitive_state,
-            dt,
-            params.gamma,
-            params.gravitational_constant,
-            config,
-            params,
-            helper_data_pad,
-            registered_variables,
-        )
+        if config.solver_mode == FINITE_VOLUME:
+            primitive_state = _evolve_state_fv(
+                primitive_state,
+                dt,
+                params.gamma,
+                params.gravitational_constant,
+                config,
+                params,
+                helper_data_pad,
+                registered_variables,
+            )
+        elif config.solver_mode == FINITE_DIFFERENCE:
+            primitive_state = _evolve_state_fd(
+                primitive_state,
+                dt,
+                params.gamma,
+                params.gravitational_constant,
+                config,
+                params,
+                helper_data_pad,
+                registered_variables,
+            )
 
         time += dt
 

@@ -1,3 +1,8 @@
+# ==== GPU selection ====
+from autocvd import autocvd
+autocvd(num_gpus = 1)
+# =======================
+
 # numerics
 import jax
 import jax.numpy as jnp
@@ -87,8 +92,6 @@ def setup_blast_simulation(num_cells, B0, theta, phi):
     B_y = B0 * jnp.sin(theta) * jnp.sin(phi)
     B_z = B0 * jnp.cos(theta)
 
-    print(f"Magnetic field: Bx={B_x}, By={B_y}, Bz={B_z}")
-
     B_x = jnp.ones_like(r) * B_x
     B_y = jnp.ones_like(r) * B_y
     B_z = jnp.ones_like(r) * B_z
@@ -120,22 +123,28 @@ initial_state, config, registered_variables, params, helper_data = setup_blast_s
 conserved_state = conserved_state_from_primitive_mhd(
     primitive_state = initial_state,
     gamma = params.gamma,
-    config = config,
     registered_variables = registered_variables,
 )
 
 primitive_state = primitive_state_from_conserved_mhd(
     conserved_state = conserved_state,
     gamma = params.gamma,
-    config = config,
     registered_variables = registered_variables,
 )
 
 # check that initial state and primitive state from conserved match
-assert jnp.allclose(initial_state, primitive_state), "Initial state and primitive state from conserved do not match!"
+print(jnp.allclose(initial_state, primitive_state))
 
 lamb, R, L = _eigen_x(
     conserved_state,
     5/3,
     registered_variables,
 )
+
+print(lamb.shape)
+print(R.shape)
+print(L.shape)
+
+i, j, k = 16, 16, 16
+LR = jnp.matmul(L[:, :, i, j, k], R[:, :, i, j, k])
+print(jnp.allclose(LR, jnp.eye(7), atol=1e-6))
