@@ -6,7 +6,7 @@ autocvd(num_gpus = 1)
 import jax
 
 # debug nans
-jax.config.update("jax_debug_nans", True)
+# jax.config.update("jax_debug_nans", True)
 
 import jax.random as jr
 
@@ -145,7 +145,7 @@ p_gas = jnp.where(r < r_explosion, p_explosion_gas, p_ambient)
 initial_state = construct_primitive_state(
     config = config,
     registered_variables=registered_variables,
-    density = rho,
+    density = rho, # jnp.ones_like(rho) + 0.1 * jnp.exp(-r**2 / (2 * (0.1)**2)),
     velocity_x = u_x,
     velocity_y = u_y,
     velocity_z = u_z,
@@ -155,6 +155,7 @@ initial_state = construct_primitive_state(
     gas_pressure = p_gas
 )
 
+
 config = finalize_config(config, initial_state.shape)
 
 conserved_state = conserved_state_from_primitive_mhd(
@@ -162,6 +163,11 @@ conserved_state = conserved_state_from_primitive_mhd(
     gamma = params.gamma,
     registered_variables = registered_variables,
 )
+
+fig, ax = plt.subplots(1, 1, figsize=(6,6))
+ax.imshow(conserved_state[registered_variables.density_index, :, :, config.num_cells//2], origin='lower', extent=[0,1,0,1])
+plt.savefig("figures/start.png", dpi=300)
+
 
 # f = _weno_flux_y(
 #     conserved_state,
@@ -171,19 +177,23 @@ conserved_state = conserved_state_from_primitive_mhd(
 
 # # print(conserved_state)
 
-for i in range(5):
-    conserved_state = _ssprk4(
-        conserved_state,
-        gamma = params.gamma,
-        grid_spacing = config.grid_spacing,
-        dt = 0.0001,
-        registered_variables = registered_variables,
-    )
+# for i in range(20):
+#     print(f"Step {i+1}/20")
+#     conserved_state = _ssprk4(
+#         conserved_state,
+#         gamma = params.gamma,
+#         grid_spacing = config.grid_spacing,
+#         dt = 0.01,
+#         registered_variables = registered_variables,
+#     )
+#     fig, ax = plt.subplots(1, 1, figsize=(6,6))
+#     ax.imshow(conserved_state[registered_variables.density_index, :, :, config.num_cells//2], origin='lower', extent=[0,1,0,1])
+#     plt.savefig(f"figures/slice_{i+1}.png", dpi=300)
 
 # print(conserved_state)
 
 # Run the simulation
-# result = time_integration(initial_state, config, params, helper_data, registered_variables)
+result = time_integration(initial_state, config, params, helper_data, registered_variables)
 
 # print(result)
 
@@ -194,7 +204,7 @@ for i in range(5):
 
 # imshow
 fig, ax = plt.subplots(1, 1, figsize=(6,6))
-ax.imshow(conserved_state[registered_variables.pressure_index, :, :, config.num_cells//2], origin='lower', extent=[0,1,0,1])
+ax.imshow(result[registered_variables.density_index, :, :, config.num_cells//2], origin='lower', extent=[0,1,0,1])
 plt.savefig("figures/slice.png", dpi=300)
 
 # print(result[registered_variables.density_index, :, :, config.num_cells//2])

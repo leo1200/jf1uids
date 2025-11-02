@@ -117,12 +117,18 @@ def _eigen_x(
     # degeneracy handling (tangential B)
     Bt2 = By_i * By_i + Bz_i * Bz_i
     sgnBx = jnp.where(Bx_i >= 0.0, 1.0, -1.0)
+
+    Bt2 = jnp.maximum(Bt2, 1.0e-31)
+    
     # fallback for tiny Bt
     bty = jnp.where(Bt2 >= 1.0e-30, By_i / jnp.sqrt(Bt2), 1.0 / jnp.sqrt(2.0))
     btz = jnp.where(Bt2 >= 1.0e-30, Bz_i / jnp.sqrt(Bt2), 1.0 / jnp.sqrt(2.0))
 
     denom = lf_i * lf_i - ls_i * ls_i
     tiny = 1.0e-30
+    denom = jnp.maximum(denom, 1e-31)
+
+
     af = jnp.where(denom >= tiny,
                    jnp.sqrt(jnp.maximum(0.0, cs2_i - ls_i * ls_i)) / jnp.sqrt(denom),
                    1.0)
