@@ -34,12 +34,23 @@ def _evolve_state_fd(
 ) -> STATE_TYPE:
     
     
+    # conserved_state = conserved_state_from_primitive_mhd(
+    #     primitive_state[:-3], gamma, registered_variables
+    # )
+
     conserved_state = conserved_state_from_primitive_mhd(
         primitive_state, gamma, registered_variables
     )
 
+    # bxb = primitive_state[-3]
+    # byb = primitive_state[-2]
+    # bzb = primitive_state[-1]
+
     conserved_state = _ssprk4(
         conserved_state,
+        # bxb,
+        # byb,
+        # bzb,
         gamma,
         config.grid_spacing,
         dt,
@@ -49,5 +60,9 @@ def _evolve_state_fd(
     primitive_state = primitive_state_from_conserved_mhd(
         conserved_state, gamma, registered_variables
     )
+
+    # primitive_state = jnp.concatenate(
+    #     [primitive_state, bxb[None, :], byb[None, :], bzb[None, :]], axis=0
+    # )
 
     return primitive_state

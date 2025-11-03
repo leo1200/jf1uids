@@ -8,9 +8,10 @@ from jf1uids._finite_difference._interface_fluxes._weno import (
     _weno_flux_y,
     _weno_flux_z,
 )
+
 from jf1uids.variable_registry.registered_variables import RegisteredVariables
 
-
+    
 @partial(jax.jit, static_argnames=["registered_variables"])
 def _ssprk4(
     conserved_state,
