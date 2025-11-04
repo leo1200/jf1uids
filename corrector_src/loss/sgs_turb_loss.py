@@ -13,6 +13,9 @@ from jf1uids.option_classes.simulation_config import (
 from jf1uids.option_classes.simulation_params import SimulationParams
 import Pk_library as PKL
 from jf1uids._physics_modules._mhd._vector_maths import divergence3D
+from corrector_src.utils.power_spectra_1d import pk_jax_1d
+import numpy as np
+from functools import partial
 
 
 def mse_loss(predicted_state: jnp.ndarray, ground_truth: jnp.ndarray) -> float:
@@ -63,28 +66,22 @@ def spectral_energy_loss(
     energy_predicted = get_energy(predicted_state, config, registered_variables, params)
     energy_gt = get_energy(ground_truth, config, registered_variables, params)
 
-    pk_pred = PKL.Pk(
-        delta=energy_predicted, BoxSize=1, axis=0, MAS="None", threads=6, verbose=False
+    k1D_pred, Pk1D_pred, Nmodes1D_pred = pk_jax_1d(
+        energy_predicted, BoxSize=1.0, axis=0
     )
 
-    pk_gt = PKL.Pk(
-        delta=energy_gt, BoxSize=1, axis=0, MAS="None", threads=6, verbose=False
-    )
+    k1D_gt, Pk1D_gt, Nmodes1D_gt = pk_jax_1d(energy_gt, BoxSize=1.0, axis=0)
     if use_log_ratio:
-        # Extract 1D spectra and handle possible numerical issues
-        P_pred = jnp.array(pk_pred.Pk[:, 0])
-        P_true = jnp.array(pk_gt.Pk[:, 0])
-
         # Avoid division by zero or log of 0
         eps = 1e-12
-        P_pred = jnp.clip(P_pred, eps, None)
-        P_true = jnp.clip(P_true, eps, None)
+        P_pred = jnp.clip(Pk1D_pred, eps, None)
+        P_true = jnp.clip(Pk1D_gt, eps, None)
 
         # Compute spectral log-ratio loss
-        log_ratio = jnp.log(P_pred / P_true)
+        log_ratio = jnp.log(P_pred) - jnp.log(P_true)
         loss = jnp.sqrt(jnp.mean(log_ratio**2))
     else:
-        loss = jnp.mean((pk_pred.Pk[:, 0] - pk_gt.Pk[:, 0]) ** 2)
+        loss = jnp.mean((Pk1D_pred - Pk1D_gt) ** 2)
 
     return loss
 
@@ -129,4 +126,72 @@ def rate_of_strain_loss(
 
 
 # def mean_flow_loss() need to think this one trough as the average over time, i think it should be covered by the rolling
-# if i wanted to implement it, id have to play with the time integration fs
+# if i wanted to implement it, id have to play with the time integration fs (being fair they dont implement it in the cambridge 2022 paper)
+
+
+def make_loss_function(cfg_training):
+    """Builds a pure JAX-compatible loss function using values from cfg_training.
+    Returns
+        loss_function
+        make_total_loss_from_components function
+        active_loss_indices"""
+
+    # Define loss components as a dict of {name: (weight, fn)}
+    loss_fns = {
+        "mse": (
+            cfg_training["mse_loss"],
+            lambda pred, gt, config, registered_vars, params: mse_loss(pred, gt),
+        ),
+        "strain": (
+            cfg_training["rate_of_strain_loss"],
+            lambda pred, gt, config, registered_vars, params: rate_of_strain_loss(
+                pred, gt, config, registered_vars
+            ),
+        ),
+        "spectral": (
+            cfg_training["spectral_energy_loss"],
+            lambda pred, gt, config, registered_vars, params: spectral_energy_loss(
+                pred, gt, config, registered_vars, params
+            ),
+        ),
+    }
+    active_loss_indices = {
+        i: (name.replace("_loss", ""), w)
+        for i, (name, (w, _)) in enumerate(loss_fns.items())
+        if w != 0
+    }
+    active_weights = {
+        i: w for i, (name, (w, _)) in enumerate(loss_fns.items()) if w != 0
+    }
+
+    def compute_loss_from_components(loss_components):
+        # need to make this for more than 1 loss lol
+        if len(loss_components.shape) == 1:
+            total_loss = 0.0
+            for i, weight in active_weights.items():
+                total_loss += loss_components[i] * weight
+
+        else:
+            total_loss = np.zeros(loss_components.shape[0])
+            for j in range(loss_components.shape[0]):
+                for i, weight in active_weights.items():
+                    total_loss[j] += loss_components[j, i] * weight
+        return total_loss
+
+    @partial(jax.jit, static_argnames=["config", "registered_variables"])
+    def loss_function(predicted, ground_truth, config, registered_variables, params):
+        total = 0.0
+        components = {}
+
+        for name, (weight, fn) in loss_fns.items():
+            if weight > 0:
+                val = fn(predicted, ground_truth, config, registered_variables, params)
+                components[name] = val
+                total += weight * val
+
+        for name, value in components.items():
+            jax.debug.print("{name}: {value}", name=name, value=value)
+
+        return total, components
+
+    return loss_function, compute_loss_from_components, active_loss_indices

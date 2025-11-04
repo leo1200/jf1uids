@@ -12,3 +12,4 @@ num_snapshots: 1
 use_specific_snapshot_timepoints: True
 return_snapshots: True
 scenarios: [1]      
+differentiation_mode: 1

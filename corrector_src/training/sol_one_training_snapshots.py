@@ -719,9 +719,10 @@ def _time_integration(
                     registered_variables,
                     params,
                 )
-                return total_loss, loss_components, carry
+                carry = (*carry, loss_components) # we return the loss_components separate from the total_loss to be able to print it after
+                return total_loss, carry
 
-            (total_loss, loss_components, carry_loss), grads = (
+            (total_loss, carry_loss), grads = (
                 eqx.filter_value_and_grad(loss_fn, has_aux=True)(
                     network_params, carry_loss
                 )
@@ -790,7 +791,7 @@ def _time_integration(
             #     carry = time, primitive_state, network_params, opt_state
 
             if config.return_snapshots or config.activate_snapshot_callback:
-                time, primitive_state, snapshot_data = carry_loss
+                time, primitive_state, snapshot_data, loss_components = carry_loss
                 if training_config.accumulate_grads:
                     carry = (
                         time,
@@ -809,7 +810,7 @@ def _time_integration(
                         opt_state,
                     )
             else:
-                time, primitive_state = carry_loss
+                time, primitive_state, loss_components = carry_loss
                 if training_config.accumulate_grads:
                     carry = (
                         time,
@@ -821,7 +822,7 @@ def _time_integration(
                 else:
                     carry = (time, primitive_state, network_params, opt_state)
 
-            return carry, jnp.array(loss_components.values())
+            return carry, jnp.array(list(loss_components.values()))
 
     initial_network_params = params.corrector_params.network_params
 

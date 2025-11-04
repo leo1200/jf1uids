@@ -6,6 +6,6 @@ return_full_sim_epoch_interval : 10
 rng_key : 60
 debug: False
 mse_loss: 1
-spectral_energy_loss: 0.01
-rate_of_strain_loss: 0.01
+spectral_energy_loss: 0.005
+rate_of_strain_loss: 0.0001
 early_stopping: True

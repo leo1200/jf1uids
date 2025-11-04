@@ -66,12 +66,16 @@ class dataset:
             "turbulence_mhd": self._init_turbulence_mhd,
         }
 
-        if self.cfg_data.use_specific_snapshot_timepoints and self.cfg_data.snapshot_timepoints is not None:
+        if (
+            self.cfg_data.use_specific_snapshot_timepoints
+            and self.cfg_data.snapshot_timepoints is not None
+        ):
             self.cfg_data.num_snapshots = len(self.cfg_data.snapshot_timepoints)
-            print(f"Returning snapshots with specific snapshots {self.cfg_data.snapshot_timepoints}")
-        elif self.cfg_data.return_snapshots: 
+            print(
+                f"Returning snapshots with specific snapshots {self.cfg_data.snapshot_timepoints}"
+            )
+        elif self.cfg_data.return_snapshots:
             print(f"Returning {self.cfg_data.num_snapshots} snapshots")
-
 
     def _init_mhd_blast(self, resolution: int, **overrides):
         state_tuple = blast.randomized_initial_blast_state(
@@ -155,13 +159,17 @@ class dataset:
         resolution = resolution or self.default_resolution
 
         # Update overrides
-        overrides.update({
-            k: v for k, v in {
-                "corrector_config": corrector_config,
-                "corrector_params": corrector_params,
-                "rng_seed": rng_seed,
-            }.items() if v is not None
-        })
+        overrides.update(
+            {
+                k: v
+                for k, v in {
+                    "corrector_config": corrector_config,
+                    "corrector_params": corrector_params,
+                    "rng_seed": rng_seed,
+                }.items()
+                if v is not None
+            }
+        )
 
         # Dispatch dynamically
         if scenario not in self._scenario_dispatch:
@@ -177,8 +185,17 @@ class dataset:
         downscale_factor: Optional[int] = None,
         corrector_config: Optional[CorrectorConfig] = None,
         corrector_params: Optional[CorrectorParams] = None,
-    )-> Tuple[np.ndarray, Tuple[np.ndarray, SimulationConfig, SimulationParams, HelperData, RegisteredVariables, int]]:
-
+    ) -> Tuple[
+        np.ndarray,
+        Tuple[
+            np.ndarray,
+            SimulationConfig,
+            SimulationParams,
+            HelperData,
+            RegisteredVariables,
+            int,
+        ],
+    ]:
         """
         integrates a simulation and returns the states with the config, resolution, and seed given"""
         initial_state, config, params, helper_data, registered_variables, rng_seed = (
@@ -398,14 +415,14 @@ class dataset:
         config = SimulationConfig(
             runtime_debugging=self.cfg_data.debug,
             first_order_fallback=False,
-            progress_bar=False,
+            progress_bar=True,
             dimensionality=3,
             num_ghost_cells=2,
             box_size=box_size,
             num_cells=num_cells,
             mhd=mhd,
             fixed_timestep=self.cfg_data.fixed_timestep,
-            differentiation_mode=BACKWARDS,
+            differentiation_mode=self.cfg_data.differentiation_mode,
             riemann_solver=HLL,
             limiter=0,
             return_snapshots=self.cfg_data.return_snapshots,
@@ -445,7 +462,6 @@ class dataset:
             gamma=adiabatic_index,
             t_end=t_end,
             snapshot_timepoints=jnp.array(self.cfg_data.snapshot_timepoints),
-
         )
 
         # homogeneous initial state
@@ -468,6 +484,7 @@ class dataset:
         )
         if rng_seed is None:
             rng_seed = int(time.time() * 1e6) % (2**32 - 1)
+        print(rng_seed)
         key = jax.random.key(rng_seed)
 
         keys = jax.random.split(key, 3)

@@ -26,13 +26,7 @@ from corrector_src.model._cnn_mhd_corrector_options import (
     CorrectorConfig,
     CorrectorParams,
 )
-import corrector_src.loss.sgs_turb_loss as loss
-from corrector_src.data.load_sim import (
-    load_states,
-    integrate_blast,
-    filepath_state,
-    prepare_initial_state,
-)
+from corrector_src.loss.sgs_turb_loss import make_loss_function
 from corrector_src.data.dataset import dataset
 from corrector_src.training.early_stopper import EarlyStopper
 from corrector_src.utils.printing_config_summary import print_data_config_summary
@@ -64,6 +58,10 @@ def training_loop(cfg):
     epochs = cfg.training.epochs
     n_look_behind = cfg.training.n_look_behind
     loss_timesteps = jnp.array(cfg.data.snapshot_timepoints)
+    assert cfg.data.differentiation_mode == 1, (
+        "differentiation_mode must be BACKWARDS (1)"
+    )
+
     assert not (loss_timesteps > cfg.data.t_end).any(), (
         "found value greater than the end time in the snapshot timepoints"
     )
@@ -73,65 +71,9 @@ def training_loop(cfg):
     training_config = TrainingConfig()
     training_params = TrainingParams(loss_calculation_times=loss_timesteps)
 
-    def make_loss_function(cfg_training):
-        """Builds a pure JAX-compatible loss function using values from cfg_training."""
-
-        # Define loss components as a dict of {name: (weight, fn)}
-        loss_fns = {
-            "mse": (
-                cfg_training["mse_loss"],
-                lambda pred, gt, config, registered_vars, params: loss.mse_loss(
-                    pred, gt
-                ),
-            ),
-            "strain": (
-                cfg_training["rate_of_strain_loss"],
-                lambda pred,
-                gt,
-                config,
-                registered_vars,
-                params: loss.rate_of_strain_loss(pred, gt, config, registered_vars),
-            ),
-            # "spectral": (
-            #     cfg_training["spectral_energy_loss"],
-            #     lambda pred,
-            #     gt,
-            #     config,
-            #     registered_vars,
-            #     params: loss.spectral_energy_loss(
-            #         pred, gt, config, registered_vars, params
-            #     ),
-            # ),
-        }
-        active_loss_indices = {
-            i: name.replace("_loss", "")
-            for i, (name, (w, _)) in enumerate(loss_fns.items())
-            if w != 0
-        }
-
-        @partial(jax.jit, static_argnames=["config", "registered_variables"])
-        def loss_function(
-            predicted, ground_truth, config, registered_variables, params
-        ):
-            total = 0.0
-            components = {}
-
-            for name, (weight, fn) in loss_fns.items():
-                if weight > 0:
-                    val = fn(
-                        predicted, ground_truth, config, registered_variables, params
-                    )
-                    components[name] = val
-                    total += weight * val
-
-            for name, value in components.items():
-                jax.debug.print("{name}: {value}", name=name, value=value)
-
-            return total, components
-
-        return loss_function, active_loss_indices
-
-    loss_function, active_loss_indices = make_loss_function(cfg.training)
+    loss_function, compute_loss_from_components, active_loss_indices = (
+        make_loss_function(cfg.training)
+    )
 
     # ─── Creating Model And Optimizer ─────────────────────────────────────
 
@@ -169,9 +111,9 @@ def training_loop(cfg):
     # ─── Early Stopping ───────────────────────────────────────────────────
 
     if cfg.training.early_stopping:
-        patience = 5
+        patience = 10
         print(f" 🥱 Using early stopper with patience {patience}")
-        early_stopper = EarlyStopper(patience=5)
+        early_stopper = EarlyStopper(patience=patience)
         best_params = neural_net_params
     else:
         early_stopper = None
@@ -248,7 +190,7 @@ def training_loop(cfg):
             break
 
         snapshot_losses.append(losses.flatten())
-        epoch_losses.append(epoch_loss)
+        epoch_losses.append(compute_loss_from_components(losses))
 
         if early_stopper is not None:
             early_stop = early_stopper.early_stop(epoch_loss)
@@ -259,25 +201,16 @@ def training_loop(cfg):
                 break
 
         corrector_params = corrector_params._replace(network_params=new_network_params)
-        print(f" 🟡 Epoch {i} time_train {time_train:2f} loss {epoch_losses[-1]:2f}")
+        print(
+            f" 🟡 Epoch {i} time_train {float(time_train):2f} loss {float(epoch_losses[-1].item()):2f}"
+        )
 
     snapshot_losses = np.array(snapshot_losses)
-    snapshot_losses = snapshot_losses.flatten()
-
+    # snapshot_losses = snapshot_losses.flatten()
     plt.figure()
-    # plt.plot(snapshot_losses[:, 0], label="Train Loss")
-    # plt.xlabel("Epoch")
-    # plt.ylabel("Loss")
-    # plt.title("Losses")
-    # plt.legend()
-    # plt.tight_layout()
-    # plt.savefig("snapshot_loss_curve.png")
-    # plt.close()
 
-    for i, name in active_loss_indices:
-        plt.plot(snapshot_losses[:, i], label=name)
-
-    # Optionally, plot total loss if you’re storing it as the last column
+    for i, (name, weight) in active_loss_indices.items():
+        plt.plot(weight * snapshot_losses[:, i], label=name)
 
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
@@ -328,48 +261,54 @@ def creating_data(
 ]:
     "creates data and makes sure that the ground truth hr and lr dont have any nans"
     is_nan_data = True
-    while is_nan_data:
-        time_start = time.time()
-        (
-            ground_truth,
+    while is_nan_data:  # nan seed 4158841521
+        try:
+            time_start = time.time()
             (
-                initial_state_lr,
-                initial_config_lr,
-                initial_params_lr,
-                initial_helper_data_lr,
-                initial_registered_variables_lr,
-            ),
-        ) = dataset.train_initializator(
-            resolution=cfg.data.hr_res,
-            downscale=cfg.data.downscaling_factor,
-            rng_seed=None,
-            # scenario selection if needed
-            corrector_config=corrector_config,
-            corrector_params=corrector_params,
-        )
-        time_hr = time.time()
-        is_nan_data = jnp.any(jnp.isnan(ground_truth))
-        if is_nan_data:
-            print("found nan in hr_data repeating the calculation")
-        else:
-            not_ml_config_lr = initial_config_lr._replace(
-                return_snapshots=True, corrector_config=CorrectorConfig(corrector=False)
+                ground_truth,
+                (
+                    initial_state_lr,
+                    initial_config_lr,
+                    initial_params_lr,
+                    initial_helper_data_lr,
+                    initial_registered_variables_lr,
+                ),
+            ) = dataset.train_initializator(
+                resolution=cfg.data.hr_res,
+                downscale=cfg.data.downscaling_factor,
+                rng_seed=None,
+                # scenario selection if needed
+                corrector_config=corrector_config,
+                corrector_params=corrector_params,
             )
-
-            final_states_lr = time_integration(
-                initial_state_lr,
-                not_ml_config_lr,
-                initial_params_lr,
-                initial_helper_data_lr,
-                initial_registered_variables_lr,
-            )
-            time_lr = time.time()
-            is_nan_data = jnp.any(jnp.isnan(final_states_lr.states))
+            time_hr = time.time()
+            is_nan_data = jnp.any(jnp.isnan(ground_truth))
             if is_nan_data:
-                print("nan found in lr without ml, getting another initial state")
-        print(
-            f"Time taken to create data hr {time_hr - time_start}, lr {time_lr - time_hr}"
-        )
+                print("found nan in hr_data repeating the calculation")
+            else:
+                not_ml_config_lr = initial_config_lr._replace(
+                    return_snapshots=True,
+                    corrector_config=CorrectorConfig(corrector=False),
+                )
+
+                final_states_lr = time_integration(
+                    initial_state_lr,
+                    not_ml_config_lr,
+                    initial_params_lr,
+                    initial_helper_data_lr,
+                    initial_registered_variables_lr,
+                )
+                time_lr = time.time()
+                is_nan_data = jnp.any(jnp.isnan(final_states_lr.states))
+                if is_nan_data:
+                    print("nan found in lr without ml, getting another initial state")
+            print(
+                f"Time taken to create data hr {time_hr - time_start}, lr {time_lr - time_hr}"
+            )
+        except RuntimeError as e:
+            if "float NaN" in str(e):
+                print("nan founds in data trying another seed")
+                is_nan_data = True
     return (
         ground_truth,
         (
