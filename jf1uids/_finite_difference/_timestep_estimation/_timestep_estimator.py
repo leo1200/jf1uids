@@ -12,7 +12,6 @@ from typing import Union
 # general jf1uids imports
 from jf1uids._finite_difference._fluid_equations._eigen import _eigen_x
 from jf1uids._finite_difference._fluid_equations._equations import conserved_state_from_primitive_mhd, primitive_state_from_conserved_mhd
-from jf1uids._finite_difference._time_integrators._ssprk import _ssprk4
 from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.variable_registry.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import (

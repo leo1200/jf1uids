@@ -13,7 +13,7 @@ import jax
 import jax.numpy as jnp
 # jax.config.update("jax_enable_x64", True)
 
-from jf1uids._finite_difference._magnetic_update._constrained_transport import initialize_interface_fields
+from jf1uids._finite_difference._magnetic_update._constrained_transport import fd_deriv_x, fd_deriv_y, fd_deriv_z, initialize_interface_fields
 
 # plotting
 import matplotlib.pyplot as plt
@@ -44,7 +44,7 @@ from jf1uids.option_classes.simulation_config import (
     OSHER, PERIODIC_BOUNDARY, BoundarySettings, BoundarySettings1D
 )
 
-def run_blast_simulation(num_cells, B0, theta, phi):
+def run_blast_simulation(num_cells, B0):
 
 
     # spatial domain
@@ -81,7 +81,7 @@ def run_blast_simulation(num_cells, B0, theta, phi):
     helper_data = get_helper_data(config)
 
     params = SimulationParams(
-        t_end = 0.01,
+        t_end = 0.02,
         C_cfl = 1.5,
         gamma = 5/3
     )
@@ -90,21 +90,22 @@ def run_blast_simulation(num_cells, B0, theta, phi):
 
     r = helper_data.r
 
+    r0 = 0.125
+    r1 = 1.1 * r0
+
     rho = jnp.ones_like(r)
-    P = jnp.ones_like(r) * 0.1
-    r_inj = 0.1 * box_size
-    r_tap = 1.1 * r_inj
-    p_inj = 1000
-    P = jnp.where(r**2 < r_inj**2, p_inj, P)
-    P = jnp.where((r**2 >= r_inj**2) & (r**2 <= r_tap**2), 0.1 + (p_inj - 0.1) * (r_tap - r) / (r_tap - r_inj), P)
+    P = jnp.ones_like(r) * 1.0
+    P = jnp.where(r <= r0, 100.0, P)
+    P = jnp.where((r > r0) & (r <= r1), 1.0 + 99.0 * (r1 - r) / (r1 - r0), P)
+    P = jnp.where(r > r1, 1.0, P)
 
     V_x = jnp.zeros_like(r)
     V_y = jnp.zeros_like(r)
     V_z = jnp.zeros_like(r)
 
-    B_x = B0 * jnp.sin(theta) * jnp.cos(phi)
-    B_y = B0 * jnp.sin(theta) * jnp.sin(phi)
-    B_z = B0 * jnp.cos(theta)
+    B_x = B0 / jnp.sqrt(2)
+    B_y = B0 / jnp.sqrt(2)
+    B_z = 0
 
     print(f"Magnetic field: Bx={B_x}, By={B_y}, Bz={B_z}")
 
@@ -129,12 +130,10 @@ def run_blast_simulation(num_cells, B0, theta, phi):
 
     return initial_state, config, registered_variables, params, helper_data
 
-num_cells = 196
-B0 = 100 / jnp.sqrt(4 * jnp.pi)
-theta = jnp.pi / 2
-phi = jnp.pi / 4
+num_cells = 200
+B0 = 10
 
-initial_state, config, registered_variables, params, helper_data = run_blast_simulation(num_cells, B0, theta, phi)
+initial_state, config, registered_variables, params, helper_data = run_blast_simulation(num_cells, B0)
 
 conserved_state = conserved_state_from_primitive_mhd(
     primitive_state = initial_state,
@@ -146,18 +145,39 @@ conserved_state = conserved_state_from_primitive_mhd(
 
 bxb, byb, bzb = initialize_interface_fields(conserved_state, registered_variables)
 
+c1, c2, c3 = 75.0/64.0, -25.0/384.0, 3.0/640.0
+divergence = jnp.mean(jnp.abs(
+    1.0 / config.grid_spacing * (
+        fd_deriv_x(bxb, c1, c2, c3) +
+        fd_deriv_y(byb, c1, c2, c3) +
+        fd_deriv_z(bzb, c1, c2, c3)
+    )
+))
+print(divergence)
+
 initial_state = jnp.concatenate(
     [initial_state, bxb[None, :], byb[None, :], bzb[None, :]], axis=0
 )
 
-run_simulation = True
+run_simulation = False
 
 if run_simulation:
     final_state = time_integration(initial_state, config, params, helper_data, registered_variables)
     # save final state
-    jnp.save('data/mhd_blast3D.npy', final_state)
+    jnp.save('data/how_blast.npy', final_state)
 else:
-    final_state = jnp.load('data/mhd_blast3D.npy')
+    final_state = jnp.load('data/how_blast.npy')
+
+bxb, byb, bzb = final_state[-3:, :]
+c1, c2, c3 = 75.0/64.0, -25.0/384.0, 3.0/640.0
+divergence = jnp.mean(jnp.abs(
+    1.0 / config.grid_spacing * (
+        fd_deriv_x(bxb, c1, c2, c3) +
+        fd_deriv_y(byb, c1, c2, c3) +
+        fd_deriv_z(bzb, c1, c2, c3)
+    )
+))
+print(divergence)
 
 # plot
 density = final_state[registered_variables.density_index]
@@ -168,8 +188,8 @@ Bz = final_state[registered_variables.magnetic_index.z]
 vx = final_state[registered_variables.velocity_index.x]
 vy = final_state[registered_variables.velocity_index.y]
 vz = final_state[registered_variables.velocity_index.z]
-magnetic_pressure = 0.5 * (Bx**2 + By**2 + Bz**2)
-v2_half = 0.5 * (vx**2 + vy**2 + vz**2)
+b_squared = (Bx**2 + By**2 + Bz**2)
+v_squared = (vx**2 + vy**2 + vz**2)
 
 fig, axs = plt.subplots(2, 3, figsize=(9, 6))
 
@@ -179,8 +199,6 @@ im = axs[0, 0].imshow(
     origin='lower',
     extent=(0, config.box_size, 0, config.box_size),
     cmap = "jet",
-    vmin = 0.2,
-    vmax = 3.5
 )
 cbar = make_axes_locatable(axs[0, 0]).append_axes("right", size="5%", pad=0.1)
 fig.colorbar(im, cax=cbar, label='density')
@@ -189,69 +207,58 @@ axs[0, 0].set_xlabel('x')
 axs[0, 0].set_ylabel('y')
 
 # log pressure
-im = axs[0, 1].imshow(
-    jnp.log10(pressure[:, :, num_cells//2]),
+im = axs[1, 1].imshow(
+    pressure[:, :, num_cells//2],
     origin='lower',
     extent=(0, config.box_size, 0, config.box_size),
     cmap="jet",
-    vmin = -1.0,
-    vmax = 2.3
-)
-cbar = make_axes_locatable(axs[0, 1]).append_axes("right", size="5%", pad=0.1)
-fig.colorbar(im, cax=cbar, label='pressure')
-axs[0, 1].set_title('pressure slice')
-axs[0, 1].set_xlabel('x')
-axs[0, 1].set_ylabel('y')
-
-# 1, 0: v^2/2
-im = axs[1, 0].imshow(
-    v2_half[:, :, num_cells//2],
-    origin='lower',
-    extent=(0, config.box_size, 0, config.box_size),
-    cmap = "jet",
-    vmin = 0.0,
-    vmax = 160.0
-)
-cbar = make_axes_locatable(axs[1, 0]).append_axes("right", size="5%", pad=0.1)
-fig.colorbar(im, cax=cbar, label='v^2/2')
-axs[1, 0].set_title('kinetic energy slice')
-axs[1, 0].set_xlabel('x')
-axs[1, 0].set_ylabel('y')
-
-# 1, 1: B^2/2
-im = axs[1, 1].imshow(
-    magnetic_pressure[:, :, num_cells//2],
-    origin='lower',
-    extent=(0, config.box_size, 0, config.box_size),
-    cmap = "jet",
-    vmin = 170,
-    vmax = 480
 )
 cbar = make_axes_locatable(axs[1, 1]).append_axes("right", size="5%", pad=0.1)
-fig.colorbar(im, cax=cbar, label='B^2/2')
-axs[1, 1].set_title('magnetic pressure slice')
+fig.colorbar(im, cax=cbar, label='pressure')
+axs[1, 1].set_title('pressure slice')
 axs[1, 1].set_xlabel('x')
 axs[1, 1].set_ylabel('y')
 
+
+im = axs[0, 1].imshow(
+    v_squared[:, :, num_cells//2],
+    origin='lower',
+    extent=(0, config.box_size, 0, config.box_size),
+    cmap = "jet",
+)
+cbar = make_axes_locatable(axs[0, 1]).append_axes("right", size="5%", pad=0.1)
+fig.colorbar(im, cax=cbar, label='v^2')
+axs[0, 1].set_title('kinetic energy slice')
+axs[0, 1].set_xlabel('x')
+axs[0, 1].set_ylabel('y')
+
+im = axs[1, 0].imshow(
+    b_squared[:, :, num_cells//2],
+    origin='lower',
+    extent=(0, config.box_size, 0, config.box_size),
+    cmap = "jet",
+)
+cbar = make_axes_locatable(axs[1, 0]).append_axes("right", size="5%", pad=0.1)
+fig.colorbar(im, cax=cbar, label='B^2')
+axs[1, 0].set_title('magnetic pressure slice')
+axs[1, 0].set_xlabel('x')
+axs[1, 0].set_ylabel('y')
+
 # 0, 2: |B|^2 / 2 along the diagonal from the center
-diag_indices = jnp.arange(num_cells // 2, num_cells)
-B_diag = magnetic_pressure[diag_indices, diag_indices, num_cells//2]
-r_diag = jnp.sqrt((diag_indices - num_cells//2)**2 + (diag_indices - num_cells//2)**2) * (config.box_size / num_cells)
+diag_indices = jnp.arange(0, num_cells)
+B_diag = b_squared[diag_indices, diag_indices, num_cells//2]
+r_diag = jnp.sqrt((diag_indices)**2 + (diag_indices)**2) * (config.box_size / num_cells)
 axs[0, 2].plot(r_diag, B_diag)
-axs[0, 2].set_ylabel('|B|^2 / 2')
-axs[0, 2].set_xlabel('r')
-axs[0, 2].set_xlim(0, 0.3)
-axs[0, 2].set_ylim(180, 270)
-axs[0, 2].set_title('|B|^2 / 2 along diagonal')
+axs[0, 2].set_ylabel('|B|^2')
+axs[0, 2].set_xlabel('diagonal')
+axs[0, 2].set_title('|B|^2 along diagonal')
 
 # density along the vertical centerline
-density_center = density[num_cells//2, num_cells//2, :]
-axs[1, 2].plot(jnp.linspace(0, config.box_size, num_cells), density_center)
-axs[1, 2].set_ylabel('density')
-axs[1, 2].set_xlabel('z')
-axs[1, 2].set_xlim(0.5, 1.0)
-axs[1, 2].set_ylim(0.0, 1.5)
-axs[1, 2].set_title('rho along vertical centerline')
+pressure_diag = pressure[diag_indices, diag_indices, num_cells//2]
+axs[1, 2].plot(r_diag, pressure_diag)
+axs[1, 2].set_ylabel('pressure')
+axs[1, 2].set_xlabel('diagonal')
+axs[1, 2].set_title('Pressure along diagonal')
 
 plt.tight_layout()
-plt.savefig('figures/mhd_blast3D.png', dpi=300)
+plt.savefig('figures/how_blast.png', dpi=300)
