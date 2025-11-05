@@ -11,9 +11,11 @@ autocvd(num_gpus = 1)
 # numerics
 import jax
 import jax.numpy as jnp
-# jax.config.update("jax_enable_x64", True)
+jax.config.update("jax_enable_x64", True)
 
-from jf1uids._finite_difference._magnetic_update._constrained_transport import fd_deriv_x, fd_deriv_y, fd_deriv_z, initialize_interface_fields
+from jf1uids._finite_difference._interface_fluxes._weno import _weno_flux_x, _weno_flux_y, _weno_flux_z
+
+from jf1uids._finite_difference._magnetic_update._constrained_transport import constrained_transport_rhs, fd_deriv_x, fd_deriv_y, fd_deriv_z, initialize_interface_fields
 
 # plotting
 import matplotlib.pyplot as plt
@@ -155,6 +157,39 @@ divergence = jnp.mean(jnp.abs(
 ))
 print(divergence)
 
+# Calculate fluxes based on the state of the current stage
+dF_x = _weno_flux_x(conserved_state, params.gamma, registered_variables)
+dF_y = _weno_flux_y(conserved_state, params.gamma, registered_variables)
+dF_z = _weno_flux_z(conserved_state, params.gamma, registered_variables)
+
+# Calculate RHS for interface magnetic fields using Constrained Transport
+rhs_bx, rhs_by, rhs_bz = constrained_transport_rhs(
+    conserved_state,
+    bxb, byb, bzb,
+    dF_x, dF_y, dF_z,
+    1.0, 1.0, 1.0,
+    registered_variables,
+    ct_order=6
+)
+
+c1, c2, c3 = 75.0/64.0, -25.0/384.0, 3.0/640.0
+divergence = jnp.abs(
+    1.0 / config.grid_spacing * (
+        fd_deriv_x(rhs_bx, c1, c2, c3) +
+        fd_deriv_y(rhs_by, c1, c2, c3) +
+        fd_deriv_z(rhs_bz, c1, c2, c3)
+    )
+)
+print("rhs div B:", jnp.mean(divergence))
+
+
+fig, ax = plt.subplots(figsize=(6, 6))
+im = ax.imshow(divergence[:, :, num_cells//2], origin='lower')
+fig.colorbar(im, ax=ax, label='|div B|')
+ax.set_title('Divergence of RHS of B field at center slice')
+plt.savefig('figures/how_blast_divergence_rhs.png', dpi=300)
+plt.close(fig)
+
 initial_state = jnp.concatenate(
     [initial_state, bxb[None, :], byb[None, :], bzb[None, :]], axis=0
 )
@@ -169,15 +204,23 @@ else:
     final_state = jnp.load('data/how_blast.npy')
 
 bxb, byb, bzb = final_state[-3:, :]
+
 c1, c2, c3 = 75.0/64.0, -25.0/384.0, 3.0/640.0
-divergence = jnp.mean(jnp.abs(
+divergence = jnp.abs(
     1.0 / config.grid_spacing * (
         fd_deriv_x(bxb, c1, c2, c3) +
         fd_deriv_y(byb, c1, c2, c3) +
         fd_deriv_z(bzb, c1, c2, c3)
     )
-))
-print(divergence)
+)
+print("final div B:", jnp.mean(divergence))
+
+fig, ax = plt.subplots(figsize=(6, 6))
+im = ax.imshow(divergence[:, :, num_cells//2], origin='lower', vmax=1e-2)
+fig.colorbar(im, ax=ax, label='|div B|')
+ax.set_title('Divergence of B field at center slice')
+fig.savefig('figures/how_blast_divergence_final.png', dpi=300)
+plt.close(fig)
 
 # plot
 density = final_state[registered_variables.density_index]

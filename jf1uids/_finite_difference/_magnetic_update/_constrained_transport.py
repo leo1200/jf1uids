@@ -13,16 +13,16 @@ from jf1uids.variable_registry.registered_variables import RegisteredVariables
 
 @partial(jax.jit, static_argnames=["registered_variables", "ct_order"])
 def constrained_transport_rhs(
-    conserved_state: Float[Array, "8 Nx Ny Nz"],
-    bx_interface: Float[Array, "Nx+1 Ny Nz"],  
-    by_interface: Float[Array, "Nx Ny+1 Nz"],  
-    bz_interface: Float[Array, "Nx Ny Nz+1"],  
-    flux_x: Float[Array, "8 Nx+1 Ny Nz"],  # Full flux vector in x-direction
-    flux_y: Float[Array, "8 Nx Ny+1 Nz"],  # Full flux vector in y-direction
-    flux_z: Float[Array, "8 Nx Ny Nz+1"],  # Full flux vector in z-direction
-    dtdx: float,
-    dtdy: float,
-    dtdz: float,
+    conserved_state,
+    bx_interface,  
+    by_interface,  
+    bz_interface,  
+    flux_x,
+    flux_y,
+    flux_z,
+    dtdx,
+    dtdy,
+    dtdz,
     registered_variables: RegisteredVariables,
     ct_order: int = 6,
 ) -> Tuple[Float[Array, "Nx+1 Ny Nz"], Float[Array, "Nx Ny+1 Nz"], Float[Array, "Nx Ny Nz+1"]]:
@@ -191,6 +191,8 @@ def smooth_xz_edge(omega):
     smooth_z = (jnp.roll(omega, 1, axis=2) - 2*omega + jnp.roll(omega, -1, axis=2)) / 24.0
     return omega + smooth_x + smooth_z
 
+# TODO: do these in double precision?
+
 # Finite difference derivatives
 def fd_deriv_x(omega, c1, c2, c3):
     """High-order FD derivative in x."""
@@ -213,10 +215,10 @@ def fd_deriv_z(omega, c1, c2, c3):
 # Interpolation from interfaces back to centers
 @partial(jax.jit, static_argnames=["registered_variables"])
 def update_cell_center_fields(
-    conserved_state: Float[Array, "8 Nx Ny Nz"],
-    bx_interface: Float[Array, "Nx+1 Ny Nz"],
-    by_interface: Float[Array, "Nx Ny+1 Nz"],
-    bz_interface: Float[Array, "Nx Ny Nz+1"],
+    conserved_state,
+    bx_interface,
+    by_interface,
+    bz_interface,
     registered_variables: RegisteredVariables,
 ) -> Float[Array, "8 Nx Ny Nz"]:
     """Update cell-centered B field from interface values using 6th order interpolation."""
@@ -254,9 +256,9 @@ def update_cell_center_fields(
 
 @partial(jax.jit, static_argnames=["registered_variables"])
 def initialize_interface_fields(
-    conserved_state: Float[Array, "8 Nx Ny Nz"],
+    conserved_state,
     registered_variables: RegisteredVariables,
-) -> Tuple[Float[Array, "Nx+1 Ny Nz"], Float[Array, "Nx Ny+1 Nz"], Float[Array, "Nx Ny Nz+1"]]:
+):
     """Initialize magnetic field at interfaces from cell centers."""
     
     BX = registered_variables.magnetic_index.x
