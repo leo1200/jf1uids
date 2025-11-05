@@ -9,7 +9,7 @@ from equinox.internal._loop.checkpointed import checkpointed_while_loop
 # type checking
 from jaxtyping import jaxtyped
 from beartype import beartype as typechecker
-from typing import Union
+from typing import Union, Tuple
 
 # runtime debugging
 from jax.experimental import checkify
@@ -57,6 +57,7 @@ from jf1uids.time_stepping._progress_bar import _show_progress
 from timeit import default_timer as timer
 
 from jf1uids.time_stepping._utils import _pad, _unpad
+from jax.core import Tracer
 
 
 @jaxtyped(typechecker=typechecker)
@@ -68,7 +69,10 @@ def time_integration(
     registered_variables: RegisteredVariables,
     snapshot_callable=None,
     sharding: Union[NoneType, jax.NamedSharding] = None,
-) -> Union[STATE_TYPE, SnapshotData]:
+) -> Union[
+    Tuple[jnp.ndarray, Union[STATE_TYPE, SnapshotData]],
+    Union[STATE_TYPE, SnapshotData],
+]:
     """
     Integrate the fluid equations in time. For the options of
     the time integration see the simulation configuration and
@@ -140,18 +144,29 @@ def time_integration(
                 )
                 print(f"Total size: {total / (1024**2):.2f} MB")
                 print("========================================")
+        if config.active_nan_checker:
+            nan_flag, final_state = _time_integration(
+                primitive_state,
+                config,
+                params,
+                helper_data,
+                helper_data_pad,
+                registered_variables,
+                snapshot_callable,
+            )
+            return nan_flag, final_state
+        else:
+            final_state = _time_integration(
+                primitive_state,
+                config,
+                params,
+                helper_data,
+                helper_data_pad,
+                registered_variables,
+                snapshot_callable,
+            )
 
-        final_state = _time_integration(
-            primitive_state,
-            config,
-            params,
-            helper_data,
-            helper_data_pad,
-            registered_variables,
-            snapshot_callable,
-        )
-
-    return final_state
+        return final_state
 
 
 @partial(
@@ -166,7 +181,10 @@ def _time_integration(
     helper_data_pad: HelperData,
     registered_variables: RegisteredVariables,
     snapshot_callable=None,
-) -> Union[STATE_TYPE, SnapshotData]:
+) -> Union[
+    Tuple[jnp.ndarray, Union[STATE_TYPE, SnapshotData]],
+    Union[STATE_TYPE, SnapshotData],
+]:
     """
     Time integration.
 
@@ -535,10 +553,14 @@ def _time_integration(
             )
         elif config.differentiation_mode == FORWARDS:
             carry = jax.lax.while_loop(condition, update_step, carry)
+
         else:
             raise ValueError("Unknown differentiation mode.")
     else:
         carry = jax.lax.fori_loop(0, config.num_timesteps, update_step_for, carry)
+
+    if config.active_nan_checker:
+        nan_flag = jnp.isnan(carry[0])
 
     if config.return_snapshots or config.activate_snapshot_callback:
         _, state, snapshot_data = carry
@@ -548,13 +570,21 @@ def _time_integration(
                 snapshot_data = snapshot_data._replace(
                     final_state=_unpad(state, config)
                 )
-            return snapshot_data
+            if config.active_nan_checker:
+                return nan_flag, snapshot_data
+            else:
+                return snapshot_data
         else:
-            return state
+            if config.active_nan_checker:
+                return nan_flag, _unpad(state, config)
+            else:
+                return _unpad(state, config)
     else:
         _, state = carry
 
         # unpad the primitive state if we padded it
         state = _unpad(state, config)
-
-        return state
+        if config.active_nan_checker:
+            return nan_flag, state
+        else:
+            return state

@@ -29,7 +29,7 @@ from jf1uids.option_classes.simulation_config import (
 from jf1uids import CodeUnits
 from astropy import units as u
 import astropy.constants as c
-from corrector_src.utils.downaverage import downaverage_states, downaverage_state
+from corrector_src.utils.downaverage import downaverage
 
 import corrector_src.data.blast_creation as blast
 
@@ -44,6 +44,89 @@ import numpy as np
 import jax.numpy as jnp
 import jax.random
 import time
+from dataclasses import dataclass
+
+
+@dataclass
+class SimulationBundle:
+    initial_state: np.ndarray
+    config: SimulationConfig
+    params: SimulationParams
+    helper: HelperData
+    reg_vars: RegisteredVariables
+    seed: int
+
+    def override_solver_in_the_loop(
+        self,
+        corrector_config: Optional[CorrectorConfig] = None,
+        corrector_params: Optional[CorrectorParams] = None,
+    ):
+        if corrector_config:
+            self.config = self.config._replace(corrector_config=corrector_config)
+        if corrector_params:
+            self.params = self.params._replace(corrector_params=corrector_params)
+        return self
+
+    def override_config(self, strict=False, **overrides):
+        valid_fields = self.config._fields
+        valid, invalid = {}, []
+
+        for k, v in overrides.items():
+            if k in valid_fields:
+                valid[k] = v
+            else:
+                invalid.append(k)
+
+        if invalid:
+            msg = f"Invalid config keys: {invalid}"
+            if strict:
+                raise KeyError(msg)
+            else:
+                print(f"[override_config] Warning: {msg}")
+
+        self.config = self.config._replace(**valid)
+        return self
+
+    def unpack_integrate(self):
+        kwargs = {
+            "primitive_state": self.initial_state,
+            "config": self.config,
+            "params": self.params,
+            "helper_data": self.helper,
+            "registered_variables": self.reg_vars,
+        }
+        return kwargs
+
+    def copy(self):
+        """Create a shallow copy of the bundle."""
+        return SimulationBundle(
+            self.initial_state.copy(),
+            self.config,
+            self.params,
+            self.helper,
+            self.reg_vars,
+            self.seed,
+        )
+
+    def convert_to_lr(self, downscale_factor):
+        initial_state_lr = downaverage(
+            state=self.initial_state, downscale_factor=downscale_factor
+        )
+        config_lr = finalize_config(
+            self.config._replace(num_cells=self.config.num_cells // downscale_factor),
+            initial_state_lr.shape,
+        )
+        helper_lr = get_helper_data(config_lr)
+        reg_vars_lr = get_registered_variables(config_lr)
+        params_lr = self.params  # params independent of config
+        return SimulationBundle(
+            initial_state_lr,
+            config_lr,
+            params_lr,
+            helper_lr,
+            reg_vars_lr,
+            self.seed,
+        )
 
 
 class dataset:
@@ -56,7 +139,7 @@ class dataset:
         ]
         self.scenario_list = [self.complete_scenario_list[i] for i in scenarios_to_use]
         self.default_resolution = cfg_data.hr_res
-        self.default_downscaling_factor = cfg_data.downscaling_factor
+        self.downscale_factor = cfg_data.downscaling_factor
         self.cfg_data = cfg_data
 
         # 🧭 Scenario dispatch map
@@ -81,57 +164,25 @@ class dataset:
         state_tuple = blast.randomized_initial_blast_state(
             resolution, cfg_data=self.cfg_data, rng_seed=overrides.get("rng_seed")
         )
-        return self._apply_overrides_to_sim_tuple(state_tuple, **overrides)
+        return SimulationBundle(*state_tuple)
 
     def _init_turbulence(self, resolution: int, **overrides):
         state_tuple = self.randomized_turbulent_initial_state(
             resolution, mhd=False, rng_seed=overrides.get("rng_seed")
         )
-        return self._apply_overrides_to_sim_tuple(state_tuple, **overrides)
+        return SimulationBundle(*state_tuple)
 
     def _init_turbulence_mhd(self, resolution: int, **overrides):
         state_tuple = self.randomized_turbulent_initial_state(
             resolution, mhd=True, rng_seed=overrides.get("rng_seed")
         )
-        return self._apply_overrides_to_sim_tuple(state_tuple, **overrides)
+        return SimulationBundle(*state_tuple)
 
-    def _apply_overrides_to_sim_tuple(
-        self,
-        sim_tuple: Tuple[
-            np.ndarray,
-            SimulationConfig,
-            SimulationParams,
-            HelperData,
-            RegisteredVariables,
-            int,
-        ],
-        **overrides,
-    ) -> Tuple[
-        np.ndarray,
-        SimulationConfig,
-        SimulationParams,
-        HelperData,
-        RegisteredVariables,
-        int,
-    ]:
-        """
-        Takes a standard simulation tuple and applies optional overrides like
-        corrector_config, corrector_params, or any future dynamic fields.
-        """
-        state, config, params, helper, reg_vars, seed = sim_tuple
-
-        if (
-            "corrector_config" in overrides
-            and overrides["corrector_config"] is not None
-        ):
-            config = config._replace(corrector_config=overrides["corrector_config"])
-        if (
-            "corrector_params" in overrides
-            and overrides["corrector_params"] is not None
-        ):
-            params = params._replace(corrector_params=overrides["corrector_params"])
-
-        return state, config, params, helper, reg_vars, seed
+    def initialize_scenario(self, scenario, resolution, **overrides):
+        """Dynamically initialize any scenario by name."""
+        if scenario not in self._scenario_dispatch:
+            raise ValueError(f"Unknown scenario: {scenario}")
+        return self._scenario_dispatch[scenario](resolution, **overrides)
 
     def sim_initializator(
         self,
@@ -140,15 +191,9 @@ class dataset:
         rng_seed: Optional[str | int | float] = None,
         corrector_config: Optional[CorrectorConfig] = None,
         corrector_params: Optional[CorrectorParams] = None,
+        config_overrides: Optional[dict] = None,
         **overrides,
-    ) -> Tuple[
-        np.ndarray,
-        SimulationConfig,
-        SimulationParams,
-        HelperData,
-        RegisteredVariables,
-        int,
-    ]:
+    ) -> SimulationBundle:
         """returns initial_state, config, params, helper_data, registered_variables, seed"""
 
         if isinstance(scenario, str) and scenario not in self.scenario_list:
@@ -159,23 +204,30 @@ class dataset:
         resolution = resolution or self.default_resolution
 
         # Update overrides
-        overrides.update(
-            {
-                k: v
-                for k, v in {
-                    "corrector_config": corrector_config,
-                    "corrector_params": corrector_params,
-                    "rng_seed": rng_seed,
-                }.items()
-                if v is not None
-            }
+        # overrides.update(
+        #     {
+        #         k: v
+        #         for k, v in {
+        #             "rng_seed": rng_seed,
+        #         }.items()
+        #         if v is not None
+        #     }
+        # )
+        if rng_seed is not None:
+            overrides["rng_seed"] = rng_seed
+
+        sim_bundle = self._scenario_dispatch[scenario](
+            resolution=resolution, **overrides
         )
 
-        # Dispatch dynamically
-        if scenario not in self._scenario_dispatch:
-            raise ValueError(f"Unknown scenario: {scenario}")
+        if config_overrides is not None:
+            sim_bundle.override_config(**config_overrides)
+        if corrector_config is not None and corrector_params is not None:
+            sim_bundle.override_solver_in_the_loop(
+                corrector_config=corrector_config, corrector_params=corrector_params
+            )
 
-        return self._scenario_dispatch[scenario](resolution=resolution, **overrides)
+        return sim_bundle
 
     def initialize_integrate(
         self,
@@ -185,213 +237,135 @@ class dataset:
         downscale_factor: Optional[int] = None,
         corrector_config: Optional[CorrectorConfig] = None,
         corrector_params: Optional[CorrectorParams] = None,
+        config_overrides: Optional[dict] = None,
     ) -> Tuple[
         np.ndarray,
-        Tuple[
-            np.ndarray,
-            SimulationConfig,
-            SimulationParams,
-            HelperData,
-            RegisteredVariables,
-            int,
-        ],
+        SimulationBundle,
     ]:
         """
         integrates a simulation and returns the states with the config, resolution, and seed given"""
-        initial_state, config, params, helper_data, registered_variables, rng_seed = (
-            self.sim_initializator(
-                resolution,
-                scenario,
-                rng_seed,
-                corrector_config,
-                corrector_params,
-            )
+        sim_bundle = self.sim_initializator(
+            resolution,
+            scenario,
+            rng_seed,
+            corrector_config,
+            corrector_params,
+            config_overrides,
         )
 
-        config = finalize_config(config, initial_state.shape)
-        final_states = time_integration(
-            initial_state, config, params, helper_data, registered_variables
-        )
-        states = final_states.states
+        states = time_integration(**sim_bundle.unpack_integrate()).states
 
         if downscale_factor is not None:
-            states = downaverage_states(states, downscale_factor)
+            states = downaverage(states, downscale_factor)
 
-        return states, (
-            initial_state,
-            config,
-            params,
-            helper_data,
-            registered_variables,
-            rng_seed,
-        )
+        return states, sim_bundle
 
     def hr_lr_initializator(
         self,
         resolution: Optional[int] = None,
-        downscale: Optional[int] = None,
+        downscale_factor: Optional[int] = None,
         scenario: Optional[str | int] = None,
         rng_seed: Optional[str | int | float] = None,
         corrector_config: Optional[CorrectorConfig] = None,
         corrector_params: Optional[CorrectorParams] = None,
+        config_overrides: Optional[dict] = None,
+        config_overrides_lr: Optional[dict] = None,
         **overrides,
     ) -> Tuple[
-        Tuple[
-            np.ndarray,
-            SimulationConfig,
-            SimulationParams,
-            HelperData,
-            RegisteredVariables,
-        ],
-        Tuple[
-            np.ndarray,
-            SimulationConfig,
-            SimulationParams,
-            HelperData,
-            RegisteredVariables,
-        ],
+        SimulationBundle, SimulationBundle
+        # Tuple[
+        #     np.ndarray,
+        #     SimulationConfig,
+        #     SimulationParams,
+        #     HelperData,
+        #     RegisteredVariables,
+        # ],
+        # Tuple[
+        #     np.ndarray,
+        #     SimulationConfig,
+        #     SimulationParams,
+        #     HelperData,
+        #     RegisteredVariables,
+        # ],
     ]:
         """returns hr-lr pair of (state, config, params, helper_data, registered_vars)"""
 
-        if isinstance(scenario, str) and scenario not in self.scenario_list:
-            raise NameError(f"scenario should be in list {self.scenario_list}")
-        if scenario is None:
-            scenario = random.choice(self.scenario_list)
-
-        resolution = resolution or self.default_resolution
-        downscale = downscale or self.default_downscaling_factor
-
-        # Include RNG override only (CNN parameters are for LR only)
-        if rng_seed is not None:
-            overrides["rng_seed"] = rng_seed
-
-        # Dispatch dynamically to get HR state
-        if scenario not in self._scenario_dispatch:
-            raise ValueError(f"Unknown scenario: {scenario}")
-
-        (
-            initial_state_hr,
-            config_hr,
-            params_hr,
-            helper_data_hr,
-            registered_variables_hr,
-            rng_seed,
-        ) = self._scenario_dispatch[scenario](resolution=resolution, **overrides)
-
-        # Downscale for LR state
-        initial_state_lr = downaverage_state(
-            state=initial_state_hr, downsample_factor=downscale
+        sim_bundle_hr = self.sim_initializator(
+            resolution=resolution or self.default_resolution,
+            scenario=scenario,
+            rng_seed=rng_seed,
+            corrector_config=corrector_config,
+            corrector_params=corrector_params,
+            config_overrides=config_overrides,
         )
-        config_lr = finalize_config(
-            config_hr._replace(num_cells=resolution // downscale),
-            initial_state_lr.shape,
+
+        sim_bundle_lr = sim_bundle_hr.convert_to_lr(
+            downscale_factor=downscale_factor or self.downscale_factor
         )
-        helper_data_lr = get_helper_data(config_lr)
-        registered_variables_lr = get_registered_variables(config_lr)
-        params_lr = params_hr  # params independent of config
 
         # Apply CNN overrides ONLY to LR state
-        if corrector_config is not None:
-            config_lr = config_lr._replace(corrector_config=corrector_config)
-        if corrector_params is not None:
-            params_lr = params_lr._replace(corrector_params=corrector_params)
-
-        return (
-            (
-                initial_state_hr,
-                config_hr,
-                params_hr,
-                helper_data_hr,
-                registered_variables_hr,
-            ),
-            (
-                initial_state_lr,
-                config_lr,
-                params_lr,
-                helper_data_lr,
-                registered_variables_lr,
-            ),
-        )
+        # if corrector_config is not None:
+        #     config_lr = config_lr._replace(corrector_config=corrector_config)
+        # if corrector_params is not None:
+        #     params_lr = params_lr._replace(corrector_params=corrector_params)
+        if config_overrides_lr is not None:
+            sim_bundle_lr.override_config(**config_overrides_lr)
+        return (sim_bundle_hr, sim_bundle_lr)
 
     def train_initializator(
         self,
         resolution: Optional[int] = None,
-        downscale: Optional[int] = None,
+        downscale_factor: Optional[int] = None,
         scenario: Optional[str | int] = None,
-        rng_seed: Optional[str | int | float] = None,
         corrector_config: Optional[CorrectorConfig] = None,
         corrector_params: Optional[CorrectorParams] = None,
         **overrides,
     ) -> Tuple[
         np.ndarray,
-        Tuple[
-            np.ndarray,
-            SimulationConfig,
-            SimulationParams,
-            HelperData,
-            RegisteredVariables,
-        ],
+        SimulationBundle,
     ]:
-        """function tailored to use while training the corrector_config
-        returns hr states (DOWNSCALED if downscale is given) and lr  state, config, params, helper_data, registered_vars
-        *if the corrector is given it will only be applied to the lr configuration and parameters"""
+        config_overrides_lr = {
+            "return_snapshots": False,
+            "use_specific_snapshot_timepoints": False,
+            "active_nan_checker": True,
+        }
+        config_overrides_hr = {
+            "return_snapshots": True,
+            "use_specific_snapshot_timepoints": True,
+            "active_nan_checker": True,
+        }
+        config_overrides_lr_ml = {
+            "active_nan_checker": True,
+        }
+        is_nan_data = True
+        while is_nan_data:
+            (sim_bundle_hr, sim_bundle_lr) = self.hr_lr_initializator(
+                resolution=resolution or self.default_resolution,
+                downscale=downscale_factor or self.downscale_factor,
+                scenario=scenario,
+                config_overrides=config_overrides_hr,
+                config_overrides_lr=config_overrides_lr,
+            )
+            is_nan_data, hr_snapshot_data = time_integration(
+                **sim_bundle_hr.unpack_integrate()
+            )
+            if is_nan_data:
+                print("Nan found during time integration wo ML enhancing")
+                continue
 
-        if isinstance(scenario, str) and scenario not in self.scenario_list:
-            raise NameError(f"scenario should be in list {self.scenario_list}")
-        if scenario is None:
-            scenario = random.choice(self.scenario_list)
+            is_nan_data, _ = time_integration(**sim_bundle_lr.unpack_integrate())
+            if is_nan_data:
+                print("Nan found during time integration wo ML enhancing")
+                continue
 
-        resolution = resolution or self.default_resolution
-        downscale = downscale or self.default_downscaling_factor
-        # Include RNG override only (CNN parameters are for LR only)
-        if rng_seed is not None:
-            overrides["rng_seed"] = rng_seed
-
-        # Dispatch dynamically to get HR state
-        if scenario not in self._scenario_dispatch:
-            raise ValueError(f"Unknown scenario: {scenario}")
-
-        (
-            hr_states,
-            (
-                initial_state_hr,
-                config_hr,
-                params_hr,
-                helper_data_hr,
-                registered_variables_hr,
-                rng_seed,
-            ),
-        ) = self.initialize_integrate(
-            resolution=resolution,
-            scenario=scenario,
-            rng_seed=rng_seed,
-            downscale_factor=downscale,
+        sim_bundle_lr.override_config(**config_overrides_lr_ml)
+        sim_bundle_lr.override_solver_in_the_loop(
+            corrector_config=corrector_config, corrector_params=corrector_params
         )
-        initial_state_lr = hr_states[0]
-        config_lr = finalize_config(
-            config_hr._replace(num_cells=resolution // downscale),
-            initial_state_lr.shape,
+        hr_downscaled_states = downaverage(
+            hr_snapshot_data.states, downscale_factor or self.downscale_factor
         )
-        helper_data_lr = get_helper_data(config_lr)
-        registered_variables_lr = get_registered_variables(config_lr)
-        params_lr = params_hr  # params independent of config
-
-        # Apply CNN overrides ONLY to LR state
-        if corrector_config is not None:
-            config_lr = config_lr._replace(corrector_config=corrector_config)
-        if corrector_params is not None:
-            params_lr = params_lr._replace(corrector_params=corrector_params)
-
-        return (
-            hr_states,
-            (
-                initial_state_lr,
-                config_lr,
-                params_lr,
-                helper_data_lr,
-                registered_variables_lr,
-            ),
-        )
+        return (hr_downscaled_states, sim_bundle_lr)
 
     def randomized_turbulent_initial_state(
         self,
@@ -415,7 +389,7 @@ class dataset:
         config = SimulationConfig(
             runtime_debugging=self.cfg_data.debug,
             first_order_fallback=False,
-            progress_bar=True,
+            progress_bar=False,
             dimensionality=3,
             num_ghost_cells=2,
             box_size=box_size,
@@ -484,7 +458,7 @@ class dataset:
         )
         if rng_seed is None:
             rng_seed = int(time.time() * 1e6) % (2**32 - 1)
-        print(rng_seed)
+
         key = jax.random.key(rng_seed)
 
         keys = jax.random.split(key, 3)
@@ -547,7 +521,7 @@ class dataset:
                 velocity_z=u_z,
                 gas_pressure=p,
             )
-
+        config = finalize_config(config, initial_state.shape)
         return (
             initial_state,
             config,

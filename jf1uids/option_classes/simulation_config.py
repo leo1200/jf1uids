@@ -279,6 +279,12 @@ class SimulationConfig(NamedTuple):
     #: Configuration of the CNN MHD corrector module.
     corrector_config: CorrectorConfig = CorrectorConfig()
 
+    # custom flag made by jalegria: the idea is that we dont want to use checkify to not lower the performance
+    # instead we call a nan_checker function and that will make time_integration return a flag in case theres a nan
+    # this way the error is easily catchable by say a try except loop
+    # the nan_catcher function is as easy as: if math.isnan(current_time)
+    active_nan_checker: bool = False
+
 
 def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
     """Finalizes the simulation configuration."""

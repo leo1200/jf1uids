@@ -290,6 +290,8 @@ def randomized_initial_blast_state(
         magnetic_field_y=B_y,
         magnetic_field_z=B_z,
     )
+    config = finalize_config(config, initial_state.shape)
+
     return initial_state, config, params, helper_data, registered_variables, rng_seed
 
 
@@ -297,7 +299,6 @@ def run_blast_simulation(num_cells):
     initial_state, config, params, helper_data, registered_variables = (
         initial_blast_state(num_cells)
     )
-    config = finalize_config(config, initial_state.shape)
 
     final_state = time_integration(
         initial_state, config, params, helper_data, registered_variables

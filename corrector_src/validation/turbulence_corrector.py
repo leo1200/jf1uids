@@ -1,3 +1,5 @@
+import contextlib
+import io
 from autocvd import autocvd
 
 autocvd(num_gpus=1)
@@ -12,8 +14,6 @@ import jax
 from corrector_src.model.cnn_mhd_model import CorrectorCNN
 from corrector_src.model.fno_hd_force_corrector import TurbulenceSGSForceCorrectorFNO
 from corrector_src.model._cnn_mhd_corrector_options import (
-    # CNNMHDParams,
-    # CNNMHDconfig,
     CorrectorConfig,
     CorrectorParams,
 )
@@ -24,24 +24,17 @@ from corrector_src.utils.downaverage import downaverage_states
 
 # jf1uids
 from jf1uids import time_integration
-from jf1uids.data_classes.simulation_helper_data import HelperData
-from jf1uids.fluid_equations.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import SimulationConfig
-from jf1uids.option_classes.simulation_params import SimulationParams
 
 # other stuff
 import equinox as eqx
 import matplotlib.pyplot as plt
 from matplotlib import animation
-import optax
 import time
 import hydra
-from hydra.utils import get_original_cwd
 from hydra.utils import instantiate
-from omegaconf import OmegaConf
-from functools import partial
-from typing import Tuple
+from omegaconf import OmegaConf, open_dict
 import Pk_library as PKL
+
 
 main_experiment_folder = "../../experiments/turbulence_force_corrector/"
 experiment_name = "2025-11-03_17-35-49"
@@ -54,7 +47,7 @@ pk_comparison = False
 
 @hydra.main(version_base=None, config_path=config_path, config_name="config")
 def turb_model_validation(cfg):
-    rng_seed = 448505923
+    rng_seed = 4158841521  # 448505923 stable seed
     num_snapshots = 30
     use_specific_snapshot_timepoints = True
     specific_snapshots = np.arange(0.0, cfg.data.t_end, cfg.data.t_end / 30).tolist()
@@ -64,7 +57,8 @@ def turb_model_validation(cfg):
     cfg.data.num_snapshots = num_snapshots
     cfg.data.return_snapshots = True
     cfg.data.snapshot_timepoints = specific_snapshots
-    # cfg.data.differentiation_mode = 0  # FOWARDS
+    with open_dict(cfg):
+        cfg.data.differentiation_mode = 0  # FOWARDS
 
     cfg.training.spectral_energy_loss = 1.0
 
@@ -90,12 +84,15 @@ def turb_model_validation(cfg):
         f" ✅ Initialized model '{model_name}' successfully with # of params {trainable_params}"
     )
     corrector_config = CorrectorConfig(corrector=True, network_static=neural_net_static)
-    corrector_params = CorrectorParams(neural_net_params)
+    corrector_params = CorrectorParams(network_params=neural_net_params)
 
     dataset_turb = dataset([1], cfg.data)
 
     is_nan_data = True
-    jit_time_integration = jax.jit(time_integration)
+    jit_time_integration = jax.jit(
+        time_integration,
+        static_argnames=["config", "registered_variables", "snapshot_callable"],
+    )
     while is_nan_data:
         try:
             (

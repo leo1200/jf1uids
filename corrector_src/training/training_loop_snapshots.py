@@ -96,7 +96,7 @@ def training_loop(cfg):
     corrector_params = CorrectorParams(network_params=neural_net_params)
     optimizer = optax.chain(
         optax.clip_by_global_norm(1.0),
-        optax.adam(float(cfg.training.learning_rate)),
+        optax.adamw(float(cfg.training.learning_rate)),
     )
     opt_state = optimizer.init(neural_net_params)
 
@@ -111,7 +111,7 @@ def training_loop(cfg):
     # ─── Early Stopping ───────────────────────────────────────────────────
 
     if cfg.training.early_stopping:
-        patience = 10
+        patience = 20
         print(f" 🥱 Using early stopper with patience {patience}")
         early_stopper = EarlyStopper(patience=patience)
         best_params = neural_net_params
@@ -121,16 +121,8 @@ def training_loop(cfg):
     if not cfg.data.generate_data_on_fly and len(gt_cfg_data.scenarios) == 1:
         (
             ground_truth,
-            (
-                initial_state_lr,
-                initial_config_lr,
-                initial_params_lr,
-                initial_helper_data_lr,
-                initial_registered_variables_lr,
-            ),
-        ) = creating_data(
-            dataset=dataset_creator,
-            cfg=cfg,
+            sim_bundle_train,
+        ) = dataset_creator.train_initializator(
             corrector_config=corrector_config,
             corrector_params=corrector_params,
         )
@@ -150,31 +142,19 @@ def training_loop(cfg):
         if cfg.data.generate_data_on_fly:
             (
                 ground_truth,
-                (
-                    initial_state_lr,
-                    initial_config_lr,
-                    initial_params_lr,
-                    initial_helper_data_lr,
-                    initial_registered_variables_lr,
-                ),
-            ) = creating_data(
-                dataset=dataset_creator,
-                cfg=cfg,
+                sim_bundle_train,
+            ) = dataset_creator.train_initializator(
                 corrector_config=corrector_config,
                 corrector_params=corrector_params,
             )
         else:
-            initial_params_lr = initial_params_lr._replace(
+            sim_bundle_train.params = sim_bundle_train.params._replace(
                 corrector_params=corrector_params
             )
         time_train = time.time()
-        initial_config_lr = initial_config_lr._replace(return_snapshots=False)
+
         losses, new_network_params, opt_state, _ = time_integration_train(
-            primitive_state=initial_state_lr,
-            config=initial_config_lr,
-            params=initial_params_lr,
-            helper_data=initial_helper_data_lr,
-            registered_variables=initial_registered_variables_lr,
+            **sim_bundle_train.unpack_integrate(),
             optimizer=optimizer,
             loss_function=loss_function,
             opt_state=opt_state,
@@ -182,7 +162,7 @@ def training_loop(cfg):
             training_config=training_config,
             training_params=training_params,
         )
-        epoch_loss = np.mean(losses)
+        epoch_loss = compute_loss_from_components(losses)
         time_train = time.time() - time_train
 
         if np.isnan(np.mean(losses)):
@@ -244,81 +224,81 @@ def training_loop(cfg):
     )
 
 
-def creating_data(
-    dataset: dataset,
-    cfg: OmegaConf,
-    corrector_config: CorrectorConfig,
-    corrector_params: CorrectorParams,
-) -> Tuple[
-    jnp.ndarray,
-    Tuple[
-        np.ndarray,
-        SimulationConfig,
-        SimulationParams,
-        HelperData,
-        RegisteredVariables,
-    ],
-]:
-    "creates data and makes sure that the ground truth hr and lr dont have any nans"
-    is_nan_data = True
-    while is_nan_data:  # nan seed 4158841521
-        try:
-            time_start = time.time()
-            (
-                ground_truth,
-                (
-                    initial_state_lr,
-                    initial_config_lr,
-                    initial_params_lr,
-                    initial_helper_data_lr,
-                    initial_registered_variables_lr,
-                ),
-            ) = dataset.train_initializator(
-                resolution=cfg.data.hr_res,
-                downscale=cfg.data.downscaling_factor,
-                rng_seed=None,
-                # scenario selection if needed
-                corrector_config=corrector_config,
-                corrector_params=corrector_params,
-            )
-            time_hr = time.time()
-            is_nan_data = jnp.any(jnp.isnan(ground_truth))
-            if is_nan_data:
-                print("found nan in hr_data repeating the calculation")
-            else:
-                not_ml_config_lr = initial_config_lr._replace(
-                    return_snapshots=True,
-                    corrector_config=CorrectorConfig(corrector=False),
-                )
+# def creating_data(
+#     dataset: dataset,
+#     cfg: OmegaConf,
+#     corrector_config: CorrectorConfig,
+#     corrector_params: CorrectorParams,
+# ) -> Tuple[
+#     jnp.ndarray,
+#     Tuple[
+#         np.ndarray,
+#         SimulationConfig,
+#         SimulationParams,
+#         HelperData,
+#         RegisteredVariables,
+#     ],
+# ]:
+#     "creates data and makes sure that the ground truth hr and lr dont have any nans"
+#     is_nan_data = True
+#     while is_nan_data:  # nan seed 4158841521
+#         try:
+#             time_start = time.time()
+#             (
+#                 ground_truth,
+#                 (
+#                     initial_state_lr,
+#                     initial_config_lr,
+#                     initial_params_lr,
+#                     initial_helper_data_lr,
+#                     initial_registered_variables_lr,
+#                 ),
+#             ) = dataset.train_initializator(
+#                 resolution=cfg.data.hr_res,
+#                 downscale=cfg.data.downscaling_factor,
+#                 rng_seed=None,
+#                 # scenario selection if needed
+#                 corrector_config=corrector_config,
+#                 corrector_params=corrector_params,
+#             )
+#             time_hr = time.time()
+#             is_nan_data = jnp.any(jnp.isnan(ground_truth))
+#             if is_nan_data:
+#                 print("found nan in hr_data repeating the calculation")
+#             else:
+#                 not_ml_config_lr = initial_config_lr._replace(
+#                     return_snapshots=True,
+#                     corrector_config=CorrectorConfig(corrector=False),
+#                 )
 
-                final_states_lr = time_integration(
-                    initial_state_lr,
-                    not_ml_config_lr,
-                    initial_params_lr,
-                    initial_helper_data_lr,
-                    initial_registered_variables_lr,
-                )
-                time_lr = time.time()
-                is_nan_data = jnp.any(jnp.isnan(final_states_lr.states))
-                if is_nan_data:
-                    print("nan found in lr without ml, getting another initial state")
-            print(
-                f"Time taken to create data hr {time_hr - time_start}, lr {time_lr - time_hr}"
-            )
-        except RuntimeError as e:
-            if "float NaN" in str(e):
-                print("nan founds in data trying another seed")
-                is_nan_data = True
-    return (
-        ground_truth,
-        (
-            initial_state_lr,
-            initial_config_lr,
-            initial_params_lr,
-            initial_helper_data_lr,
-            initial_registered_variables_lr,
-        ),
-    )
+#                 final_states_lr = time_integration(
+#                     initial_state_lr,
+#                     not_ml_config_lr,
+#                     initial_params_lr,
+#                     initial_helper_data_lr,
+#                     initial_registered_variables_lr,
+#                 )
+#                 time_lr = time.time()
+#                 is_nan_data = jnp.any(jnp.isnan(final_states_lr.states))
+#                 if is_nan_data:
+#                     print("nan found in lr without ml, getting another initial state")
+#             print(
+#                 f"Time taken to create data hr {time_hr - time_start}, lr {time_lr - time_hr}"
+#             )
+#         except RuntimeError as e:
+#             if "float NaN" in str(e):
+#                 print("nan founds in data trying another seed")
+#                 is_nan_data = True
+#     return (
+#         ground_truth,
+#         (
+#             initial_state_lr,
+#             initial_config_lr,
+#             initial_params_lr,
+#             initial_helper_data_lr,
+#             initial_registered_variables_lr,
+#         ),
+#     )
 
 
 if __name__ == "__main__":
