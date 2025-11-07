@@ -1,6 +1,7 @@
 """
 Constrained Transport (CT) implementation for MHD.
-Based on HOW-MHD paper (Seo & Ryu 2023).
+Based on HOW-MHD paper (Seo & Ryu 2023, 
+see https://arxiv.org/abs/2304.04360).
 
 Algorithm summary
 -----------------
@@ -42,7 +43,7 @@ XAXIS = 0
 YAXIS = 1
 ZAXIS = 2
 
-@partial(jax.jit, static_argnames=["registered_variables", "ct_order"])
+@partial(jax.jit, static_argnames=["registered_variables"])
 def constrained_transport_rhs(
     conserved_state,
     weno_flux_x,
@@ -200,24 +201,17 @@ def update_cell_center_fields(
     return conserved_new
 
 
-@partial(jax.jit, static_argnames=["registered_variables"])
+@jax.jit
 def initialize_interface_fields(
-    conserved_state,
-    registered_variables: RegisteredVariables,
+    magnetic_field_x,
+    magnetic_field_y,
+    magnetic_field_z,
 ):
     """Initialize magnetic field at interfaces from cell centers."""
 
-    BX = registered_variables.magnetic_index.x
-    BY = registered_variables.magnetic_index.y
-    BZ = registered_variables.magnetic_index.z
-
-    Bx = conserved_state[BX]
-    By = conserved_state[BY]
-    Bz = conserved_state[BZ]
-
     # Use fourth-order interpolation
-    bx_interface = interp_center_to_face(Bx, XAXIS)
-    by_interface = interp_center_to_face(By, YAXIS)
-    bz_interface = interp_center_to_face(Bz, ZAXIS)
+    bx_interface = interp_center_to_face(magnetic_field_x, XAXIS)
+    by_interface = interp_center_to_face(magnetic_field_y, YAXIS)
+    bz_interface = interp_center_to_face(magnetic_field_z, ZAXIS)
 
     return bx_interface, by_interface, bz_interface

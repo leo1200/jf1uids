@@ -44,8 +44,11 @@ HYBRID_HLLC = 4
 AM_HLLC = 5
 
 # time integrators
+# currently only for finite volume
 RK2_SSP = 0
 MUSCL = 1
+# currently only for finite difference
+RK4_SSP = 2
 
 # boundary conditions
 OPEN_BOUNDARY = 0
@@ -127,6 +130,10 @@ class SnapshotSettings(NamedTuple):
     #: Whether to return radial momentum
     return_radial_momentum: bool = False
 
+    #: Whether to return the magnetic field divergence
+    #: NOTE: currently only implemented for finite difference MHD
+    return_magnetic_divergence: bool = False
+
 
 class BoundarySettings1D(NamedTuple):
     left_boundary: int = OPEN_BOUNDARY
@@ -198,9 +205,11 @@ class SimulationConfig(NamedTuple):
     reconstruction_order: int = 1
 
     #: The limiter for the reconstruction.
+    #: Only affects finite volume mode.
     limiter: int = MINMOD
 
     #: The Riemann solver used
+    #: Only for finite volume mode.
     riemann_solver: int = HLL
 
     #: Dimensional splitting / unsplit mode.
@@ -347,6 +356,50 @@ def finalize_config(config: SimulationConfig, state_shape) -> SimulationConfig:
         )
         print("Setting DOUBLE_MINMOD limiter for self-gravity.")
         config = config._replace(limiter=MINMOD)
+
+    # finite difference specific checks
+    if config.solver_mode == FINITE_DIFFERENCE:
+        if not config.mhd:
+            raise ValueError(
+                "Finite difference solver mode is currently " \
+                "only supported for MHD simulations. This will be easy to extend, " \
+                "feel free to contribute."
+            )
+
+        if config.dimensionality != 3:
+            raise ValueError(
+                "Finite difference solver mode is currently " \
+                "only supported for 3D simulations. This will be easy to extend, " \
+                "feel free to contribute."
+            )
+        
+        if config.boundary_settings != BoundarySettings(
+            BoundarySettings1D(
+                left_boundary=PERIODIC_BOUNDARY, right_boundary=PERIODIC_BOUNDARY
+            ),
+            BoundarySettings1D(
+                left_boundary=PERIODIC_BOUNDARY, right_boundary=PERIODIC_BOUNDARY
+            ),
+            BoundarySettings1D(
+                left_boundary=PERIODIC_BOUNDARY, right_boundary=PERIODIC_BOUNDARY
+            ),
+        ):
+            raise ValueError(
+                "Finite difference solver mode currently only supports periodic boundaries."
+            )
+        
+        if config.time_integrator != RK4_SSP:
+            print(
+                "Setting time integrator to RK4_SSP for finite difference solver mode."
+            )
+            config = config._replace(time_integrator=RK4_SSP)
+        
+        if config.boundary_handling != PERIODIC_ROLL:
+            print(
+                "Setting boundary handling to " \
+                "PERIODIC_ROLL for finite difference solver mode."
+            )
+            config = config._replace(boundary_handling=PERIODIC_ROLL)
 
     # set boundary conditions if not set
     if config.boundary_settings is None:

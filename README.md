@@ -8,10 +8,10 @@
 ## Features
 
 - [x] 1D, 2D and 3D hydrodynamics and magnetohydrodynamics simulations
-- [x] provably divergence free magnetic fields and provably positivity preserving
-hydrodynamics based on the approach of [Pang and Wu (2024)](https://arxiv.org/abs/2410.05173)
-- [x] the basic Lax-Friedrichs, HLL and HLLC Riemann solvers as well as the HLLC-LM ([Fleischmann et al., 2020](https://www.sciencedirect.com/science/article/pii/S0021999120305362)) and HYBRID-HLLC & AM-HLLC ([Hu et al., 2025](https://www.sciencedirect.com/science/article/pii/S1007570425005891)) (sequels to HLLC-LM) variants
-- [x] novel (possibly) conservative self gravity scheme, stable at strong discontinuities
+- [x] a high-order finite difference constrained transport WENO MHD scheme following [HOW-MHD by Seo & Ryu 2023](https://arxiv.org/abs/2304.04360) as well as the provably divergence free and provably positivity preserving
+finite volume approach of [Pang and Wu (2024)](https://arxiv.org/abs/2410.05173)
+- [x] for finite volume simulations the basic Lax-Friedrichs, HLL and HLLC Riemann solvers as well as the HLLC-LM ([Fleischmann et al., 2020](https://www.sciencedirect.com/science/article/pii/S0021999120305362)) and HYBRID-HLLC & AM-HLLC ([Hu et al., 2025](https://www.sciencedirect.com/science/article/pii/S1007570425005891)) (sequels to HLLC-LM) variants
+- [x] novel (possibly) conservative self gravity scheme, stable at strong discontinuities (currently only available for the finite volume solver)
 - [x] spherically symmetric simulations such that mass and energy are conserved based on the scheme of [Crittenden and Balachandar (2018)](https://doi.org/10.1007/s00193-017-0784-y)
 - [x] backwards and forwards differentiable with adaptive timestepping
 - [x] easily extensible, all code is open source

@@ -1,5 +1,5 @@
 from jf1uids.variable_registry.registered_variables import RegisteredVariables
-from jf1uids.option_classes.simulation_config import FIELD_TYPE, STATE_TYPE, SimulationConfig
+from jf1uids.option_classes.simulation_config import FIELD_TYPE, FINITE_DIFFERENCE, STATE_TYPE, SimulationConfig
 
 from typing import Union
 
@@ -25,6 +25,9 @@ def construct_primitive_state(
     magnetic_field_x: Union[FIELD_TYPE, NoneType] = None,
     magnetic_field_y: Union[FIELD_TYPE, NoneType] = None,
     magnetic_field_z: Union[FIELD_TYPE, NoneType] = None,
+    interface_magnetic_field_x: Union[FIELD_TYPE, NoneType] = None,
+    interface_magnetic_field_y: Union[FIELD_TYPE, NoneType] = None,
+    interface_magnetic_field_z: Union[FIELD_TYPE, NoneType] = None,
     gas_pressure: Union[FIELD_TYPE, NoneType] = None,
     cosmic_ray_pressure: Union[FIELD_TYPE, NoneType] = None,
     sharding=None,
@@ -82,6 +85,17 @@ def construct_primitive_state(
             state = state.at[registered_variables.magnetic_index.z].set(
                 magnetic_field_z
             )
+
+        if config.solver_mode == FINITE_DIFFERENCE:
+            state = state.at[
+                registered_variables.interface_magnetic_field_index.x
+            ].set(interface_magnetic_field_x)
+            state = state.at[
+                registered_variables.interface_magnetic_field_index.y
+            ].set(interface_magnetic_field_y)
+            state = state.at[
+                registered_variables.interface_magnetic_field_index.z
+            ].set(interface_magnetic_field_z)
 
     state = state.at[registered_variables.pressure_index].set(gas_pressure)
 

@@ -1,13 +1,8 @@
 # This tests follows the one presented in Fig. 12 in
 # https://doi.org/10.48550/arXiv.2004.10542
 
-# TODO: test if Lax-Friedrichs flux removes the problem of the "small waves"
-
 # ==== GPU selection ====
 from autocvd import autocvd
-
-from jf1uids._finite_difference._maths._differencing import finite_difference_int6
-
 autocvd(num_gpus=1)
 # =======================
 
@@ -15,13 +10,15 @@ autocvd(num_gpus=1)
 import jax
 import jax.numpy as jnp
 
-jax.config.update("jax_enable_x64", True)
+# jax.config.update("jax_enable_x64", True)
 
 from jf1uids._finite_difference._interface_fluxes._weno import (
     _weno_flux_x,
     _weno_flux_y,
     _weno_flux_z,
 )
+
+from jf1uids._finite_difference._maths._differencing import finite_difference_int6
 
 from jf1uids._finite_difference._magnetic_update._constrained_transport import (
     constrained_transport_rhs,
@@ -91,9 +88,6 @@ def run_blast_simulation(num_cells, B0):
         dimensionality=3,
         box_size=box_size,
         num_cells=num_cells,
-        limiter=MINMOD,
-        riemann_solver=HLL,
-        exact_end_time=True,
         boundary_settings=BoundarySettings(
             BoundarySettings1D(
                 left_boundary=PERIODIC_BOUNDARY, right_boundary=PERIODIC_BOUNDARY
@@ -138,6 +132,8 @@ def run_blast_simulation(num_cells, B0):
     B_y = jnp.ones_like(r) * B_y
     B_z = jnp.ones_like(r) * B_z
 
+    bxb, byb, bzb = initialize_interface_fields(B_x, B_y, B_z)
+
     initial_state = construct_primitive_state(
         config=config,
         registered_variables=registered_variables,
@@ -148,6 +144,9 @@ def run_blast_simulation(num_cells, B0):
         magnetic_field_x=B_x,
         magnetic_field_y=B_y,
         magnetic_field_z=B_z,
+        interface_magnetic_field_x=bxb,
+        interface_magnetic_field_y=byb,
+        interface_magnetic_field_z=bzb,
         gas_pressure=P,
     )
 
@@ -156,22 +155,22 @@ def run_blast_simulation(num_cells, B0):
     return initial_state, config, registered_variables, params, helper_data
 
 
-num_cells = 128
+num_cells = 200
 B0 = 10
 
 initial_state, config, registered_variables, params, helper_data = run_blast_simulation(
     num_cells, B0
 )
 
+bxb = initial_state[registered_variables.interface_magnetic_field_index.x]
+byb = initial_state[registered_variables.interface_magnetic_field_index.y]
+bzb = initial_state[registered_variables.interface_magnetic_field_index.z]
+
 conserved_state = conserved_state_from_primitive_mhd(
-    primitive_state=initial_state,
+    primitive_state=initial_state[:-3],
     gamma=params.gamma,
     registered_variables=registered_variables,
 )
-
-# bxb, byb, bzb = initialize_face_centered_b(conserved_state, registered_variables)
-
-bxb, byb, bzb = initialize_interface_fields(conserved_state, registered_variables)
 
 divergence = jnp.mean(
     jnp.abs(
@@ -221,10 +220,6 @@ fig.colorbar(im, ax=ax, label="|div B|")
 ax.set_title("Divergence of RHS of B field at center slice")
 plt.savefig("figures/how_blast_divergence_rhs.png", dpi=300)
 plt.close(fig)
-
-initial_state = jnp.concatenate(
-    [initial_state, bxb[None, :], byb[None, :], bzb[None, :]], axis=0
-)
 
 run_simulation = True
 

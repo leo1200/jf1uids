@@ -1,3 +1,17 @@
+"""
+The registered_variables module tells the code where 
+in the state array which field is stored. This is important 
+for modularity and readability of the code.
+
+When you want to add new variables to the state array, e.g.
+densities for chemical species, you have to register them here.
+
+NOTE: For finite volume MHD simulation, the magnetic field
+is assumed to be stored in the last three indices of the state array
+and for finite difference MHD the magnetic field at interfaces
+is assumed to be stored in the three indices.
+"""
+
 from typing import NamedTuple
 
 import jax.numpy as jnp
@@ -6,7 +20,7 @@ from jaxtyping import Array, Float, Int
 
 from typing import Union
 
-from jf1uids.option_classes.simulation_config import XAXIS, YAXIS, ZAXIS, SimulationConfig
+from jf1uids.option_classes.simulation_config import FINITE_DIFFERENCE, XAXIS, YAXIS, ZAXIS, SimulationConfig
 
 
 class StaticIntVector(NamedTuple):
@@ -68,6 +82,10 @@ class RegisteredVariables(NamedTuple):
 
     #: Magnetic field index
     magnetic_index: Union[int, StaticIntVector] = -1
+
+    #: Magnetic field at interfaces index
+    #: used in finite difference MHD constrained transport
+    interface_magnetic_field_index: Union[int, StaticIntVector] = -1
 
     #: Pressure index
     pressure_index: int = 2
@@ -159,6 +177,19 @@ def get_registered_variables(config: SimulationConfig) -> RegisteredVariables:
             registered_variables = registered_variables._replace(
                 num_vars=registered_variables.num_vars + 3
             )
+
+    if config.mhd and config.solver_mode == FINITE_DIFFERENCE:
+        # interface magnetic field indices
+        registered_variables = registered_variables._replace(
+            interface_magnetic_field_index=StaticIntVector(
+                registered_variables.num_vars,
+                registered_variables.num_vars + 1,
+                registered_variables.num_vars + 2,
+            )
+        )
+        registered_variables = registered_variables._replace(
+            num_vars=registered_variables.num_vars + 3
+        )
 
     if config.wind_config.trace_wind_density:
         registered_variables = registered_variables._replace(

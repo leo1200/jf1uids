@@ -15,6 +15,7 @@ from typing import Union
 from jax.experimental import checkify
 
 # jf1uids constants
+from jf1uids._finite_difference._maths._differencing import _interface_field_divergence
 from jf1uids._finite_difference._state_evolution._evolve_state import _evolve_state_fd
 from jf1uids._finite_difference._timestep_estimation._timestep_estimator import _cfl_time_step_fd
 from jf1uids._geometry.boundaries import _boundary_handler
@@ -299,6 +300,13 @@ def _time_integration(
             else None
         )
 
+        magnetic_divergence = (
+            jnp.zeros(config.num_snapshots)
+            if config.snapshot_settings.return_magnetic_divergence
+            and config.mhd
+            else None
+        )
+
         current_checkpoint = 0
 
         snapshot_data = SnapshotData(
@@ -311,6 +319,7 @@ def _time_integration(
             gravitational_energy=gravitational_energy,
             current_checkpoint=current_checkpoint,
             radial_momentum=radial_momentum,
+            magnetic_divergence=magnetic_divergence,
             final_state=None,
         )
 
@@ -458,6 +467,17 @@ def _time_integration(
                 else:
                     gravitational_energy = None
 
+                magnetic_divergence = snapshot_data.magnetic_divergence.at[
+                    snapshot_data.current_checkpoint
+                ].set(
+                    jnp.mean(jnp.abs(_interface_field_divergence(
+                        unpad_primitive_state[registered_variables.interface_magnetic_field_index.x],
+                        unpad_primitive_state[registered_variables.interface_magnetic_field_index.y],
+                        unpad_primitive_state[registered_variables.interface_magnetic_field_index.z],
+                        config.grid_spacing,
+                    )))
+                ) if config.snapshot_settings.return_magnetic_divergence and config.mhd else None
+
                 current_checkpoint = snapshot_data.current_checkpoint + 1
                 snapshot_data = snapshot_data._replace(
                     time_points=time_points,
@@ -469,6 +489,7 @@ def _time_integration(
                     kinetic_energy=kinetic_energy,
                     gravitational_energy=gravitational_energy,
                     radial_momentum=radial_momentum,
+                    magnetic_divergence=magnetic_divergence,
                 )
                 return snapshot_data
 

@@ -5,17 +5,17 @@
 
 # ==== GPU selection ====
 from autocvd import autocvd
-
-from jf1uids._finite_difference._maths._differencing import finite_difference_int6
 autocvd(num_gpus=1)
 # =======================
 
 # numerics
 import jax
 import jax.numpy as jnp
-# jax.config.update("jax_enable_x64", True)
+jax.config.update("jax_enable_x64", True)
 
 from jax.numpy.fft import fftn, ifftn
+
+from jf1uids._finite_difference._maths._differencing import finite_difference_int6
 
 
 from jf1uids._finite_difference._interface_fluxes._weno import (
@@ -27,7 +27,6 @@ from jf1uids._finite_difference._interface_fluxes._weno import (
 from jf1uids._finite_difference._magnetic_update._constrained_transport import (
     constrained_transport_rhs,
     initialize_interface_fields,
-    project_divergence_free,
 )
 
 # plotting
@@ -95,10 +94,6 @@ def run_blast_simulation(num_cells, B0, theta, phi):
         dimensionality=3,
         box_size=box_size,
         num_cells=num_cells,
-        limiter=MINMOD,
-        riemann_solver=HLL,
-        exact_end_time=True,
-        boundary_handling=PERIODIC_ROLL,
         boundary_settings=BoundarySettings(
             BoundarySettings1D(
                 left_boundary=PERIODIC_BOUNDARY, right_boundary=PERIODIC_BOUNDARY
@@ -146,6 +141,8 @@ def run_blast_simulation(num_cells, B0, theta, phi):
     B_y = jnp.ones_like(r) * B_y
     B_z = jnp.ones_like(r) * B_z
 
+    bxb, byb, bzb = initialize_interface_fields(B_x, B_y, B_z)
+
     initial_state = construct_primitive_state(
         config=config,
         registered_variables=registered_variables,
@@ -156,6 +153,9 @@ def run_blast_simulation(num_cells, B0, theta, phi):
         magnetic_field_x=B_x,
         magnetic_field_y=B_y,
         magnetic_field_z=B_z,
+        interface_magnetic_field_x=bxb,
+        interface_magnetic_field_y=byb,
+        interface_magnetic_field_z=bzb,
         gas_pressure=P,
     )
 
@@ -173,16 +173,15 @@ initial_state, config, registered_variables, params, helper_data = run_blast_sim
     num_cells, B0, theta, phi
 )
 
+bxb = initial_state[registered_variables.interface_magnetic_field_index.x]
+byb = initial_state[registered_variables.interface_magnetic_field_index.y]
+bzb = initial_state[registered_variables.interface_magnetic_field_index.z]
+
 conserved_state = conserved_state_from_primitive_mhd(
-    primitive_state=initial_state,
+    primitive_state=initial_state[:-3],
     gamma=params.gamma,
     registered_variables=registered_variables,
 )
-
-# bxb, byb, bzb = initialize_face_centered_b(conserved_state, registered_variables)
-
-bxb, byb, bzb = initialize_interface_fields(conserved_state, registered_variables)
-
 
 c1, c2, c3 = 75.0 / 64.0, -25.0 / 384.0, 3.0 / 640.0
 divergence = jnp.mean(
@@ -220,18 +219,12 @@ divergence = jnp.abs(
 )
 print("rhs div B:", jnp.mean(divergence))
 
-
 fig, ax = plt.subplots(figsize=(6, 6))
 im = ax.imshow(divergence[:, :, num_cells // 2], origin="lower")
 fig.colorbar(im, ax=ax, label="|div B|")
 ax.set_title("Divergence of RHS of B field at center slice")
 plt.savefig("figures/3d_blast_divergence_rhs.png", dpi=300)
 plt.close(fig)
-
-
-initial_state = jnp.concatenate(
-    [initial_state, bxb[None, :], byb[None, :], bzb[None, :]], axis=0
-)
 
 run_simulation = True
 

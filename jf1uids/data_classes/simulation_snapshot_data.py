@@ -33,6 +33,9 @@ class SnapshotData(NamedTuple):
     #: Radial momentum
     radial_momentum: jnp.ndarray = None
 
+    #: Magnetic field divergence
+    magnetic_divergence: jnp.ndarray = None
+
     # The runtime of the simulation-loop.
     runtime: float = 0.0
 

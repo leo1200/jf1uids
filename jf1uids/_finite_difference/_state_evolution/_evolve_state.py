@@ -33,19 +33,18 @@ def _evolve_state_fd(
     registered_variables: RegisteredVariables,
 ) -> STATE_TYPE:
     
-    
+    # NOTE: here we assume the magnetic field at interfaces
+    # is stored in the last three indices of the state array
     conserved_state = conserved_state_from_primitive_mhd(
         primitive_state[:-3], gamma, registered_variables
     )
 
-    # conserved_state = conserved_state_from_primitive_mhd(
-    #     primitive_state, gamma, registered_variables
-    # )
+    # extract interface magnetic fields
+    bxb = primitive_state[registered_variables.interface_magnetic_field_index.x]
+    byb = primitive_state[registered_variables.interface_magnetic_field_index.y]
+    bzb = primitive_state[registered_variables.interface_magnetic_field_index.z]
 
-    bxb = primitive_state[-3]
-    byb = primitive_state[-2]
-    bzb = primitive_state[-1]
-
+    # update conserved state and interface magnetic fields
     conserved_state, bxb, byb, bzb = _ssprk4_with_ct(
         conserved_state,
         bxb,
@@ -57,10 +56,13 @@ def _evolve_state_fd(
         registered_variables,
     )
 
+    # back to primitive state
     primitive_state = primitive_state_from_conserved_mhd(
         conserved_state, gamma, registered_variables
     )
 
+    # append updated interface magnetic fields
+    # NOTE: same assumption as above
     primitive_state = jnp.concatenate(
         [primitive_state, bxb[None, :], byb[None, :], bzb[None, :]], axis=0
     )
