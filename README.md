@@ -1,7 +1,7 @@
 # jf1uids - differentiable (magneto)hydrodynamics for astrophysics in JAX
 
 > [!WARNING]  
-> This project is still an alpha version (but generally functional), updates might break examples. We are aiming for the first stable release in Fall 2025. The documentation might not reflect the current state of the code.
+> This project is still an alpha version (but generally functional), updates might break examples. We are aiming for the first stable release in mid-december 2025. The documentation might not reflect the current state of the code.
 
 [![DOI](https://zenodo.org/badge/848159116.svg)](https://doi.org/10.5281/zenodo.15052815)
 
