@@ -75,7 +75,7 @@ def run_blast_simulation(num_cells, B0, theta, phi):
     params = SimulationParams(
         t_end = 0.01,
         C_cfl = 0.4,
-        gamma = 1.4
+        gamma = 5/3
     )
 
     registered_variables = get_registered_variables(config)

@@ -68,6 +68,10 @@ XAXIS = 1
 YAXIS = 2
 ZAXIS = 3
 
+# boundary handling modes
+GHOST_CELLS = 0
+PERIODIC_ROLL = 1
+
 # self-gravity versions
 SIMPLE_SOURCE_TERM = 0
 DONOR_ACCOUNTING = 1
@@ -223,6 +227,9 @@ class SimulationConfig(NamedTuple):
 
     #: Grid spacing.
     grid_spacing: float = box_size / num_cells
+
+    #: Explicit boundary handling mode.
+    boundary_handling: int = GHOST_CELLS
 
     #: Boundary settings for the simulation.
     boundary_settings: Union[NoneType, BoundarySettings1D, BoundarySettings] = None

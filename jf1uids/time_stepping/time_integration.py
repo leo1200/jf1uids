@@ -19,7 +19,7 @@ from jf1uids._finite_difference._state_evolution._evolve_state import _evolve_st
 from jf1uids._finite_difference._timestep_estimation._timestep_estimator import _cfl_time_step_fd
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.data_classes.simulation_state_struct import StateStruct
-from jf1uids.option_classes.simulation_config import BACKWARDS, FINITE_DIFFERENCE, FINITE_VOLUME, FORWARDS, STATE_TYPE
+from jf1uids.option_classes.simulation_config import BACKWARDS, FINITE_DIFFERENCE, FINITE_VOLUME, FORWARDS, GHOST_CELLS, STATE_TYPE
 
 # jf1uids containers
 from jf1uids.option_classes.simulation_config import SimulationConfig
@@ -97,7 +97,7 @@ def time_integration(
     # time if requested, compiling the function for memory analysis if
     # requested, etc.
 
-    helper_data_pad = get_helper_data(config, sharding, padded=True)
+    helper_data_pad = get_helper_data(config, sharding, padded = config.boundary_handling == GHOST_CELLS)
 
     if config.runtime_debugging:
         errors = (
@@ -236,7 +236,9 @@ def _time_integration(
     # pad the primitive state with two ghost cells on each side
     # to account for the periodic boundary conditions
     original_shape = primitive_state.shape
-    primitive_state = _pad(primitive_state, config)
+
+    if config.boundary_handling == GHOST_CELLS:
+        primitive_state = _pad(primitive_state, config)
 
     # important for active boundaries influencing
     # the time step criterion for now only gas state
@@ -360,7 +362,8 @@ def _time_integration(
                     snapshot_data.current_checkpoint
                 ].set(time)
 
-                unpad_primitive_state = _unpad(primitive_state, config)
+                if config.boundary_handling == GHOST_CELLS:
+                    unpad_primitive_state = _unpad(primitive_state, config)
 
                 if config.snapshot_settings.return_states:
                     states = snapshot_data.states.at[
@@ -719,12 +722,18 @@ def _time_integration(
 
         if config.return_snapshots:
             if config.snapshot_settings.return_final_state:
+                if config.boundary_handling == GHOST_CELLS:
+                    unpad_primitive_state = _unpad(primitive_state, config)
+                else:
+                    unpad_primitive_state = primitive_state
+                
                 snapshot_data = snapshot_data._replace(
-                    final_state=_unpad(primitive_state, config)
+                    final_state=unpad_primitive_state
                 )
             return snapshot_data
         else:
-            primitive_state = _unpad(primitive_state, config)
+            if config.boundary_handling == GHOST_CELLS:
+                primitive_state = _unpad(primitive_state, config)
             if config.state_struct:
                 return StateStruct(primitive_state=primitive_state)
 
@@ -733,7 +742,8 @@ def _time_integration(
         _, primitive_state = carry
 
         # unpad the primitive state if we padded it
-        primitive_state = _unpad(primitive_state, config)
+        if config.boundary_handling == GHOST_CELLS:
+            primitive_state = _unpad(primitive_state, config)
 
         if config.state_struct:
             return StateStruct(primitive_state=primitive_state)

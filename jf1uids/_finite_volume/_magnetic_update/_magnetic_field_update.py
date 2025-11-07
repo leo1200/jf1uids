@@ -130,8 +130,8 @@ def magnetic_update(
         B_k = B_kp1
         v_k = v_kp1
 
-        avg_B = B_k # (B_k + magnetic_field) / 2
-        avg_v = v_k # (v_k + velocity) / 2
+        avg_B = (B_k + magnetic_field) / 2
+        avg_v = (v_k + velocity) / 2
 
         phiA, phiB = phi(avg_v, avg_B)
 
