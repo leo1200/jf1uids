@@ -20,7 +20,7 @@ from corrector_src.model._cnn_mhd_corrector_options import (
 from corrector_src.loss.sgs_turb_loss import get_energy, make_loss_function
 from corrector_src.utils.power_spectra_1d import pk_jax_1d
 from corrector_src.data.dataset import dataset
-from corrector_src.utils.downaverage import downaverage_states
+from corrector_src.utils.downaverage import downaverage
 
 # jf1uids
 from jf1uids import time_integration
@@ -44,10 +44,9 @@ animation_name = "corrector/figures/energy_spectra"
 figure_name = "corrector/figures/loss_components"
 pk_comparison = False
 
-
 @hydra.main(version_base=None, config_path=config_path, config_name="config")
 def turb_model_validation(cfg):
-    rng_seed = 4158841521  # 448505923 stable seed
+    rng_seed = 448505923 # 448505923 stable seed 4158841521 nan seed
     num_snapshots = 30
     use_specific_snapshot_timepoints = True
     specific_snapshots = np.arange(0.0, cfg.data.t_end, cfg.data.t_end / 30).tolist()
@@ -88,94 +87,47 @@ def turb_model_validation(cfg):
 
     dataset_turb = dataset([1], cfg.data)
 
-    is_nan_data = True
     jit_time_integration = jax.jit(
         time_integration,
         static_argnames=["config", "registered_variables", "snapshot_callable"],
     )
-    while is_nan_data:
-        try:
-            (
-                (
-                    initial_state_hr,
-                    config_hr,
-                    params_hr,
-                    helper_data_hr,
-                    registered_variables_hr,
-                ),
-                (
-                    initial_state_lr,
-                    config_lr,
-                    params_lr,
-                    helper_data_lr,
-                    registered_variables_lr,
-                ),
-            ) = dataset_turb.hr_lr_initializator(
-                resolution=cfg.data.hr_res,
-                downscale=cfg.data.downscaling_factor,
-                rng_seed=rng_seed,
-                # corrector_config=corrector_config,
-                # corrector_params=corrector_params,
-            )
-            start_hr = time.time()
-            hr_states = jit_time_integration(
-                initial_state_hr,
-                config_hr,
-                params_hr,
-                helper_data_hr,
-                registered_variables_hr,
-            ).states
-            time_hr = time.time() - start_hr
-            # print(jnp.any(jnp.isnan(hr_states.states)))
-            start_lr = time.time()
-            states_lr = jit_time_integration(
-                initial_state_lr,
-                config_lr,
-                params_lr,
-                helper_data_lr,
-                registered_variables_lr,
-            ).states
-            time_lr = time.time() - start_lr
-            is_nan_data = False
-            print("data created")
-        except RuntimeError as e:
-            if "float NaN" in str(e):
-                print("nan founds in data trying another seed")
-                rng_seed = None
-                is_nan_data = True
-
-    config_lr_sol = config_lr._replace(corrector_config=corrector_config)
-    params_lr_sol = params_lr._replace(corrector_params=corrector_params)
-    start_time_lr_sol = time.time()
-    states_lr_sol = jit_time_integration(
-        initial_state_lr,
-        config_lr_sol,
-        params_lr_sol,
-        helper_data_lr,
-        registered_variables_lr,
-    ).states
-    time_lr_sol = time.time() - start_time_lr_sol
+    (
+        sim_bundle_hr,
+        sim_bundle_lr,
+    ) = dataset_turb.hr_lr_initializator(
+        rng_seed=rng_seed
+        # corrector_config=corrector_config,
+        # corrector_params=corrector_params,
+    )
+    
+    states_hr = jit_time_integration(**sim_bundle_hr.unpack_integrate()).states
+    downscaled_hr_states = downaverage(states_hr, downscale_factor=cfg.data.downscaling_factor)
+    states_lr= jit_time_integration(**sim_bundle_lr.unpack_integrate()).states
+    sim_bundle_lr_sol = sim_bundle_lr.override_solver_in_the_loop(corrector_config=corrector_config, corrector_params=corrector_params)
+    states_lr_sol = jit_time_integration(**sim_bundle_lr_sol.unpack_integrate()).states
     loss_fn, loss_from_components, active_loss_indices = make_loss_function(
         cfg.training
     )
-    downscaled_hr_states = downaverage_states(hr_states, cfg.data.downscaling_factor)
+
     vloss = jax.vmap(loss_fn, in_axes=(0, 0, None, None, None), out_axes=0)
     total_loss, loss_components = vloss(
         states_lr_sol,
         downscaled_hr_states,
-        config_lr,
-        registered_variables_lr,
-        params_lr,
+        sim_bundle_lr_sol.config,
+        sim_bundle_lr_sol.reg_vars,
+        sim_bundle_lr_sol.params,
     )
 
     plt.figure()
 
     for i, (name, weight) in active_loss_indices.items():
         plt.plot(
-            loss_components[name] / jnp.linalg.norm(loss_components[name]), label=name
+            loss_components[name] 
+            # /jnp.linalg.norm(loss_components[name])
+            , label=name
         )
 
-    plt.xlabel("Epoch")
+    plt.xlabel("Snapshot")
     plt.ylabel("Loss")
     plt.title("Normalized Training Loss Components")
     plt.legend()
@@ -190,7 +142,7 @@ def turb_model_validation(cfg):
     energies = {}
     for states, label in zip(states_list, labels):
         energies[label] = vget_energy(
-            states, config_lr, registered_variables_lr, params_lr
+            states, sim_bundle_lr_sol.config, sim_bundle_lr_sol.reg_vars, sim_bundle_lr_sol.params
         )
 
     vpower = jax.vmap(pk_jax_1d, in_axes=(0, None, None))
@@ -281,15 +233,15 @@ def turb_model_validation(cfg):
     )
     plt.show()
 
-    print("=" * 30)
-    print(f"High res time for {cfg.data.hr_res} resolution : {time_hr}")
-    print(
-        f"Low res time for {cfg.data.hr_res // cfg.data.downscaling_factor} resolution : {time_lr}"
-    )
-    print(
-        f"Low res time for {cfg.data.hr_res // cfg.data.downscaling_factor} resolution and solver in the loop with {trainable_params} parameters: {time_lr_sol}"
-    )
-    print("=" * 30)
+    # print("=" * 30)
+    # print(f"High res time for {cfg.data.hr_res} resolution : {time_hr}")
+    # print(
+    #     f"Low res time for {cfg.data.hr_res // cfg.data.downscaling_factor} resolution : {time_lr}"
+    # )
+    # print(
+    #     f"Low res time for {cfg.data.hr_res // cfg.data.downscaling_factor} resolution and solver in the loop with {trainable_params} parameters: {time_lr_sol}"
+    # )
+    # print("=" * 30)
 
 
 if __name__ == "__main__":

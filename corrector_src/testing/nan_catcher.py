@@ -43,7 +43,7 @@ pk_comparison = False
 
 @hydra.main(version_base=None, config_path=config_path, config_name="config")
 def nan_catcher_test(cfg):
-    rng_seed = 4158841521  # 448505923 stable seed
+    rng_seed = 448505923  # 448505923 stable seed // 4158841521 nan seed
     num_snapshots = 30
     use_specific_snapshot_timepoints = True
     specific_snapshots = np.arange(0.0, cfg.data.t_end, cfg.data.t_end / 30).tolist()
@@ -53,10 +53,9 @@ def nan_catcher_test(cfg):
     cfg.data.num_snapshots = num_snapshots
     cfg.data.return_snapshots = True
     cfg.data.snapshot_timepoints = specific_snapshots
+    create_fig = False
     with open_dict(cfg):
         cfg.data.differentiation_mode = 0  # FOWARDS
-
-    cfg.training.spectral_energy_loss = 1.0
 
     # model_cfg = OmegaConf.to_container(cfg.models, resolve=True)
     # model_name = model_cfg.pop("_name_", None)
@@ -86,10 +85,18 @@ def nan_catcher_test(cfg):
 
     is_nan_data = True
     while is_nan_data:
+        # config_overrides = {
+        #     "return_snapshots": False,
+        #     "use_specific_snapshot_timepoints": False,
+        #     "active_nan_checker": True,
+        # }
+
         config_overrides = {
-            "return_snapshots": False,
+            "return_snapshots": True,
+            "num_snapshots": 40,
             "use_specific_snapshot_timepoints": False,
             "active_nan_checker": True,
+            "memory_analysis": True,
         }
         (sim_bundle_hr, sim_bundle_lr) = dataset_turb.hr_lr_initializator(
             resolution=cfg.data.hr_res,
@@ -100,34 +107,29 @@ def nan_catcher_test(cfg):
             config_overrides=config_overrides,
         )
         print("starting hr integration")
-        is_nan_data, _ = time_integration(**sim_bundle_hr.unpack_integrate())
-        print(is_nan_data)
+        is_nan_data, states_hr = time_integration(**sim_bundle_hr.unpack_integrate())
+        print(states_hr.states.shape, states_hr.states.nbytes)
         print("starting lr integration")
-        is_nan_data, _ = time_integration(**sim_bundle_lr.unpack_integrate())
+        is_nan_data, states_lr = time_integration(**sim_bundle_lr.unpack_integrate())
+        print(states_lr.states.shape, states_lr.states.nbytes)
         if is_nan_data:
             print("nan found")
             continue
 
         print("data created")
-
-    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-    ax[0].imshow(
-        sim_bundle_hr.initial_state[2, :, :, sim_bundle_hr.config.num_cells // 2]
-    )
-    ax[1].imshow(
-        sim_bundle_lr.initial_state[2, :, :, sim_bundle_lr.config.num_cells // 2]
-    )
-    plt.savefig(
-        os.path.abspath(
-            "/export/home/jalegria/Thesis/jf1uids/corrector/figures/initial_states.png"
+    if create_fig:
+        fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+        ax[0].imshow(
+            sim_bundle_hr.initial_state[2, :, :, sim_bundle_hr.config.num_cells // 2]
         )
-    )
-
-
-def nan_checker(current_time, state, registered_variables):
-    print(current_time, jnp.any(jnp.isnan(state)))
-    if math.isnan(current_time):
-        raise ValueError("NaN found during time integration")
+        ax[1].imshow(
+            sim_bundle_lr.initial_state[2, :, :, sim_bundle_lr.config.num_cells // 2]
+        )
+        plt.savefig(
+            os.path.abspath(
+                "/export/home/jalegria/Thesis/jf1uids/corrector/figures/initial_states.png"
+            )
+        )
 
 
 if __name__ == "__main__":

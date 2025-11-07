@@ -1,0 +1,16 @@
+hr_res : 160
+downscaling_factor : 2
+num_checkpoints: 10
+num_timesteps: 1000
+generate_data_on_fly: True
+precomputed_data : False
+fixed_timestep: False
+dt_max: 0.1
+t_end: 1.0
+snapshot_timepoints: [1.0]
+num_snapshots: 50
+use_specific_snapshot_timepoints: False
+return_snapshots: True
+scenarios: [1]      
+differentiation_mode: 0
+n_simulations: 100

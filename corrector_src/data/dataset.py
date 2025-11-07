@@ -9,7 +9,7 @@ from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.fluid_equations.registered_variables import RegisteredVariables
 from jf1uids.fluid_equations.fluid import construct_primitive_state
 from jf1uids import get_registered_variables
-from jf1uids.option_classes.simulation_config import finalize_config
+from jf1uids.option_classes.simulation_config import SnapshotSettings, finalize_config
 from jf1uids.initial_condition_generation.turb import create_turb_field
 
 # jf1uids constants
@@ -154,11 +154,11 @@ class dataset:
             and self.cfg_data.snapshot_timepoints is not None
         ):
             self.cfg_data.num_snapshots = len(self.cfg_data.snapshot_timepoints)
-            print(
-                f"Returning snapshots with specific snapshots {self.cfg_data.snapshot_timepoints}"
-            )
-        elif self.cfg_data.return_snapshots:
-            print(f"Returning {self.cfg_data.num_snapshots} snapshots")
+            # print(
+            #     f"Returning snapshots with specific snapshots {self.cfg_data.snapshot_timepoints}"
+            # )
+        # elif self.cfg_data.return_snapshots:
+        #     print(f"Returning {self.cfg_data.num_snapshots} snapshots")
 
     def _init_mhd_blast(self, resolution: int, **overrides):
         state_tuple = blast.randomized_initial_blast_state(
@@ -366,6 +366,57 @@ class dataset:
             hr_snapshot_data.states, downscale_factor or self.downscale_factor
         )
         return (hr_downscaled_states, sim_bundle_lr)
+
+    def dataset_validation_initializator(
+        self,
+        resolution: Optional[int] = None,
+        downscale_factor: Optional[int] = None,
+        scenario: Optional[str | int] = None,
+        **overrides,
+    ):
+        config_overrides_hr = {
+            "active_nan_checker": True,
+            "snapshot_settings": SnapshotSettings(
+                return_states=True, return_total_energy=True, return_total_mass=True
+            ),
+        }
+        config_overrides_lr = {
+            "return_snapshots": False,
+            "use_specific_snapshot_timepoints": False,
+            "active_nan_checker": True,
+        }
+        is_nan_data = True
+        while is_nan_data:
+            (sim_bundle_hr, sim_bundle_lr) = self.hr_lr_initializator(
+                resolution=resolution or self.default_resolution,
+                downscale=downscale_factor or self.downscale_factor,
+                scenario=scenario,
+                config_overrides=config_overrides_hr,
+                config_overrides_lr=config_overrides_lr,
+            )
+
+            is_nan_data, hr_snapshot_data = time_integration(
+                **sim_bundle_hr.unpack_integrate()
+            )
+            if is_nan_data:
+                print("Nan found during time integration wo ML enhancing")
+                continue
+
+            is_nan_data, _ = time_integration(**sim_bundle_lr.unpack_integrate())
+            if is_nan_data:
+                print("Nan found during time integration wo ML enhancing")
+                continue
+
+        hr_downscaled_states = downaverage(
+            hr_snapshot_data.states, downscale_factor or self.downscale_factor
+        )
+        return (
+            hr_downscaled_states,
+            sim_bundle_lr.initial_state,
+            hr_snapshot_data.total_energy[0],
+            hr_snapshot_data.total_mass[0],
+            sim_bundle_hr.seed,
+        )
 
     def randomized_turbulent_initial_state(
         self,

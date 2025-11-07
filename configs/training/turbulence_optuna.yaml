@@ -8,4 +8,7 @@ debug: False
 mse_loss: 1
 spectral_energy_loss: 0.007
 rate_of_strain_loss: 0.002
+mse_weigh: 0.554
+spectral_weight: 33.53
+strain_weight: 104.71
 early_stopping: True
