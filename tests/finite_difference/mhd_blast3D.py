@@ -11,7 +11,11 @@ autocvd(num_gpus=1)
 # numerics
 import jax
 import jax.numpy as jnp
-jax.config.update("jax_enable_x64", True)
+
+double_precision = True
+
+if double_precision:
+    jax.config.update("jax_enable_x64", True)
 
 from jax.numpy.fft import fftn, ifftn
 
@@ -50,6 +54,7 @@ from jf1uids.option_classes.simulation_config import (
     LAX_FRIEDRICHS,
     PERIODIC_ROLL,
     VAN_ALBADA_PP,
+    SnapshotSettings,
     finalize_config,
 )
 import numpy as np
@@ -105,6 +110,13 @@ def run_blast_simulation(num_cells, B0, theta, phi):
                 left_boundary=PERIODIC_BOUNDARY, right_boundary=PERIODIC_BOUNDARY
             ),
         ),
+        return_snapshots=True,
+        num_snapshots = 30,
+        snapshot_settings=SnapshotSettings(
+            return_states = False,
+            return_final_state = True,
+            return_magnetic_divergence = True,
+        )
     )
 
     helper_data = get_helper_data(config)
@@ -224,18 +236,32 @@ im = ax.imshow(divergence[:, :, num_cells // 2], origin="lower")
 fig.colorbar(im, ax=ax, label="|div B|")
 ax.set_title("Divergence of RHS of B field at center slice")
 plt.savefig("figures/3d_blast_divergence_rhs.png", dpi=300)
+plt.tight_layout()
 plt.close(fig)
 
 run_simulation = True
 
 if run_simulation:
-    final_state = time_integration(
+    result = time_integration(
         initial_state, config, params, helper_data, registered_variables
     )
     # save final state
-    jnp.save("data/mhd_blast3D.npy", final_state)
+    jnp.save("data/mhd_blast3D.npy", result.final_state)
 else:
     final_state = jnp.load("data/mhd_blast3D.npy")
+
+div_b = result.magnetic_divergence
+time_points = result.time_points
+final_state = result.final_state
+
+# plot the divergence evolution
+fig, ax = plt.subplots(figsize=(6, 4))
+ax.plot(time_points, div_b)
+ax.set_ylabel("<|div B|>")
+ax.set_xlabel("time")
+ax.set_title("Evolution of mean |div B|")
+plt.savefig("figures/3D_blast_magnetic_divergence.svg")
+plt.close(fig)
 
 bxb, byb, bzb = final_state[-3:, :]
 

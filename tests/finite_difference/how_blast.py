@@ -82,6 +82,7 @@ def run_blast_simulation(num_cells, B0):
     # setup simulation config
     config = SimulationConfig(
         solver_mode=FINITE_DIFFERENCE,
+        memory_analysis=True,
         runtime_debugging=False,
         progress_bar=True,
         mhd=True,

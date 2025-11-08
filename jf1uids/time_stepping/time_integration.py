@@ -373,6 +373,8 @@ def _time_integration(
 
                 if config.boundary_handling == GHOST_CELLS:
                     unpad_primitive_state = _unpad(primitive_state, config)
+                else:
+                    unpad_primitive_state = primitive_state
 
                 if config.snapshot_settings.return_states:
                     states = snapshot_data.states.at[
