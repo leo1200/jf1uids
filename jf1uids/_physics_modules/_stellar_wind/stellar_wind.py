@@ -478,6 +478,45 @@ def _wind_ei3D(
 
     return primitive_state
 
+@partial(
+    jax.jit,
+    static_argnames=["num_injection_cells", "registered_variables", "config"],
+)
+def _wind_ei3D_source(
+    wind_params: WindParams,
+    conserved_state: STATE_TYPE,
+    config: SimulationConfig,
+    helper_data: HelperData,
+    num_injection_cells: int,
+    registered_variables: RegisteredVariables,
+) -> STATE_TYPE:
+
+    source_term = jnp.zeros_like(conserved_state)
+
+    r_inj = num_injection_cells * config.grid_spacing
+    V = 4 / 3 * jnp.pi * r_inj**3
+
+    # for now only allow injection at the box center
+    injection_mask = helper_data.r <= r_inj - config.grid_spacing / 2
+
+    # mass injection
+    drho_dt = wind_params.wind_mass_loss_rate / V
+
+    source_term = source_term.at[registered_variables.density_index].set(
+        drho_dt * injection_mask
+    )
+
+    # energy injection
+    dE_dt = (
+        0.5 * wind_params.wind_final_velocity**2 * wind_params.wind_mass_loss_rate / V
+    )
+
+    source_term = source_term.at[registered_variables.energy_index].set(
+        dE_dt * injection_mask
+    )
+
+    return source_term
+
 
 # # @jaxtyped(typechecker=typechecker)
 # @partial(jax.jit, static_argnames=['num_ghost_cells', 'num_injection_cells', 'registered_variables'])

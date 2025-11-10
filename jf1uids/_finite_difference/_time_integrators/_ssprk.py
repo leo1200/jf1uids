@@ -22,10 +22,14 @@ from jf1uids._finite_difference._magnetic_update._constrained_transport import (
     update_cell_center_fields,
 )
 from jf1uids._finite_difference._maths._differencing import finite_difference_int6
+from jf1uids._physics_modules._stellar_wind.stellar_wind import _wind_ei3D_source
+from jf1uids.data_classes.simulation_helper_data import HelperData
+from jf1uids.option_classes.simulation_config import SimulationConfig
+from jf1uids.option_classes.simulation_params import SimulationParams
 from jf1uids.variable_registry.registered_variables import RegisteredVariables
 
 
-@partial(jax.jit, static_argnames=["registered_variables"])
+@partial(jax.jit, static_argnames=["registered_variables", "config"])
 def _ssprk4_with_ct(
     conserved_state,
     bx_interface,
@@ -34,6 +38,9 @@ def _ssprk4_with_ct(
     gamma: Union[float, jnp.ndarray],
     grid_spacing: Union[float, jnp.ndarray],
     dt: Union[float, jnp.ndarray],
+    params: SimulationParams,
+    helper_data: HelperData,
+    config: SimulationConfig,
     registered_variables: RegisteredVariables,
 ):
     """
@@ -74,6 +81,16 @@ def _ssprk4_with_ct(
             + (dF_y - jnp.roll(dF_y, 1, axis=2))
             + (dF_z - jnp.roll(dF_z, 1, axis=3))
         )
+
+        if config.wind_config.stellar_wind:
+            rhs_q += _wind_ei3D_source(
+                params.wind_params,
+                current_q,
+                config,
+                helper_data,
+                config.wind_config.num_injection_cells,
+                registered_variables,
+            ) * k2_coeff * dt
 
         return rhs_q, rhs_bx, rhs_by, rhs_bz
 

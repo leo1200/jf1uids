@@ -82,7 +82,7 @@ box_size = 1.0
 num_cells = 300
 
 # activate stellar wind
-stellar_wind = False
+stellar_wind = True
 
 # turbulence
 turbulence = True
@@ -111,7 +111,7 @@ num_timesteps = 2000
 
 # setup simulation config
 config = SimulationConfig(
-    solver_mode = FINITE_VOLUME,
+    solver_mode = FINITE_DIFFERENCE,
     runtime_debugging = False,
     memory_analysis = False,
     print_elapsed_time = False,

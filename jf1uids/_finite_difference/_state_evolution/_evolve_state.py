@@ -53,6 +53,9 @@ def _evolve_state_fd(
         gamma,
         config.grid_spacing,
         dt,
+        params,
+        helper_data,
+        config,
         registered_variables,
     )
 

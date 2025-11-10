@@ -627,19 +627,20 @@ def _time_integration(
         if config.exact_end_time and not config.use_specific_snapshot_timepoints:
             dt = jnp.minimum(dt, params.t_end - time)
 
-        # run physics modules
-        # for now we mainly consider the stellar wind, a constant source term term,
-        # so the source is handled via a simple Euler step but generally
-        # a higher order method (in a split fashion) may be used
-        primitive_state = _run_physics_modules(
-            primitive_state,
-            dt,
-            config,
-            params,
-            helper_data_pad,
-            registered_variables,
-            time + dt,
-        )
+        if config.solver_mode == FINITE_VOLUME:
+            # run physics modules
+            # for now we mainly consider the stellar wind, a constant source term term,
+            # so the source is handled via a simple Euler step but generally
+            # a higher order method (in a split fashion) may be used
+            primitive_state = _run_physics_modules(
+                primitive_state,
+                dt,
+                config,
+                params,
+                helper_data_pad,
+                registered_variables,
+                time + dt,
+            )
 
         # EVOLVE THE STATE
         if config.solver_mode == FINITE_VOLUME:
