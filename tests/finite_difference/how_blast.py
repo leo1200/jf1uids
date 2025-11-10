@@ -156,7 +156,7 @@ def run_blast_simulation(num_cells, B0):
     return initial_state, config, registered_variables, params, helper_data
 
 
-num_cells = 200
+num_cells = 300
 B0 = 10
 
 initial_state, config, registered_variables, params, helper_data = run_blast_simulation(

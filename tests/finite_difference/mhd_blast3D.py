@@ -12,7 +12,7 @@ autocvd(num_gpus=1)
 import jax
 import jax.numpy as jnp
 
-double_precision = True
+double_precision = False
 
 if double_precision:
     jax.config.update("jax_enable_x64", True)
@@ -176,7 +176,7 @@ def run_blast_simulation(num_cells, B0, theta, phi):
     return initial_state, config, registered_variables, params, helper_data
 
 
-num_cells = 128
+num_cells = 300
 B0 = 100 / jnp.sqrt(4 * jnp.pi)
 theta = jnp.pi / 2
 phi = jnp.pi / 4

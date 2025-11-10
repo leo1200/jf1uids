@@ -42,8 +42,6 @@ def _ssprk4_with_ct(
     with Constrained Transport (CT).
     """
 
-    # jax.debug.print("Starting SSPRK4 with CT step")
-
     def compute_rhs(current_q, bx, by, bz, k2_coeff):
         """
         Computes the right-hand side (RHS) of the MHD equations for a given stage.

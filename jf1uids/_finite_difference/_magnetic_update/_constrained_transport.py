@@ -22,10 +22,7 @@ NOTE: While the scheme theoretically keeps div B = 0,
 floating point errors seem to accumulate over time,
 especially in single precision. Projecting this divergence
 out seemed to help with the divergence of the magnetic field
-but still I observed perturbations in the density field
-in a specific blast wave test (not the one from the reference 
-paper, see Fig. 12 in https://doi.org/10.48550/arXiv.2004.10542)
-in single precision.
+but comes at additional cost.
 """
 
 import jax

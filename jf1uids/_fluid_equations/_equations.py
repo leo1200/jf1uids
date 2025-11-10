@@ -48,7 +48,8 @@ def primitive_state_from_conserved(
     elif config.dimensionality == 2:
         ux = conserved_state[registered_variables.velocity_index.x] / rho
         uy = conserved_state[registered_variables.velocity_index.y] / rho
-        u = jnp.sqrt(ux**2 + uy**2)
+        # TODO: find smarter way, problem d/dx sqrt(0) = inf
+        u = jnp.sqrt(ux**2 + uy**2 + 1e-20)
     elif config.dimensionality == 3:
         ux = conserved_state[registered_variables.velocity_index.x] / rho
         uy = conserved_state[registered_variables.velocity_index.y] / rho

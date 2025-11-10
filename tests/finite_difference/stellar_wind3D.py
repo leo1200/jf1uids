@@ -52,7 +52,7 @@ from jf1uids.option_classes import WindConfig
 
 from jf1uids.time_stepping.time_integration import _time_integration
 
-from jf1uids.option_classes.simulation_config import BACKWARDS, DONOR_ACCOUNTING, FINITE_DIFFERENCE, HLL, HLLC, MINMOD, MUSCL, OSHER, PERIODIC_BOUNDARY, SIMPLE_SOURCE_TERM, SPLIT, VARAXIS, XAXIS, YAXIS, ZAXIS, BoundarySettings, BoundarySettings1D, SnapshotSettings
+from jf1uids.option_classes.simulation_config import BACKWARDS, DONOR_ACCOUNTING, FINITE_DIFFERENCE, FINITE_VOLUME, HLL, HLLC, MINMOD, MUSCL, OSHER, PERIODIC_BOUNDARY, SIMPLE_SOURCE_TERM, SPLIT, VARAXIS, XAXIS, YAXIS, ZAXIS, BoundarySettings, BoundarySettings1D, SnapshotSettings
 
 from jf1uids._physics_modules._cooling._cooling_tables import schure_cooling
 from jf1uids._physics_modules._cooling.cooling_options import PIECEWISE_POWER_LAW, CoolingConfig, CoolingCurveConfig, CoolingParams
@@ -79,7 +79,7 @@ gamma = 5/3
 
 # spatial domain
 box_size = 1.0
-num_cells = 200
+num_cells = 300
 
 # activate stellar wind
 stellar_wind = False
@@ -111,7 +111,7 @@ num_timesteps = 2000
 
 # setup simulation config
 config = SimulationConfig(
-    solver_mode = FINITE_DIFFERENCE,
+    solver_mode = FINITE_VOLUME,
     runtime_debugging = False,
     memory_analysis = False,
     print_elapsed_time = False,
