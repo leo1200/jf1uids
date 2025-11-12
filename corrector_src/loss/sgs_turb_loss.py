@@ -13,6 +13,10 @@ from jf1uids.option_classes.simulation_config import (
 from jf1uids.option_classes.simulation_params import SimulationParams
 import Pk_library as PKL
 from jf1uids._physics_modules._mhd._vector_maths import divergence3D
+from jf1uids.data_classes.simulation_helper_data import get_helper_data
+from jf1uids.fluid_equations.total_quantities import (
+    calculate_total_energy,
+)
 from corrector_src.utils.power_spectra_1d import pk_jax_1d
 import numpy as np
 from functools import partial
@@ -129,6 +133,33 @@ def rate_of_strain_loss(
 # if i wanted to implement it, id have to play with the time integration fs (being fair they dont implement it in the cambridge 2022 paper)
 
 
+def energy_loss(
+    predicted_state: jnp.ndarray,
+    ground_truth: jnp.ndarray,
+    config: SimulationConfig,
+    registered_variables: RegisteredVariables,
+    params: SimulationParams,
+) -> float:
+    helper_data = get_helper_data(config)
+    energy_predicted = calculate_total_energy(
+        predicted_state,
+        helper_data,
+        params.gamma,
+        params.gravitational_constant,
+        config,
+        registered_variables,
+    )
+    energy_ground_truth = calculate_total_energy(
+        ground_truth,
+        helper_data,
+        params.gamma,
+        params.gravitational_constant,
+        config,
+        registered_variables,
+    )
+    return energy_predicted - energy_ground_truth
+
+
 def make_loss_function(cfg_training):
     """Builds a pure JAX-compatible loss function using values from cfg_training.
     Returns
@@ -189,8 +220,8 @@ def make_loss_function(cfg_training):
                 components[name] = val
                 total += weight * val
 
-        # for name, value in components.items():
-        #     jax.debug.print("{name}: {value}", name=name, value=value)
+        for name, value in components.items():
+            jax.debug.print("{name}: {value}", name=name, value=value)
 
         return total, components
 

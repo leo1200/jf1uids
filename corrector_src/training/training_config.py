@@ -99,7 +99,10 @@ class TrainingConfig(NamedTuple):
     accumulate_grads: bool = True
 
     debug_training: bool = True
+
+    correct_from_beggining: bool = True
     # return_full_sim: bool = True
+    start_correction_time: float = 0.03
 
 
 class TrainingParams(NamedTuple):

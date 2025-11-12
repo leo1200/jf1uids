@@ -28,7 +28,7 @@ from jf1uids import time_integration
 import corrector_src.data.blast_creation as blast
 from corrector_src.utils.downaverage import downaverage_states
 from corrector_src.model._cnn_mhd_corrector import CorrectorCNN
-from corrector_src.model._cnn_mhd_corrector_options import (
+from corrector_src.model._corrector_options import (
     CNNMHDParams,
     CNNMHDconfig,
 )

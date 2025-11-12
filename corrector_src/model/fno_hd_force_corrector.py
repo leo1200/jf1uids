@@ -1,6 +1,6 @@
 import jax
 import equinox as eqx
-from jaxtyping import Array, Float, PRNGKeyArray
+from jaxtyping import Array, Float, PRNGKeyArray, Key
 import jax.numpy as jnp
 
 # Simulation framework imports
@@ -48,10 +48,10 @@ class SpectralConv3d(eqx.Module):
         modes3: int,
         shifting_modes: int = 0,
         *,
-        key: Optional[PRNGKeyArray] = None,
+        key: Optional[Key] = None,
     ):
         if key is None:
-            key = jax.random.PRNGKey(0)
+            key = jax.random.key(0)
         k1, k2, k3, k4 = jax.random.split(key, 4)
 
         self.in_channels = int(in_channels)
@@ -70,7 +70,7 @@ class SpectralConv3d(eqx.Module):
             r = jax.random.normal(k_r, shape, dtype=jnp.float32)
             i = jax.random.normal(k_i, shape, dtype=jnp.float32)
             c = (scale * (r + 1j * i)).astype(jnp.complex64)
-            return c  # not supported in jax .astype(jnp.complex64)
+            return c
 
         wshape = (
             self.in_channels,
@@ -106,7 +106,9 @@ class SpectralConv3d(eqx.Module):
         assert in_c == self.in_channels
 
         # rfftn keeps kz >= 0 (last axis reduced to nz//2 + 1)
-        x_ft = jnp.fft.rfftn(x, axes=(-3, -2, -1))  # shape: (in_c, nx, ny, nz//2 + 1)
+        x_ft = jnp.fft.rfftn(x, axes=(-3, -2, -1)).astype(
+            jnp.complex64
+        )  # shape: (in_c, nx, ny, nz//2 + 1)
 
         # compute how many modes we'll actually use (bounded by available spectrum)
         # note: for nx, we treat available kx indices as nx (full signed range), but usable positive half is nx//2
@@ -186,10 +188,10 @@ class FNO3dLayer(eqx.Module):
         modes3: int,
         shifting_modes: int = 0,
         *,
-        key: PRNGKeyArray = None,
+        key: Key = None,
     ):
         if key is None:
-            key = jax.random.PRNGKey(0)
+            key = jax.random.key(0)
         k1, k2 = jax.random.split(key)
 
         # spectral convolution
@@ -228,7 +230,7 @@ class FNO(eqx.Module):
         n_fourier_layers: int,
         fourier_modes: int,
         shifting_modes: int,
-        key: PRNGKeyArray,
+        key: Key,
         activation=jax.nn.gelu,
     ):
         self.activation = activation
@@ -294,6 +296,8 @@ class TurbulenceSGSForceCorrectorFNO(eqx.Module):
 
     fno: FNO
     cambridge_approach: bool = True  # from paper 10.1017/jfm.2022.738
+    postprocessing_floor: bool
+    output_channels: int
 
     def __init__(
         self,
@@ -303,8 +307,9 @@ class TurbulenceSGSForceCorrectorFNO(eqx.Module):
         n_fourier_layers: int,
         fourier_modes: int,
         shifting_modes: int,
-        *,
-        key: PRNGKeyArray,
+        key: Key,
+        postprocessing_floor: bool = False,
+        output_channels: int = 3,
     ):
         """Initialize the FNO-based turbulence corrector."""
         if self.cambridge_approach:
@@ -312,11 +317,12 @@ class TurbulenceSGSForceCorrectorFNO(eqx.Module):
         else:
             in_channels = 4  # 3 velocities + presure
             # should i add the density though???
-
+        self.postprocessing_floor = postprocessing_floor
+        self.output_channels = output_channels
         self.fno = FNO(
             in_channels=in_channels,
             hidden_channels=hidden_channels,
-            out_channels=3,  # for the moment just going to ouput a 3D force field
+            out_channels=output_channels,  # for the moment just going to ouput a 3D force field
             n_fourier_layers=n_fourier_layers,
             fourier_modes=fourier_modes,
             shifting_modes=shifting_modes,
@@ -366,6 +372,21 @@ class TurbulenceSGSForceCorrectorFNO(eqx.Module):
         primitive_state: STATE_TYPE,
         registered_variables: RegisteredVariables,
     ):
+        if self.postprocessing_floor:
+            p_min = 1e-20
+            primitive_state = primitive_state.at[
+                registered_variables.pressure_index
+            ].set(
+                jnp.maximum(primitive_state[registered_variables.pressure_index], p_min)
+            )
+            rho_min = 1e-20
+            primitive_state = primitive_state.at[
+                registered_variables.density_index
+            ].set(
+                jnp.maximum(
+                    primitive_state[registered_variables.density_index], rho_min
+                )
+            )
         return primitive_state
 
     def __call__(
@@ -387,26 +408,28 @@ class TurbulenceSGSForceCorrectorFNO(eqx.Module):
             time_step: Simulation time step (scalar)
         """
 
-        # === Preprocessing ===
         x = self.preprocessing(
             primitive_state=primitive_state,
             config=config,
             registered_variables=registered_variables,
         )
 
-        # === FNO Forward Pass ===
         forces = self.fno(x)
 
-        # === Postprocessing ===
         x = self.postprocessing(
             primitive_state=primitive_state, registered_variables=registered_variables
         )
         # === Apply correction ===
 
         nc = config.num_ghost_cells
-        for i, v_index in enumerate(registered_variables.velocity_index):
-            primitive_state = primitive_state.at[v_index, nc:-nc, nc:-nc, nc:-nc].add(
-                forces[i] * time_step
+        if self.output_channels == 3:
+            for i, v_index in enumerate(registered_variables.velocity_index):
+                primitive_state = primitive_state.at[
+                    v_index, nc:-nc, nc:-nc, nc:-nc
+                ].add(forces[i] * time_step)
+        elif self.output_channels == 5:
+            primitive_state = primitive_state.at[:, nc:-nc, nc:-nc, nc:-nc].add(
+                forces * time_step
             )
 
         return primitive_state

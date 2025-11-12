@@ -20,7 +20,7 @@ from jf1uids import time_integration
 
 from corrector_src.training.training_config import TrainingConfig, TrainingParams
 from corrector_src.model.cnn_mhd_model import CorrectorCNN
-from corrector_src.model._cnn_mhd_corrector_options import (
+from corrector_src.model._corrector_options import (
     CNNMHDParams,
     CNNMHDconfig,
 )

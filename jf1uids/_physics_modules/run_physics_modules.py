@@ -129,13 +129,36 @@ def _run_physics_modules(
     #         )
 
     if config.corrector_config.corrector:
-        neural_net_params = params.corrector_params.network_params
-        neural_net_static = config.corrector_config.network_static
-        model = eqx.combine(neural_net_params, neural_net_static)
+        if config.corrector_config.correct_from_beggining is False:
 
-        primitive_state = model(
-            primitive_state, config, registered_variables, params, dt
-        )
+            def correct_state(primitive_state: STATE_TYPE):
+                # config, registered_variables, params, dt are captured from outer scope
+                neural_net_params = params.corrector_params.network_params
+                neural_net_static = config.corrector_config.network_static
+                model = eqx.combine(neural_net_params, neural_net_static)
+
+                primitive_state = model(
+                    primitive_state, config, registered_variables, params, dt
+                )
+                return primitive_state
+
+            def no_correct_state(primitive_state: STATE_TYPE):
+                return primitive_state
+
+            primitive_state = jax.lax.cond(
+                current_time > config.corrector_config.start_correction_time,
+                correct_state,
+                no_correct_state,
+                primitive_state,  # Only pass the non-static arguments
+            )
+        else:
+            neural_net_params = params.corrector_params.network_params
+            neural_net_static = config.corrector_config.network_static
+            model = eqx.combine(neural_net_params, neural_net_static)
+
+            primitive_state = model(
+                primitive_state, config, registered_variables, params, dt
+            )
     """
     if config.runtime_debugging:
         checkify.check(

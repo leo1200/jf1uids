@@ -25,7 +25,7 @@ from corrector_src.training.solver_in_loop_train import time_integration_trainin
 
 from corrector_src.training.training_config import TrainingConfig
 from corrector_src.model._cnn_mhd_corrector import CorrectorCNN
-from corrector_src.model._cnn_mhd_corrector_options import (
+from corrector_src.model._corrector_options import (
     CNNMHDParams,
     CNNMHDconfig,
 )

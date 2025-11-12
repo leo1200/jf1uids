@@ -14,13 +14,13 @@ import jax.numpy as jnp
 import jax
 
 # corrector_src
-from corrector_src.training.sol_one_training_snapshots import (
+from corrector_src.training.time_integration_w_training import (
     time_integration as time_integration_train,
 )
 from corrector_src.training.training_config import TrainingConfig, TrainingParams
 from corrector_src.model.cnn_mhd_model import CorrectorCNN
 from corrector_src.model.fno_hd_force_corrector import TurbulenceSGSForceCorrectorFNO
-from corrector_src.model._cnn_mhd_corrector_options import (
+from corrector_src.model._corrector_options import (
     # CNNMHDParams,
     # CNNMHDconfig,
     CorrectorConfig,
@@ -169,8 +169,8 @@ def training_loop(cfg):
             print("nan found in loss, stopping the training")
             break
 
-        snapshot_losses.append(losses.flatten())
-        epoch_losses.append(compute_loss_from_components(losses))
+        snapshot_losses.append(losses)
+        epoch_losses.append(epoch_loss)
 
         if early_stopper is not None:
             early_stop = early_stopper.early_stop(epoch_loss)
@@ -187,18 +187,42 @@ def training_loop(cfg):
 
     snapshot_losses = np.array(snapshot_losses)
     # snapshot_losses = snapshot_losses.flatten()
-    plt.figure()
 
-    for i, (name, weight) in active_loss_indices.items():
-        plt.plot(weight * snapshot_losses[:, i], label=name)
+    if len(training_params.loss_calculation_times) > 1:
+        for j, t in enumerate(training_params.loss_calculation_times):
+            fig, ax = plt.subplots(1, 1, figsize=(6, 4))
+            for i, (name, weight) in active_loss_indices.items():
+                ax.plot(weight * snapshot_losses[:, j, i], label=f"{name} (w={weight})")
+            ax.set_xlabel("Epoch")
+            ax.set_ylabel("Loss")
+            ax.set_title(f"Training Loss Components (t={t})")
+            ax.legend()
+            fig.savefig(f"components_loss_curve_t_{t}.png")
+            plt.close(fig)
 
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.title("Training Loss Components")
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig("components_loss_curve.png")
-    plt.close()
+        # --- Combined plot with all t values ---
+        fig, ax = plt.subplots(1, 1, figsize=(8, 5))
+        for j, t in enumerate(training_params.loss_calculation_times):
+            for i, (name, weight) in active_loss_indices.items():
+                ax.plot(weight * snapshot_losses[:, j, i], label=f"{name}, t={t}")
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("Loss")
+        ax.set_title("Training Loss Components")
+        ax.legend()
+        fig.savefig("components_loss_curve.png")
+        plt.close(fig)
+
+    else:
+        for i, (name, weight) in active_loss_indices.items():
+            plt.plot(weight * snapshot_losses[:, i], label=name)
+
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.title("Training Loss Components")
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig("components_loss_curve.png")
+        plt.close()
 
     plt.figure()
     plt.plot(epoch_losses, label="Train Loss")
@@ -218,7 +242,7 @@ def training_loop(cfg):
     eqx.tree_serialise_leaves(f"{model_name}.eqx", final_model)
     np.savez(
         "losses.npz",
-        n_look_behind=np.array(n_look_behind),
+        loss_calculation_times=np.array(training_params.loss_calculation_times),
         epoch_losses=np.array(epoch_losses),
         snapshot_losses=np.array(snapshot_losses),
     )

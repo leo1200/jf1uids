@@ -8,7 +8,7 @@ from corrector_src.utils.downaverage import downaverage_states
 import corrector_src.data.blast_creation as blast
 from typing import Tuple, Any, Optional, List
 from omegaconf import DictConfig
-from corrector_src.model._cnn_mhd_corrector_options import (
+from corrector_src.model._corrector_options import (
     CNNMHDParams,
     CNNMHDconfig,
 )
@@ -109,16 +109,14 @@ def prepare_initial_state(
     rng_seed: Optional[int],
     cnn_mhd_corrector_config: Optional[CNNMHDconfig],
     cnn_mhd_corrector_params: Optional[CNNMHDParams],
-    downscale: bool = False
+    downscale: bool = False,
 ):
-    if downscale: 
+    if downscale:
         resolution = cfg_data.hr_res // cfg_data.downscaling_factor
     else:
-        resolution = cfg_data.hr_res  
+        resolution = cfg_data.hr_res
     initial_state, config, params, helper_data, registered_variables, _ = (
-        blast.randomized_initial_blast_state(
-            resolution, cfg_data, rng_seed
-        )
+        blast.randomized_initial_blast_state(resolution, cfg_data, rng_seed)
     )
     config = finalize_config(config, initial_state.shape)
     if cnn_mhd_corrector_config is not None and cnn_mhd_corrector_params is not None:

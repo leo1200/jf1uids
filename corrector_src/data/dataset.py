@@ -319,6 +319,8 @@ class dataset:
         scenario: Optional[str | int] = None,
         corrector_config: Optional[CorrectorConfig] = None,
         corrector_params: Optional[CorrectorParams] = None,
+        rng_seed: int = None,
+        verbose: bool = False,
         **overrides,
     ) -> Tuple[
         np.ndarray,
@@ -345,6 +347,7 @@ class dataset:
                 scenario=scenario,
                 config_overrides=config_overrides_hr,
                 config_overrides_lr=config_overrides_lr,
+                rng_seed=rng_seed,
             )
             is_nan_data, hr_snapshot_data = time_integration(
                 **sim_bundle_hr.unpack_integrate()
@@ -365,6 +368,7 @@ class dataset:
         hr_downscaled_states = downaverage(
             hr_snapshot_data.states, downscale_factor or self.downscale_factor
         )
+        print(f"rng seed {sim_bundle_hr.seed}")
         return (hr_downscaled_states, sim_bundle_lr)
 
     def dataset_validation_initializator(
@@ -416,6 +420,99 @@ class dataset:
             hr_snapshot_data.total_energy[0],
             hr_snapshot_data.total_mass[0],
             sim_bundle_hr.seed,
+        )
+
+    def hr_lr_ml_states_integration(
+        self,
+        resolution: Optional[int] = None,
+        downscale_factor: Optional[int] = None,
+        scenario: Optional[str | int] = None,
+        corrector_config: Optional[CorrectorConfig] = None,
+        corrector_params: Optional[CorrectorParams] = None,
+        rng_seed: int = None,
+        verbose: bool = False,
+        num_snapshots: int = 50,
+        **overrides,
+    ) -> Tuple[
+        np.ndarray,
+        SimulationBundle,
+    ]:
+        snapshot_timepoints = jnp.linspace(0.0, self.cfg_data.t_end, num_snapshots)
+        # print(snapshot_timepoints)
+        config_overrides_lr = {
+            "return_snapshots": True,
+            "use_specific_snapshot_timepoints": True,
+            "active_nan_checker": True,
+            "num_snapshots": num_snapshots,
+        }
+        config_overrides_hr = {
+            "return_snapshots": True,
+            "use_specific_snapshot_timepoints": True,
+            "active_nan_checker": True,
+            "num_snapshots": num_snapshots,
+            "progress_bar": True,
+        }
+        config_overrides_lr_ml = {
+            "active_nan_checker": True,
+            "num_snapshots": num_snapshots,
+        }
+        is_nan_data = True
+        while is_nan_data:
+            (sim_bundle_hr, sim_bundle_lr) = self.hr_lr_initializator(
+                resolution=resolution or self.default_resolution,
+                downscale=downscale_factor or self.downscale_factor,
+                scenario=scenario,
+                config_overrides=config_overrides_hr,
+                config_overrides_lr=config_overrides_lr,
+                rng_seed=rng_seed,
+            )
+            sim_bundle_hr.params = sim_bundle_hr.params._replace(
+                snapshot_timepoints=snapshot_timepoints
+            )
+            sim_bundle_lr.params = sim_bundle_lr.params._replace(
+                snapshot_timepoints=snapshot_timepoints
+            )
+            print("Integrating HR")
+            time_hr = time.time()
+            is_nan_data, hr_snapshot_data = time_integration(
+                **sim_bundle_hr.unpack_integrate()
+            )
+            print("Time taken for HR ", time.time() - time_hr)
+            if is_nan_data:
+                print("Nan found during time integration wo ML enhancing")
+                continue
+            print("Integrating LR")
+            time_lr = time.time()
+            is_nan_data, lr_snapshot_data = time_integration(
+                **sim_bundle_lr.unpack_integrate()
+            )
+            print("Time taken for LR ", time.time() - time_lr)
+            if is_nan_data:
+                print("Nan found during time integration wo ML enhancing")
+                continue
+
+            sim_bundle_lr.override_config(**config_overrides_lr_ml)
+            sim_bundle_lr.override_solver_in_the_loop(
+                corrector_config=corrector_config, corrector_params=corrector_params
+            )
+            print("Integrating ML w SOL")
+            time_lr_sol = time.time()
+            is_nan_data, lr_ml_snapshot_data = time_integration(
+                **sim_bundle_lr.unpack_integrate()
+            )
+            print("Time taken for LR SOL", time.time() - time_lr_sol)
+            if is_nan_data:
+                print("Nan found during time integration w ML enhancing")
+                continue
+            is_nan_data = False
+
+            print(f"rng seed {sim_bundle_hr.seed}")
+        return (
+            sim_bundle_hr,
+            sim_bundle_lr,
+            hr_snapshot_data,
+            lr_snapshot_data,
+            lr_ml_snapshot_data,
         )
 
     def randomized_turbulent_initial_state(

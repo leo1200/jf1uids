@@ -14,13 +14,13 @@ import jax.numpy as jnp
 import jax
 
 # corrector_src
-from corrector_src.training.sol_one_training_snapshots import (
+from corrector_src.training.time_integration_w_training import (
     time_integration as time_integration_train,
 )
 from corrector_src.training.training_config import TrainingConfig, TrainingParams
 from corrector_src.model.cnn_mhd_model import CorrectorCNN
 from corrector_src.model.fno_hd_force_corrector import TurbulenceSGSForceCorrectorFNO
-from corrector_src.model._cnn_mhd_corrector_options import (
+from corrector_src.model._corrector_options import (
     # CNNMHDParams,
     # CNNMHDconfig,
     CorrectorConfig,
@@ -49,11 +49,13 @@ from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from functools import partial
 from typing import Tuple
+from numpy import ndarray
 
 
-def train_model(cfg: OmegaConf):
+def train_model(cfg: OmegaConf, loss_timesteps: ndarray = None):
     epochs = cfg.training.epochs
-    loss_timesteps = jnp.array(cfg.data.snapshot_timepoints)
+    if loss_timesteps is None:
+        loss_timesteps = jnp.array(cfg.data.snapshot_timepoints)
     assert cfg.data.differentiation_mode == 1, (
         "differentiation_mode must be BACKWARDS (1)"
     )
@@ -74,7 +76,7 @@ def train_model(cfg: OmegaConf):
     model_cfg = OmegaConf.to_container(cfg.models, resolve=True)
     model_name = model_cfg.pop("_name_", None)
 
-    key = jax.random.PRNGKey(cfg.training.rng_key)
+    key = jax.random.key(cfg.training.rng_key)
     model = instantiate(model_cfg, key=key)
 
     neural_net_params, neural_net_static = eqx.partition(model, eqx.is_array)
@@ -105,7 +107,7 @@ def train_model(cfg: OmegaConf):
     # ─── Early Stopping ───────────────────────────────────────────────────
 
     if cfg.training.early_stopping:
-        patience = 50
+        patience = 20
         print(f" 🥱 Using early stopper with patience {patience}")
         early_stopper = EarlyStopper(patience=patience)
         best_params = neural_net_params

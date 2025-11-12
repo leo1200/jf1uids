@@ -16,6 +16,8 @@ class CNNMHDParams(NamedTuple):
 class CorrectorConfig(NamedTuple):
     corrector: bool = False
     network_static: Union[PyTree, NoneType] = None
+    correct_from_beggining: bool = True
+    start_correction_time: float = 0.05
 
 
 class CorrectorParams(NamedTuple):
