@@ -187,6 +187,11 @@ class SimulationConfig(NamedTuple):
     #: Magnetohydrodynamics switch.
     mhd: bool = False
 
+    # #: Enforce positivity of density and pressure.
+    # #: NOTE: CURRENTLY ONLY IMPLEMENTED FOR 
+    # #: FINITE DIFFERENCE MODE.
+    # #: enforce_positivity: bool = True
+
     #: Self gravity switch, currently only
     #: for periodic boundaries.
     self_gravity: bool = False

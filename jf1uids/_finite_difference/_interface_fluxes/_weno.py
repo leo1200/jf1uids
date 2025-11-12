@@ -110,6 +110,8 @@ from jf1uids.variable_registry.registered_variables import RegisteredVariables
 @partial(jax.jit, static_argnames=["registered_variables"])
 def _weno_flux_x(
     conserved_state,
+    rhomin: Union[float, jnp.ndarray],
+    pgmin: Union[float, jnp.ndarray],
     gamma: Union[float, jnp.ndarray],
     registered_variables: RegisteredVariables,
 ):
@@ -118,7 +120,7 @@ def _weno_flux_x(
     """
 
     epsilon = 1e-8
-    
+
     # retrieve the center fluxes
     F = _mhd_flux_x(conserved_state, gamma, registered_variables)
     
@@ -130,8 +132,8 @@ def _weno_flux_x(
     def mode_flux(mode, F_current):
 
         # get eigenstructure for this mode
-        lambdas_center = _eigen_lambdas(conserved_state, gamma, registered_variables, mode)
-        L_row = _eigen_L_row(conserved_state, gamma, registered_variables, mode)
+        lambdas_center = _eigen_lambdas(conserved_state, rhomin, pgmin, gamma, registered_variables, mode)
+        L_row = _eigen_L_row(conserved_state, rhomin, pgmin, gamma, registered_variables, mode)
 
         F0 = jnp.roll(F,  2, axis=1)   # shape (N_vars, Nx, Ny, Nz) — i-2 at target i
         F1 = jnp.roll(F,  1, axis=1)   # i-1
@@ -226,7 +228,7 @@ def _weno_flux_x(
         Fs = -second + third
 
         # transform back and add to current flux
-        R_col = _eigen_R_col(conserved_state, gamma, registered_variables, mode)
+        R_col = _eigen_R_col(conserved_state, rhomin, pgmin, gamma, registered_variables, mode)
         dF = jnp.einsum('nxyz,xyz->nxyz', R_col, Fs)
         return F_current + dF
     
@@ -239,6 +241,8 @@ def _weno_flux_x(
 @partial(jax.jit, static_argnames=["registered_variables"])
 def _weno_flux_y(
     conserved_state,
+    rhomin: Union[float, jnp.ndarray],
+    pgmin: Union[float, jnp.ndarray],
     gamma: Union[float, jnp.ndarray],
     registered_variables: RegisteredVariables,
 ):
@@ -256,7 +260,7 @@ def _weno_flux_y(
     qy = qy.at[registered_variables.magnetic_index.x].set(B_y)
     qy = qy.at[registered_variables.magnetic_index.y].set(B_x)
     
-    Fy = _weno_flux_x(qy, gamma, registered_variables)
+    Fy = _weno_flux_x(qy, rhomin, pgmin, gamma, registered_variables)
     
     # Transpose back
     Fy = jnp.transpose(Fy, (0, 2, 1, 3))
@@ -278,6 +282,8 @@ def _weno_flux_y(
 @partial(jax.jit, static_argnames=["registered_variables"])
 def _weno_flux_z(
     conserved_state,
+    rhomin: Union[float, jnp.ndarray],
+    pgmin: Union[float, jnp.ndarray],
     gamma: Union[float, jnp.ndarray],
     registered_variables: RegisteredVariables,
 ):
@@ -295,7 +301,7 @@ def _weno_flux_z(
     qz = qz.at[registered_variables.magnetic_index.x].set(B_z)
     qz = qz.at[registered_variables.magnetic_index.z].set(B_x)
     
-    Fz = _weno_flux_x(qz, gamma, registered_variables)
+    Fz = _weno_flux_x(qz, rhomin, pgmin, gamma, registered_variables)
     
     # Transpose back
     Fz = jnp.transpose(Fz, (0, 3, 2, 1))

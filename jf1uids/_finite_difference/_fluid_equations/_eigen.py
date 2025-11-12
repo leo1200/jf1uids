@@ -317,6 +317,8 @@ def _eigen_x(
 @partial(jax.jit, static_argnames=["registered_variables"])
 def _eigen_R_col(
     conserved_state,
+    rhomin: Union[float, jnp.ndarray],
+    pgmin: Union[float, jnp.ndarray],
     gamma: Union[float, jnp.ndarray],
     registered_variables: RegisteredVariables,
     col: int,
@@ -353,10 +355,6 @@ def _eigen_R_col(
     BB2 = Bx * Bx + By * By + Bz * Bz
 
     pg = (gamma - 1.0) * (EE - 0.5 * (rho * vv2 + BB2))
-
-    # protection (use same small floors as before)
-    rhomin = 1.0e-12
-    pgmin = 1.0e-12
 
     mask_bad = (rho < rhomin) | (pg < pgmin)
     rho = jnp.where(mask_bad, jnp.maximum(rho, rhomin), rho)
@@ -420,16 +418,9 @@ def _eigen_R_col(
 
     gam2 = (gamma - 2.0) / (gamma - 1.0)
 
-    # allocate R and L on interfaces (Nx,Ny,Nz)
-    R = jnp.zeros((N_vars, Nx, Ny, Nz))
-
     # continuity sign flips (sgnBt) and conditional multiplication as in Fortran
     sgnBt = jnp.where(By_i != 0.0, jnp.where(By_i >= 0.0, 1.0, -1.0), jnp.where(Bz_i >= 0.0, 1.0, -1.0))
     mask_cs_ge_la = cs_i >= la_i
-
-    # helper setters using registry indices for conserved ordering
-    def rset(idx, value):
-        return R.at[idx, ...].set(value)
 
     # map conserved ordering indices for eigenvector slots
     idx_D  = DI
@@ -443,82 +434,89 @@ def _eigen_R_col(
     def col_0():
         # Fill right eigenvectors R (columns) exactly as Fortran
         # Column 1 (fast -)
-        R_out = rset(idx_D, af)
-        R_out = R_out.at[idx_Mx, ...].set(af * (vx_i - lf_i))
-        R_out = R_out.at[idx_My, ...].set(af * vy_i + as_ * ls_i * bty * sgnBx)
-        R_out = R_out.at[idx_Mz, ...].set(af * vz_i + as_ * ls_i * btz * sgnBx)
-        R_out = R_out.at[idx_By, ...].set(cs_i * as_ * bty / sqrt_rho)
-        R_out = R_out.at[idx_Bz, ...].set(cs_i * as_ * btz / sqrt_rho)
-        R_out = R_out.at[idx_E, ...].set(af * (lf_i**2 - lf_i * vx_i + 0.5 * vv2_i - gam2 * cs2_i) + as_ * ls_i * (bty * vy_i + btz * vz_i) * sgnBx)
-        R_out = R_out.at[:, ...].set(jnp.where(~mask_cs_ge_la, R_out[:, ...] * sgnBt, R_out[:, ...]))
-        return R_out
+        R = jnp.zeros((N_vars, Nx, Ny, Nz))
+        R = R.at[idx_D].set(af)
+        R = R.at[idx_Mx].set(af * (vx_i - lf_i))
+        R = R.at[idx_My].set(af * vy_i + as_ * ls_i * bty * sgnBx)
+        R = R.at[idx_Mz].set(af * vz_i + as_ * ls_i * btz * sgnBx)
+        R = R.at[idx_By].set(cs_i * as_ * bty / sqrt_rho)
+        R = R.at[idx_Bz].set(cs_i * as_ * btz / sqrt_rho)
+        R = R.at[idx_E].set(af * (lf_i**2 - lf_i * vx_i + 0.5 * vv2_i - gam2 * cs2_i) + as_ * ls_i * (bty * vy_i + btz * vz_i) * sgnBx)
+        R = jnp.where(~mask_cs_ge_la, R * sgnBt, R)
+        return R
     
     def col_1():
         # Column 2 (alfven -)
-        R_out = rset(idx_D, 0.0)
-        R_out = R_out.at[idx_Mx, ...].set(0.0)
-        R_out = R_out.at[idx_My, ...].set(-btz)
-        R_out = R_out.at[idx_Mz, ...].set(bty)
-        R_out = R_out.at[idx_By, ...].set(-btz * sgnBx / sqrt_rho)
-        R_out = R_out.at[idx_Bz, ...].set(bty * sgnBx / sqrt_rho)
-        R_out = R_out.at[idx_E, ...].set(bty * vz_i - btz * vy_i)
-        return R_out
+        R = jnp.zeros((N_vars, Nx, Ny, Nz))
+        R = R.at[idx_D].set(0.0)
+        R = R.at[idx_Mx].set(0.0)
+        R = R.at[idx_My].set(-btz)
+        R = R.at[idx_Mz].set(bty)
+        R = R.at[idx_By].set(-btz * sgnBx / sqrt_rho)
+        R = R.at[idx_Bz].set(bty * sgnBx / sqrt_rho)
+        R = R.at[idx_E].set(bty * vz_i - btz * vy_i)
+        return R
     
     def col_2():
-        R_out = rset(idx_D, as_)
-        R_out = R_out.at[idx_Mx, ...].set(as_ * (vx_i - ls_i))
-        R_out = R_out.at[idx_My, ...].set(as_ * vy_i - af * lf_i * bty * sgnBx)
-        R_out = R_out.at[idx_Mz, ...].set(as_ * vz_i - af * lf_i * btz * sgnBx)
-        R_out = R_out.at[idx_By, ...].set(-cs_i * af * bty / sqrt_rho)
-        R_out = R_out.at[idx_Bz, ...].set(-cs_i * af * btz / sqrt_rho)
-        R_out = R_out.at[idx_E, ...].set(as_ * (ls_i**2 - ls_i * vx_i + 0.5 * vv2_i - gam2 * cs2_i) - af * lf_i * (bty * vy_i + btz * vz_i) * sgnBx)
-        R_out = R_out.at[:, ...].set(jnp.where(mask_cs_ge_la, R_out[:, ...] * sgnBt, R_out[:, ...]))
-        return R_out
+        R = jnp.zeros((N_vars, Nx, Ny, Nz))
+        R = R.at[idx_D].set(as_)
+        R = R.at[idx_Mx].set(as_ * (vx_i - ls_i))
+        R = R.at[idx_My].set(as_ * vy_i - af * lf_i * bty * sgnBx)
+        R = R.at[idx_Mz].set(as_ * vz_i - af * lf_i * btz * sgnBx)
+        R = R.at[idx_By].set(-cs_i * af * bty / sqrt_rho)
+        R = R.at[idx_Bz].set(-cs_i * af * btz / sqrt_rho)
+        R = R.at[idx_E].set(as_ * (ls_i**2 - ls_i * vx_i + 0.5 * vv2_i - gam2 * cs2_i) - af * lf_i * (bty * vy_i + btz * vz_i) * sgnBx)
+        R = jnp.where(mask_cs_ge_la, R * sgnBt, R)
+        return R
     
     def col_3():
-        R_out = rset(idx_D, 1.0)
-        R_out = R_out.at[idx_Mx, ...].set(vx_i)
-        R_out = R_out.at[idx_My, ...].set(vy_i)
-        R_out = R_out.at[idx_Mz, ...].set(vz_i)
-        R_out = R_out.at[idx_By, ...].set(0.0)
-        R_out = R_out.at[idx_Bz, ...].set(0.0)
-        R_out = R_out.at[idx_E, ...].set(0.5 * vv2_i)
-        return R_out
+        R = jnp.zeros((N_vars, Nx, Ny, Nz))
+        R = R.at[idx_D].set(1.0)
+        R = R.at[idx_Mx].set(vx_i)
+        R = R.at[idx_My].set(vy_i)
+        R = R.at[idx_Mz].set(vz_i)
+        R = R.at[idx_By].set(0.0)
+        R = R.at[idx_Bz].set(0.0)
+        R = R.at[idx_E].set(0.5 * vv2_i)
+        return R
     
     def col_4():
         # Column 5 (slow +)
-        R_out = rset(idx_D, as_)
-        R_out = R_out.at[idx_Mx, ...].set(as_ * (vx_i + ls_i))
-        R_out = R_out.at[idx_My, ...].set(as_ * vy_i + af * lf_i * bty * sgnBx)
-        R_out = R_out.at[idx_Mz, ...].set(as_ * vz_i + af * lf_i * btz * sgnBx)
-        R_out = R_out.at[idx_By, ...].set(-cs_i * af * bty / sqrt_rho)
-        R_out = R_out.at[idx_Bz, ...].set(-cs_i * af * btz / sqrt_rho)
-        R_out = R_out.at[idx_E, ...].set(as_ * (ls_i**2 + ls_i * vx_i + 0.5 * vv2_i - gam2 * cs2_i) + af * lf_i * (bty * vy_i + btz * vz_i) * sgnBx)
-        R_out = R_out.at[:, ...].set(jnp.where(mask_cs_ge_la, R_out[:, ...] * sgnBt, R_out[:, ...]))
-        return R_out
+        R = jnp.zeros((N_vars, Nx, Ny, Nz))
+        R = R.at[idx_D].set(as_)
+        R = R.at[idx_Mx].set(as_ * (vx_i + ls_i))
+        R = R.at[idx_My].set(as_ * vy_i + af * lf_i * bty * sgnBx)
+        R = R.at[idx_Mz].set(as_ * vz_i + af * lf_i * btz * sgnBx)
+        R = R.at[idx_By].set(-cs_i * af * bty / sqrt_rho)
+        R = R.at[idx_Bz].set(-cs_i * af * btz / sqrt_rho)
+        R = R.at[idx_E].set(as_ * (ls_i**2 + ls_i * vx_i + 0.5 * vv2_i - gam2 * cs2_i) + af * lf_i * (bty * vy_i + btz * vz_i) * sgnBx)
+        R = jnp.where(mask_cs_ge_la, R * sgnBt, R)
+        return R
     
     def col_5():
         # Column 6 (alfven +)
-        R_out = rset(idx_D, 0.0)
-        R_out = R_out.at[idx_Mx, ...].set(0.0)
-        R_out = R_out.at[idx_My, ...].set(-btz)
-        R_out = R_out.at[idx_Mz, ...].set(bty)
-        R_out = R_out.at[idx_By, ...].set(btz * sgnBx / sqrt_rho)
-        R_out = R_out.at[idx_Bz, ...].set(-bty * sgnBx / sqrt_rho)
-        R_out = R_out.at[idx_E, ...].set(bty * vz_i - btz * vy_i)
-        return R_out
+        R = jnp.zeros((N_vars, Nx, Ny, Nz))
+        R = R.at[idx_D].set(0.0)
+        R = R.at[idx_Mx].set(0.0)
+        R = R.at[idx_My].set(-btz)
+        R = R.at[idx_Mz].set(bty)
+        R = R.at[idx_By].set(btz * sgnBx / sqrt_rho)
+        R = R.at[idx_Bz].set(-bty * sgnBx / sqrt_rho)
+        R = R.at[idx_E].set(bty * vz_i - btz * vy_i)
+        return R
     
     def col_6():
         # Column 7 (fast +)
-        R_out = rset(idx_D, af)
-        R_out = R_out.at[idx_Mx, ...].set(af * (vx_i + lf_i))
-        R_out = R_out.at[idx_My, ...].set(af * vy_i - as_ * ls_i * bty * sgnBx)
-        R_out = R_out.at[idx_Mz, ...].set(af * vz_i - as_ * ls_i * btz * sgnBx)
-        R_out = R_out.at[idx_By, ...].set(cs_i * as_ * bty / sqrt_rho)
-        R_out = R_out.at[idx_Bz, ...].set(cs_i * as_ * btz / sqrt_rho)
-        R_out = R_out.at[idx_E, ...].set(af * (lf_i**2 + lf_i * vx_i + 0.5 * vv2_i - gam2 * cs2_i) - as_ * ls_i * (bty * vy_i + btz * vz_i) * sgnBx)
-        R_out = R_out.at[:, ...].set(jnp.where(~mask_cs_ge_la, R_out[:, ...] * sgnBt, R_out[:, ...]))
-        return R_out
+        R = jnp.zeros((N_vars, Nx, Ny, Nz))
+        R = R.at[idx_D].set(af)
+        R = R.at[idx_Mx].set(af * (vx_i + lf_i))
+        R = R.at[idx_My].set(af * vy_i - as_ * ls_i * bty * sgnBx)
+        R = R.at[idx_Mz].set(af * vz_i - as_ * ls_i * btz * sgnBx)
+        R = R.at[idx_By].set(cs_i * as_ * bty / sqrt_rho)
+        R = R.at[idx_Bz].set(cs_i * as_ * btz / sqrt_rho)
+        R = R.at[idx_E].set(af * (lf_i**2 + lf_i * vx_i + 0.5 * vv2_i - gam2 * cs2_i) - as_ * ls_i * (bty * vy_i + btz * vz_i) * sgnBx)
+        R = jnp.where(~mask_cs_ge_la, R * sgnBt, R)
+        return R
 
     R = jax.lax.switch(col, [col_0, col_1, col_2, col_3, col_4, col_5, col_6])
 
@@ -527,6 +525,8 @@ def _eigen_R_col(
 @partial(jax.jit, static_argnames=["registered_variables"])
 def _eigen_L_row(
     conserved_state,
+    rhomin: Union[float, jnp.ndarray],
+    pgmin: Union[float, jnp.ndarray],
     gamma: Union[float, jnp.ndarray],
     registered_variables: RegisteredVariables,
     row: int,
@@ -563,10 +563,6 @@ def _eigen_L_row(
     BB2 = Bx * Bx + By * By + Bz * Bz
 
     pg = (gamma - 1.0) * (EE - 0.5 * (rho * vv2 + BB2))
-
-    # protection (use same small floors as before)
-    rhomin = 1.0e-12
-    pgmin = 1.0e-12
 
     mask_bad = (rho < rhomin) | (pg < pgmin)
     rho = jnp.where(mask_bad, jnp.maximum(rho, rhomin), rho)
@@ -639,11 +635,6 @@ def _eigen_L_row(
     sgnBt = jnp.where(By_i != 0.0, jnp.where(By_i >= 0.0, 1.0, -1.0), jnp.where(Bz_i >= 0.0, 1.0, -1.0))
     mask_cs_ge_la = cs_i >= la_i
 
-    L = jnp.zeros((N_vars, Nx, Ny, Nz))
-
-    def lset(idx, value):
-        return L.at[idx, ...].set(value)
-
     # map conserved ordering indices for eigenvector slots
     idx_D  = DI
     idx_Mx = MX
@@ -654,93 +645,169 @@ def _eigen_L_row(
     idx_E  = IE
 
     def row_0():
-        # Fill left eigenvectors L (rows 1..7 -> 0..6) exactly as Fortran
-        L_out = lset(idx_D,  af * (gam1 * vv2_i + lf_i * vx_i) - as_ * ls_i * (bty * vy_i + btz * vz_i) * sgnBx)
-        L_out = L_out.at[idx_Mx, ...].set(af * (gam0 * vx_i - lf_i))
-        L_out = L_out.at[idx_My, ...].set(gam0 * af * vy_i + as_ * ls_i * bty * sgnBx)
-        L_out = L_out.at[idx_Mz, ...].set(gam0 * af * vz_i + as_ * ls_i * btz * sgnBx)
-        L_out = L_out.at[idx_By, ...].set(gam0 * af * By_i + cs_i * as_ * bty * sqrt_rho)
-        L_out = L_out.at[idx_Bz, ...].set(gam0 * af * Bz_i + cs_i * as_ * btz * sqrt_rho)
-        L_out = L_out.at[idx_E, ...].set(-gam0 * af)
-        L_out = L_out.at[:, ...].set(0.5 * L_out[:, ...] * inv_cs2)
-        L_out = L_out.at[:, ...].set(jnp.where(~mask_cs_ge_la, L_out[:, ...] * sgnBt, L_out[:, ...]))
-        return L_out
-
+        L = jnp.zeros((N_vars, Nx, Ny, Nz))
+        L = L.at[idx_D].set(af * (gam1 * vv2_i + lf_i * vx_i) - as_ * ls_i * (bty * vy_i + btz * vz_i) * sgnBx)
+        L = L.at[idx_Mx].set(af * (gam0 * vx_i - lf_i))
+        L = L.at[idx_My].set(gam0 * af * vy_i + as_ * ls_i * bty * sgnBx)
+        L = L.at[idx_Mz].set(gam0 * af * vz_i + as_ * ls_i * btz * sgnBx)
+        L = L.at[idx_By].set(gam0 * af * By_i + cs_i * as_ * bty * sqrt_rho)
+        L = L.at[idx_Bz].set(gam0 * af * Bz_i + cs_i * as_ * btz * sqrt_rho)
+        L = L.at[idx_E].set(-gam0 * af)
+        L = 0.5 * L * inv_cs2
+        L = jnp.where(~mask_cs_ge_la, L * sgnBt, L)
+        return L
+    
     def row_1():
-        L_out = lset(idx_D,  btz * vy_i - bty * vz_i)
-        L_out = L_out.at[idx_Mx, ...].set(0.0)
-        L_out = L_out.at[idx_My, ...].set(-btz)
-        L_out = L_out.at[idx_Mz, ...].set(bty)
-        L_out = L_out.at[idx_By, ...].set(-btz * sgnBx * sqrt_rho)
-        L_out = L_out.at[idx_Bz, ...].set(bty * sgnBx * sqrt_rho)
-        L_out = L_out.at[idx_E, ...].set(0.0)
-        L_out = L_out.at[:, ...].set(0.5 * L_out[:, ...])
-        return L_out
+        L = jnp.zeros((N_vars, Nx, Ny, Nz))
+        L = L.at[idx_D].set(btz * vy_i - bty * vz_i)
+        L = L.at[idx_Mx].set(0.0)
+        L = L.at[idx_My].set(-btz)
+        L = L.at[idx_Mz].set(bty)
+        L = L.at[idx_By].set(-btz * sgnBx * sqrt_rho)
+        L = L.at[idx_Bz].set(bty * sgnBx * sqrt_rho)
+        L = L.at[idx_E].set(0.0)
+        L = 0.5 * L
+        return L
 
     def row_2():
-        L_out = lset(idx_D,  as_ * (gam1 * vv2_i + ls_i * vx_i) + af * lf_i * (bty * vy_i + btz * vz_i) * sgnBx)
-        L_out = L_out.at[idx_Mx, ...].set(gam0 * as_ * vx_i - as_ * ls_i)
-        L_out = L_out.at[idx_My, ...].set(gam0 * as_ * vy_i - af * lf_i * bty * sgnBx)
-        L_out = L_out.at[idx_Mz, ...].set(gam0 * as_ * vz_i - af * lf_i * btz * sgnBx)
-        L_out = L_out.at[idx_By, ...].set(gam0 * as_ * By_i - cs_i * af * bty * sqrt_rho)
-        L_out = L_out.at[idx_Bz, ...].set(gam0 * as_ * Bz_i - cs_i * af * btz * sqrt_rho)
-        L_out = L_out.at[idx_E, ...].set(-gam0 * as_)
-        L_out = L_out.at[:, ...].set(0.5 * L_out[:, ...] * inv_cs2)
-        L_out = L_out.at[:, ...].set(jnp.where(mask_cs_ge_la, L_out[:, ...] * sgnBt, L_out[:, ...]))
-        return L_out
+        L = jnp.zeros((N_vars, Nx, Ny, Nz))
+        L = L.at[idx_D].set(as_ * (gam1 * vv2_i + ls_i * vx_i) + af * lf_i * (bty * vy_i + btz * vz_i) * sgnBx)
+        L = L.at[idx_Mx].set(gam0 * as_ * vx_i - as_ * ls_i)
+        L = L.at[idx_My].set(gam0 * as_ * vy_i - af * lf_i * bty * sgnBx)
+        L = L.at[idx_Mz].set(gam0 * as_ * vz_i - af * lf_i * btz * sgnBx)
+        L = L.at[idx_By].set(gam0 * as_ * By_i - cs_i * af * bty * sqrt_rho)
+        L = L.at[idx_Bz].set(gam0 * as_ * Bz_i - cs_i * af * btz * sqrt_rho)
+        L = L.at[idx_E].set(-gam0 * as_)
+        L = 0.5 * L * inv_cs2
+        L = jnp.where(mask_cs_ge_la, L * sgnBt, L)
+        return L
 
     def row_3():
-        L_out = lset(idx_D,  -cs2_i / gam0 - 0.5 * vv2_i)
-        L_out = L_out.at[idx_Mx, ...].set(vx_i)
-        L_out = L_out.at[idx_My, ...].set(vy_i)
-        L_out = L_out.at[idx_Mz, ...].set(vz_i)
-        L_out = L_out.at[idx_By, ...].set(By_i)
-        L_out = L_out.at[idx_Bz, ...].set(Bz_i)
-        L_out = L_out.at[idx_E, ...].set(-1.0)
-        L_out = L_out.at[:, ...].set(-gam0 * L_out[:, ...] * inv_cs2)
-        return L_out
+        L = jnp.zeros((N_vars, Nx, Ny, Nz))
+        L = L.at[idx_D].set(-cs2_i / gam0 - 0.5 * vv2_i)
+        L = L.at[idx_Mx].set(vx_i)
+        L = L.at[idx_My].set(vy_i)
+        L = L.at[idx_Mz].set(vz_i)
+        L = L.at[idx_By].set(By_i)
+        L = L.at[idx_Bz].set(Bz_i)
+        L = L.at[idx_E].set(-1.0)
+        L = -gam0 * L * inv_cs2
+        return L
 
     def row_4():
-        L_out = lset(idx_D,  as_ * (gam1 * vv2_i - ls_i * vx_i) - af * lf_i * (bty * vy_i + btz * vz_i) * sgnBx)
-        L_out = L_out.at[idx_Mx, ...].set(as_ * (gam0 * vx_i + ls_i))
-        L_out = L_out.at[idx_My, ...].set(gam0 * as_ * vy_i + af * lf_i * bty * sgnBx)
-        L_out = L_out.at[idx_Mz, ...].set(gam0 * as_ * vz_i + af * lf_i * btz * sgnBx)
-        L_out = L_out.at[idx_By, ...].set(gam0 * as_ * By_i - cs_i * af * bty * sqrt_rho)
-        L_out = L_out.at[idx_Bz, ...].set(gam0 * as_ * Bz_i - cs_i * af * btz * sqrt_rho)
-        L_out = L_out.at[idx_E, ...].set(-gam0 * as_)
-        L_out = L_out.at[:, ...].set(0.5 * L_out[:, ...] * inv_cs2)
-        L_out = L_out.at[:, ...].set(jnp.where(mask_cs_ge_la, L_out[:, ...] * sgnBt, L_out[:, ...]))
-        return L_out
+        L = jnp.zeros((N_vars, Nx, Ny, Nz))
+        L = L.at[idx_D].set(as_ * (gam1 * vv2_i - ls_i * vx_i) - af * lf_i * (bty * vy_i + btz * vz_i) * sgnBx)
+        L = L.at[idx_Mx].set(as_ * (gam0 * vx_i + ls_i))
+        L = L.at[idx_My].set(gam0 * as_ * vy_i + af * lf_i * bty * sgnBx)
+        L = L.at[idx_Mz].set(gam0 * as_ * vz_i + af * lf_i * btz * sgnBx)
+        L = L.at[idx_By].set(gam0 * as_ * By_i - cs_i * af * bty * sqrt_rho)
+        L = L.at[idx_Bz].set(gam0 * as_ * Bz_i - cs_i * af * btz * sqrt_rho)
+        L = L.at[idx_E].set(-gam0 * as_)
+        L = 0.5 * L * inv_cs2
+        L = jnp.where(mask_cs_ge_la, L * sgnBt, L)
+        return L
 
     def row_5():
-        L_out = lset(idx_D,  btz * vy_i - bty * vz_i)
-        L_out = L_out.at[idx_Mx, ...].set(0.0)
-        L_out = L_out.at[idx_My, ...].set(-btz)
-        L_out = L_out.at[idx_Mz, ...].set(bty)
-        L_out = L_out.at[idx_By, ...].set(btz * sgnBx * sqrt_rho)
-        L_out = L_out.at[idx_Bz, ...].set(-bty * sgnBx * sqrt_rho)
-        L_out = L_out.at[idx_E, ...].set(0.0)
-        L_out = L_out.at[:, ...].set(0.5 * L_out[:, ...])
-        return L_out
+        L = jnp.zeros((N_vars, Nx, Ny, Nz))
+        L = L.at[idx_D].set(btz * vy_i - bty * vz_i)
+        L = L.at[idx_Mx].set(0.0)
+        L = L.at[idx_My].set(-btz)
+        L = L.at[idx_Mz].set(bty)
+        L = L.at[idx_By].set(btz * sgnBx * sqrt_rho)
+        L = L.at[idx_Bz].set(-bty * sgnBx * sqrt_rho)
+        L = L.at[idx_E].set(0.0)
+        L = 0.5 * L
+        return L
 
     def row_6():
-        L_out = lset(idx_D,  af * (gam1 * vv2_i - lf_i * vx_i) + as_ * ls_i * (bty * vy_i + btz * vz_i) * sgnBx)
-        L_out = L_out.at[idx_Mx, ...].set(af * (gam0 * vx_i + lf_i))
-        L_out = L_out.at[idx_My, ...].set(gam0 * af * vy_i - as_ * ls_i * bty * sgnBx)
-        L_out = L_out.at[idx_Mz, ...].set(gam0 * af * vz_i - as_ * ls_i * btz * sgnBx)
-        L_out = L_out.at[idx_By, ...].set(gam0 * af * By_i + cs_i * as_ * bty * sqrt_rho)
-        L_out = L_out.at[idx_Bz, ...].set(gam0 * af * Bz_i + cs_i * as_ * btz * sqrt_rho)
-        L_out = L_out.at[idx_E, ...].set(-gam0 * af)
-        L_out = L_out.at[:, ...].set(0.5 * L_out[:, ...] * inv_cs2)
-        L_out = L_out.at[:, ...].set(jnp.where(~mask_cs_ge_la, L_out[:, ...] * sgnBt, L_out[:, ...]))
-        return L_out
+        L = jnp.zeros((N_vars, Nx, Ny, Nz))
+        L = L.at[idx_D].set(af * (gam1 * vv2_i - lf_i * vx_i) + as_ * ls_i * (bty * vy_i + btz * vz_i) * sgnBx)
+        L = L.at[idx_Mx].set(af * (gam0 * vx_i + lf_i))
+        L = L.at[idx_My].set(gam0 * af * vy_i - as_ * ls_i * bty * sgnBx)
+        L = L.at[idx_Mz].set(gam0 * af * vz_i - as_ * ls_i * btz * sgnBx)
+        L = L.at[idx_By].set(gam0 * af * By_i + cs_i * as_ * bty * sqrt_rho)
+        L = L.at[idx_Bz].set(gam0 * af * Bz_i + cs_i * as_ * btz * sqrt_rho)
+        L = L.at[idx_E].set(-gam0 * af)
+        L = 0.5 * L * inv_cs2
+        L = jnp.where(~mask_cs_ge_la, L * sgnBt, L)
+        return L
 
     L = jax.lax.switch(row, [row_0, row_1, row_2, row_3, row_4, row_5, row_6])
 
     return L
 
+@partial(jax.jit, static_argnames=["registered_variables"])
+def _eigen_all_lambdas(
+    conserved_state,
+    rhomin: Union[float, jnp.ndarray],
+    pgmin: Union[float, jnp.ndarray],
+    gamma: Union[float, jnp.ndarray],
+    registered_variables: RegisteredVariables,
+):
+    
+    # registry indices (conserved ordering)
+    DI = registered_variables.density_index
+    MX = registered_variables.momentum_index.x
+    MY = registered_variables.momentum_index.y
+    MZ = registered_variables.momentum_index.z
+    BX = registered_variables.magnetic_index.x
+    BY = registered_variables.magnetic_index.y
+    BZ = registered_variables.magnetic_index.z
+    IE = registered_variables.energy_index
+
+    # unpack conserved variables (centers)
+    DD = conserved_state[DI]    # density
+    Mx = conserved_state[MX]
+    My = conserved_state[MY]
+    Mz = conserved_state[MZ]
+    Bx = conserved_state[BX]
+    By = conserved_state[BY]
+    Bz = conserved_state[BZ]
+    EE = conserved_state[IE]
+
+    # compute primitives (like Fortran primit)
+    rho = DD
+    vx = Mx / rho
+    vy = My / rho
+    vz = Mz / rho
+
+    vv2 = vx * vx + vy * vy + vz * vz
+    BB2 = Bx * Bx + By * By + Bz * Bz
+
+    pg = (gamma - 1.0) * (EE - 0.5 * (rho * vv2 + BB2))
+
+    mask_bad = (rho < rhomin) | (pg < pgmin)
+    rho = jnp.where(mask_bad, jnp.maximum(rho, rhomin), rho)
+    pg = jnp.where(mask_bad, jnp.maximum(pg, pgmin), pg)
+    EE = jnp.where(mask_bad, pg / (gamma - 1.0) + 0.5 * (rho * vv2 + BB2), EE)
+
+    # center-derived quantities for eigenvalues (center block, matches Fortran)
+    bbn2 = BB2 / rho
+    bnx2 = (Bx * Bx) / rho
+
+    cs2_center = jnp.maximum(0.0, gamma * jnp.abs(pg / rho))
+
+    disc_c = (bbn2 + cs2_center) ** 2 - 4.0 * bnx2 * cs2_center
+    root_c = jnp.sqrt(jnp.maximum(0.0, disc_c))
+
+    lf_c = jnp.sqrt(jnp.maximum(0.0, 0.5 * (bbn2 + cs2_center + root_c)))
+    la_c = jnp.sqrt(jnp.maximum(0.0, bnx2))
+    ls_c = jnp.sqrt(jnp.maximum(0.0, 0.5 * (bbn2 + cs2_center - root_c)))
+
+    return jnp.stack([
+        vx - lf_c,
+        vx - la_c,
+        vx - ls_c,
+        vx,
+        vx + ls_c,
+        vx + la_c,
+        vx + lf_c
+    ], axis=0)
+
 def _eigen_lambdas(
     conserved_state,
+    rhomin: Union[float, jnp.ndarray],
+    pgmin: Union[float, jnp.ndarray],
     gamma: Union[float, jnp.ndarray],
     registered_variables: RegisteredVariables,
     mode: int,
@@ -776,10 +843,6 @@ def _eigen_lambdas(
     BB2 = Bx * Bx + By * By + Bz * Bz
 
     pg = (gamma - 1.0) * (EE - 0.5 * (rho * vv2 + BB2))
-
-    # protection (use same small floors as before)
-    rhomin = 1.0e-12
-    pgmin = 1.0e-12
 
     mask_bad = (rho < rhomin) | (pg < pgmin)
     rho = jnp.where(mask_bad, jnp.maximum(rho, rhomin), rho)

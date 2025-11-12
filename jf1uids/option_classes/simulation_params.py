@@ -24,6 +24,18 @@ class SimulationParams(NamedTuple):
     #: The adiabatic index of the gas.
     gamma: float = 5/3
 
+    #: Minimum allowed density.
+    #: NOTE: CURRENTLY ONLY USED IN 
+    #: FINITE DIFFERENCE MODE IF
+    #: config.enforce_positivity IS TRUE.
+    minimum_density: float = 1e-14
+
+    #: Minimum allowed pressure.
+    #: NOTE: CURRENTLY ONLY USED IN 
+    #: FINITE DIFFERENCE MODE IF
+    #: config.enforce_positivity IS TRUE.
+    minimum_pressure: float = 1e-14
+
     #: The maximum time step.
     dt_max: float = 0.001
 

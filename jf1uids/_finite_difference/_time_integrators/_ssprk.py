@@ -2,7 +2,7 @@
 Strong Stability Preserving Runge-Kutta (SSPRK) time integrator.
 
 See _magnetic_update/_constrained_transport.py for more details on the
-Constrained Transport (CT) implementation following (Seo & Ryu 2023, 
+Constrained Transport (CT) implementation following (Seo & Ryu 2023,
 https://arxiv.org/abs/2304.04360).
 """
 
@@ -11,6 +11,9 @@ import jax
 import jax.numpy as jnp
 from typing import Union, Tuple
 
+from jf1uids._finite_difference._fluid_equations._enforce_positivity import (
+    _enforce_positivity,
+)
 from jf1uids._finite_difference._interface_fluxes._weno import (
     _weno_flux_x,
     _weno_flux_y,
@@ -66,9 +69,9 @@ def _ssprk4_with_ct(
         dtdz = k2_coeff * dt / grid_spacing
 
         # Calculate fluxes based on the state of the current stage
-        dF_x = _weno_flux_x(current_q, gamma, registered_variables)
-        dF_y = _weno_flux_y(current_q, gamma, registered_variables)
-        dF_z = _weno_flux_z(current_q, gamma, registered_variables)
+        dF_x = _weno_flux_x(current_q, params.minimum_density, params.minimum_pressure, gamma, registered_variables)
+        dF_y = _weno_flux_y(current_q, params.minimum_density, params.minimum_pressure, gamma, registered_variables)
+        dF_z = _weno_flux_z(current_q, params.minimum_density, params.minimum_pressure, gamma, registered_variables)
 
         # Calculate RHS for interface magnetic fields using Constrained Transport
         rhs_bx, rhs_by, rhs_bz = constrained_transport_rhs(
@@ -83,14 +86,18 @@ def _ssprk4_with_ct(
         )
 
         if config.wind_config.stellar_wind:
-            rhs_q += _wind_ei3D_source(
-                params.wind_params,
-                current_q,
-                config,
-                helper_data,
-                config.wind_config.num_injection_cells,
-                registered_variables,
-            ) * k2_coeff * dt
+            rhs_q += (
+                _wind_ei3D_source(
+                    params.wind_params,
+                    current_q,
+                    config,
+                    helper_data,
+                    config.wind_config.num_injection_cells,
+                    registered_variables,
+                )
+                * k2_coeff
+                * dt
+            )
 
         return rhs_q, rhs_bx, rhs_by, rhs_bz
 

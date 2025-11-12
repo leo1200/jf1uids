@@ -81,7 +81,14 @@ def time_integration(
             have the signature
                 callable(time: float, state: STATE_TYPE, registered_variables: RegisteredVariables) -> None
             and can be used to e.g. output the current state to disk or
-            directly produce intermediate plots.
+            directly produce intermediate plots. Note that inside the callable,
+            to pass data to memory, one must use
+                jax.debug.callback(
+                    function, args...
+                )
+            To avoid moving large amounts of data to the host, only pass
+            the necessary data to the function in the jax.debug.callback call,
+            e.g. only the slice or summary statistics you need.
         sharding: The sharding to use for the padded helper data. If None,
                   no sharding is applied.
 
@@ -541,9 +548,17 @@ def _time_integration(
                     current_checkpoint=current_checkpoint
                 )
 
-                jax.debug.callback(
-                    snapshot_callable, time, primitive_state, registered_variables
-                )
+                # call the user-defined snapshot callable
+                # NOTE: to pass data to memory, one must use
+                # jax.debug.callback(
+                #     function, args...
+                # )
+                # inside the snapshot_callable. To avoid moving
+                # large amounts of data to the host, only pass
+                # the necessary data to the function in the
+                # jax.debug.callback call, e.g. only the slice
+                # or summary statistics you need.
+                snapshot_callable(time, primitive_state, registered_variables)
 
                 return snapshot_data
 
@@ -610,6 +625,7 @@ def _time_integration(
                         params.dt_max,
                         params.gamma,
                         config,
+                        params,
                         registered_variables,
                         params.C_cfl,
                     )
@@ -626,6 +642,10 @@ def _time_integration(
         # make sure we exactly hit the end time
         if config.exact_end_time and not config.use_specific_snapshot_timepoints:
             dt = jnp.minimum(dt, params.t_end - time)
+
+        # ---------------- ↑ time step logic ↑ ----------------
+
+        # ----------------- ↓ CENTRAL UPDATE ↓ ----------------
 
         if config.solver_mode == FINITE_VOLUME:
             # run physics modules
@@ -667,6 +687,8 @@ def _time_integration(
             )
 
         time += dt
+
+        # ----------------- ↑ CENTRAL UPDATE ↑ ----------------
 
         # If we are in the last time step, we also want to update the snapshot data.
         if config.use_specific_snapshot_timepoints and config.return_snapshots:

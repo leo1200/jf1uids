@@ -1,7 +1,7 @@
 import os
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
 
-multi_gpu = False
+multi_gpu = True
 
 if multi_gpu:
     # ==== GPU selection ====
@@ -18,12 +18,12 @@ else:
 
 import jax
 
+from jf1uids._finite_difference._state_evolution._evolve_state import _evolve_state_fd
+
 # runtime debugging
 from jax.experimental import checkify
 
 from jf1uids._finite_difference._magnetic_update._constrained_transport import initialize_interface_fields
-
-# jax.config.update("jax_debug_nans", True)
 
 import jax.numpy as jnp
 from jax.sharding import PartitionSpec as P
@@ -79,14 +79,14 @@ gamma = 5/3
 
 # spatial domain
 box_size = 1.0
-num_cells = 300
+num_cells = 684
 
 # activate stellar wind
 stellar_wind = True
 
 # turbulence
 turbulence = True
-wanted_rms = 50 * u.km / u.s
+wanted_rms = 40 * u.km / u.s
 
 # cooling
 cooling = False
@@ -116,7 +116,7 @@ config = SimulationConfig(
     memory_analysis = False,
     print_elapsed_time = False,
     riemann_solver = HLL,
-    mhd = mhd,
+    mhd = True,
     limiter = DOUBLE_MINMOD,
     first_order_fallback = False,
     progress_bar = True,
@@ -126,14 +126,14 @@ config = SimulationConfig(
     num_cells = num_cells,
     wind_config = WindConfig(
         stellar_wind = stellar_wind,
-        num_injection_cells = 12,
+        num_injection_cells = 24,
         trace_wind_density = False,
     ),
     split = SPLIT,
-    time_integrator=MUSCL,
+    time_integrator = MUSCL,
     fixed_timestep = fixed_timestep,
     exact_end_time = True,
-    differentiation_mode = BACKWARDS,
+    differentiation_mode = FORWARDS,
     num_timesteps = num_timesteps,
     return_snapshots = False,
     snapshot_settings = SnapshotSettings(
@@ -175,7 +175,7 @@ code_velocity = 100 * u.km / u.s
 code_units = CodeUnits(code_length, code_mass, code_velocity)
 
 # time domain
-C_CFL = 0.4
+C_CFL = 0.8
 
 t_final = 1.0 * 1e4 * u.yr
 t_end = t_final.to(code_units.code_time).value
@@ -187,7 +187,7 @@ print(t_end)
 
 # wind parameters
 M_star = 40 * u.M_sun
-wind_final_velocity = 200 * u.km / u.s
+wind_final_velocity = 1800 * u.km / u.s
 wind_mass_loss_rate = 2.965e-3 / (1e6 * u.yr) * M_star
 
 wind_params = WindParams(
@@ -210,6 +210,8 @@ params = SimulationParams(
     C_cfl = C_CFL,
     dt_max = dt_max,
     gamma = gamma,
+    minimum_density=1e-8,
+    minimum_pressure=1e-8,
     t_end = t_end,
     wind_params = wind_params,
         cooling_params = CoolingParams(
@@ -290,30 +292,26 @@ p = jnp.ones((config.num_cells, config.num_cells, config.num_cells)) * p_0.to(co
 if mhd:
     B_0 = 13.5 * u.microgauss / c.mu0**0.5
     B_0 = B_0.to(code_units.code_magnetic_field).value
-
-    print("B_0", B_0)
-
-    # magnetic field in x direction
-    B_x = jnp.ones((config.num_cells, config.num_cells, config.num_cells)) * B_0
-    if multi_gpu:
-        B_x = jax.device_put(B_x, named_sharding_no_var)
-
-    B_y = jnp.zeros((config.num_cells, config.num_cells, config.num_cells))
-    if multi_gpu:
-        B_y = jax.device_put(B_y, named_sharding_no_var)
-    
-    B_z = jnp.zeros((config.num_cells, config.num_cells, config.num_cells))
-    if multi_gpu:
-        B_z = jax.device_put(B_z, named_sharding_no_var)
-
-    bxb, byb, bzb = initialize_interface_fields(B_x, B_y, B_z)
 else:
-    B_x = None
-    B_y = None
-    B_z = None
-    bxb = None
-    byb = None
-    bzb = None
+    B_0 = 0.0
+
+print("B_0", B_0)
+
+# magnetic field in x direction
+B_x = jnp.ones((config.num_cells, config.num_cells, config.num_cells)) * B_0
+if multi_gpu:
+    B_x = jax.device_put(B_x, named_sharding_no_var)
+
+B_y = jnp.zeros((config.num_cells, config.num_cells, config.num_cells))
+if multi_gpu:
+    B_y = jax.device_put(B_y, named_sharding_no_var)
+
+B_z = jnp.zeros((config.num_cells, config.num_cells, config.num_cells))
+if multi_gpu:
+    B_z = jax.device_put(B_z, named_sharding_no_var)
+
+bxb, byb, bzb = initialize_interface_fields(B_x, B_y, B_z)
+
 
 # construct primitive state
 initial_state = construct_primitive_state(
@@ -343,9 +341,29 @@ else:
 
 config = finalize_config(config, initial_state.shape)
 
+# primitive_state = initial_state
+
+# for i in range(10):
+#     print("iteration", i)
+#     dt = 0.5 * dt_max
+#     primitive_state = _evolve_state_fd(
+#         primitive_state,
+#         dt,
+#         params.gamma,
+#         params.gravitational_constant,
+#         config,
+#         params,
+#         helper_data,
+#         registered_variables,
+#     )
+
+
 result = time_integration(initial_state, config, params, helper_data, registered_variables, sharding = named_sharding)
 
 final_state = result
+
+# save the final state to disk
+jnp.save("data/stellar_wind3D_final_state" + app_string + ".npy", final_state)
 
 from matplotlib.colors import LogNorm
 
@@ -373,82 +391,82 @@ ax3.set_title("Pressure")
 
 plt.savefig("figures/slices" + app_string + ".png", dpi = 1000)
 
-# # def plot_weaver_comparison(axs, final_state, params, helper_data, code_units, rho_0, p_0):
-# #     rho = final_state[registered_variables.density_index].flatten()
-# #     vel = jnp.sqrt(final_state[registered_variables.velocity_index.x].flatten()**2 + final_state[registered_variables.velocity_index.y].flatten()**2 + final_state[registered_variables.velocity_index.z].flatten()**2)
-# #     p = final_state[registered_variables.pressure_index].flatten()
+# def plot_weaver_comparison(axs, final_state, params, helper_data, code_units, rho_0, p_0):
+#     rho = final_state[registered_variables.density_index].flatten()
+#     vel = jnp.sqrt(final_state[registered_variables.velocity_index.x].flatten()**2 + final_state[registered_variables.velocity_index.y].flatten()**2 + final_state[registered_variables.velocity_index.z].flatten()**2)
+#     p = final_state[registered_variables.pressure_index].flatten()
 
-# #     rho = rho * code_units.code_density
-# #     vel = vel * code_units.code_velocity
-# #     p = p * code_units.code_pressure
+#     rho = rho * code_units.code_density
+#     vel = vel * code_units.code_velocity
+#     p = p * code_units.code_pressure
 
-# #     r = helper_data.r.flatten() * code_units.code_length
+#     r = helper_data.r.flatten() * code_units.code_length
 
-# #     # get weaver solution
-# #     weaver = Weaver(
-# #         params.wind_params.wind_final_velocity * code_units.code_velocity,
-# #         params.wind_params.wind_mass_loss_rate * code_units.code_mass / code_units.code_time,
-# #         rho_0,
-# #         p_0
-# #     )
+#     # get weaver solution
+#     weaver = Weaver(
+#         params.wind_params.wind_final_velocity * code_units.code_velocity,
+#         params.wind_params.wind_mass_loss_rate * code_units.code_mass / code_units.code_time,
+#         rho_0,
+#         p_0
+#     )
     
-# #     current_time = params.t_end * code_units.code_time
+#     current_time = params.t_end * code_units.code_time
     
-# #     # density
-# #     r_density_weaver, density_weaver = weaver.get_density_profile(0.01 * u.parsec, 3.5 * u.parsec, current_time)
-# #     r_density_weaver = r_density_weaver.to(u.parsec)
-# #     density_weaver = (density_weaver / m_p).to(u.cm**-3)
+#     # density
+#     r_density_weaver, density_weaver = weaver.get_density_profile(0.01 * u.parsec, 3.5 * u.parsec, current_time)
+#     r_density_weaver = r_density_weaver.to(u.parsec)
+#     density_weaver = (density_weaver / m_p).to(u.cm**-3)
 
-# #     # velocity
-# #     r_velocity_weaver, velocity_weaver = weaver.get_velocity_profile(0.01 * u.parsec, 3.5 * u.parsec, current_time)
-# #     r_velocity_weaver = r_velocity_weaver.to(u.parsec)
-# #     velocity_weaver = velocity_weaver.to(u.km / u.s)
+#     # velocity
+#     r_velocity_weaver, velocity_weaver = weaver.get_velocity_profile(0.01 * u.parsec, 3.5 * u.parsec, current_time)
+#     r_velocity_weaver = r_velocity_weaver.to(u.parsec)
+#     velocity_weaver = velocity_weaver.to(u.km / u.s)
 
-# #     # pressure
-# #     r_pressure_weaver, pressure_weaver = weaver.get_pressure_profile(0.01 * u.parsec, 3.5 * u.parsec, current_time)
-# #     r_pressure_weaver = r_pressure_weaver.to(u.parsec)
-# #     pressure_weaver = (pressure_weaver / c.k_B).to(u.cm**-3 * u.K)
+#     # pressure
+#     r_pressure_weaver, pressure_weaver = weaver.get_pressure_profile(0.01 * u.parsec, 3.5 * u.parsec, current_time)
+#     r_pressure_weaver = r_pressure_weaver.to(u.parsec)
+#     pressure_weaver = (pressure_weaver / c.k_B).to(u.cm**-3 * u.K)
 
-# #     axs[0].set_yscale("log")
-# #     axs[0].scatter(r.to(u.parsec), (rho / m_p).to(u.cm**-3), label="jf1uids", s = 1)
+#     axs[0].set_yscale("log")
+#     axs[0].scatter(r.to(u.parsec), (rho / m_p).to(u.cm**-3), label="jf1uids", s = 1)
 
-# #     axs[0].plot(r_density_weaver, density_weaver, "--", label="Weaver solution")
+#     axs[0].plot(r_density_weaver, density_weaver, "--", label="Weaver solution")
 
-# #     axs[0].set_title("density")
-# #     axs[0].set_ylabel(r"$\rho$ in m$_p$ cm$^{-3}$")
-# #     axs[0].set_xlim(0, 3)
+#     axs[0].set_title("density")
+#     axs[0].set_ylabel(r"$\rho$ in m$_p$ cm$^{-3}$")
+#     axs[0].set_xlim(0, 3)
 
-# #     axs[0].legend(loc="upper right")
+#     axs[0].legend(loc="upper right")
 
-# #     axs[0].set_xlabel("r in pc")
+#     axs[0].set_xlabel("r in pc")
 
-# #     axs[1].set_yscale("log")
-# #     axs[1].scatter(r.to(u.parsec), (p / c.k_B).to(u.K / u.cm**3), label="jf1uids", s = 1)
-# #     axs[1].plot(r_pressure_weaver, pressure_weaver, "--", label="Weaver solution")
+#     axs[1].set_yscale("log")
+#     axs[1].scatter(r.to(u.parsec), (p / c.k_B).to(u.K / u.cm**3), label="jf1uids", s = 1)
+#     axs[1].plot(r_pressure_weaver, pressure_weaver, "--", label="Weaver solution")
 
-# #     axs[1].set_title("pressure")
-# #     axs[1].set_ylabel(r"$p$/k$_b$ in K cm$^{-3}$")
-# #     axs[1].set_xlim(0, 3)
+#     axs[1].set_title("pressure")
+#     axs[1].set_ylabel(r"$p$/k$_b$ in K cm$^{-3}$")
+#     axs[1].set_xlim(0, 3)
 
-# #     axs[1].legend(loc="upper right")
+#     axs[1].legend(loc="upper right")
 
-# #     axs[1].set_xlabel("r in pc")
+#     axs[1].set_xlabel("r in pc")
 
 
-# #     axs[2].set_yscale("log")
-# #     axs[2].scatter(r.to(u.parsec), vel.to(u.km / u.s), label="jf1uids", s = 1)
-# #     axs[2].plot(r_velocity_weaver, velocity_weaver, "--", label="Weaver solution")
-# #     axs[2].set_title("velocity")
-# #     # ylim 1 to 1e4 km/s
-# #     axs[2].set_ylim(1, 1e4)
-# #     axs[2].set_xlim(0, 3)
-# #     axs[2].set_ylabel("v in km/s")
-# #     # xlabel
-# #     # show legend upper left
-# #     axs[2].legend(loc="upper right")
+#     axs[2].set_yscale("log")
+#     axs[2].scatter(r.to(u.parsec), vel.to(u.km / u.s), label="jf1uids", s = 1)
+#     axs[2].plot(r_velocity_weaver, velocity_weaver, "--", label="Weaver solution")
+#     axs[2].set_title("velocity")
+#     # ylim 1 to 1e4 km/s
+#     axs[2].set_ylim(1, 1e4)
+#     axs[2].set_xlim(0, 3)
+#     axs[2].set_ylabel("v in km/s")
+#     # xlabel
+#     # show legend upper left
+#     axs[2].legend(loc="upper right")
 
-# #     axs[2].set_xlabel("r in pc")
+#     axs[2].set_xlabel("r in pc")
 
-# # fig, axs = plt.subplots(1, 3, figsize=(15, 5))
-# # plot_weaver_comparison(axs, final_state, params, helper_data, code_units, rho_0, p_0)
-# # plt.savefig("figures/profiles" + app_string + ".png")
+# fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+# plot_weaver_comparison(axs, final_state, params, helper_data, code_units, rho_0, p_0)
+# plt.savefig("figures/profiles" + app_string + ".png")

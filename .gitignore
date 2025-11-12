@@ -6,6 +6,8 @@ package.json
 package-lock.json
 .firebase/
 
+arena/results/*/data
+
 tests/cooling_corrector/data
 tests/mhd_tests/data
 tests/lancaster/data
