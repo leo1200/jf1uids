@@ -27,7 +27,7 @@ from jf1uids.option_classes.simulation_config import (
 from jf1uids.option_classes.simulation_params import SimulationParams
 from jf1uids._physics_modules._stellar_wind.stellar_wind import _wind_injection
 from jf1uids.shock_finder.shock_finder import shock_criteria
-
+import equinox as eqx
 
 # @jaxtyped(typechecker=typechecker)
 @partial(jax.jit, static_argnames=["config", "registered_variables"])
@@ -121,7 +121,11 @@ def _run_physics_modules(
         )
 
     if config.cnn_mhd_corrector_config.cnn_mhd_corrector:
-        primitive_state = _cnn_mhd_corrector(
+        neural_net_params = params.cnn_mhd_corrector_params.network_params
+        neural_net_static = config.cnn_mhd_corrector_config.network_static
+        model = eqx.combine(neural_net_params, neural_net_static)
+
+        primitive_state = model(
             primitive_state, config, registered_variables, params, dt
         )
 

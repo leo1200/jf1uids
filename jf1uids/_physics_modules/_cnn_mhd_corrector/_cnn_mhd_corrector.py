@@ -54,47 +54,69 @@ class CorrectorCNN(eqx.Module):
             ),
         )
 
-    def __call__(self, x: Float[Array, "num_vars h w"]) -> Float[Array, "num_vars h w"]:
+    def __call__(
+        self,
+        primitive_state: STATE_TYPE,
+        config: SimulationConfig,
+        registered_variables: RegisteredVariables,
+        params: SimulationParams,
+        time_step: Float[Array, ""],
+    ) -> Float[Array, "num_vars h w"]:
         """
         The forward pass of the model.
         """
         # Pass the input through the network to get the correction term
-        correction = x
+        correction = primitive_state
         for layer in self.layers:
             correction = layer(correction)
 
         # Add the learned correction to the original input
-        return correction
+        electric_field_correction = correction[-3:, ...]
+        magnetic_field_correction = curl2D(
+            electric_field_correction, config.grid_spacing
+        )
+        correction = correction.at[-3:, ...].set(magnetic_field_correction)
+
+        # update the primitive state with the correction
+        primitive_state = primitive_state + correction * time_step
+
+        # ensure that the pressure is larger than a minimum value
+        p_min = 1e-4
+        primitive_state = primitive_state.at[registered_variables.pressure_index].set(
+            jnp.maximum(primitive_state[registered_variables.pressure_index], p_min)
+        )
+
+        return primitive_state
 
 
-# @jaxtyped(typechecker=typechecker)
-@partial(jax.jit, static_argnames=["registered_variables", "config"])
-def _cnn_mhd_corrector(
-    primitive_state: STATE_TYPE,
-    config: SimulationConfig,
-    registered_variables: RegisteredVariables,
-    params: SimulationParams,
-    time_step: Float[Array, ""],
-):
-    neural_net_params = params.cnn_mhd_corrector_params.network_params
-    neural_net_static = config.cnn_mhd_corrector_config.network_static
-    model = eqx.combine(neural_net_params, neural_net_static)
+# # @jaxtyped(typechecker=typechecker)
+# @partial(jax.jit, static_argnames=["registered_variables", "config"])
+# def _cnn_mhd_corrector(
+#     primitive_state: STATE_TYPE,
+#     config: SimulationConfig,
+#     registered_variables: RegisteredVariables,
+#     params: SimulationParams,
+#     time_step: Float[Array, ""],
+# ):
+#     neural_net_params = params.cnn_mhd_corrector_params.network_params
+#     neural_net_static = config.cnn_mhd_corrector_config.network_static
+#     model = eqx.combine(neural_net_params, neural_net_static)
 
-    correction = model(primitive_state)
+#     correction = model(primitive_state)
 
-    # to not add divergence errors, we learn a correction for the electric field
-    # - and the divergence of a curl is zero
-    electric_field_correction = correction[-3:, ...]
-    magnetic_field_correction = curl2D(electric_field_correction, config.grid_spacing)
-    correction = correction.at[-3:, ...].set(magnetic_field_correction)
+#     # to not add divergence errors, we learn a correction for the electric field
+#     # - and the divergence of a curl is zero
+#     electric_field_correction = correction[-3:, ...]
+#     magnetic_field_correction = curl2D(electric_field_correction, config.grid_spacing)
+#     correction = correction.at[-3:, ...].set(magnetic_field_correction)
 
-    # update the primitive state with the correction
-    primitive_state = primitive_state + correction * time_step
+#     # update the primitive state with the correction
+#     primitive_state = primitive_state + correction * time_step
 
-    # ensure that the pressure is larger than a minimum value
-    p_min = 1e-4
-    primitive_state = primitive_state.at[registered_variables.pressure_index].set(
-        jnp.maximum(primitive_state[registered_variables.pressure_index], p_min)
-    )
+#     # ensure that the pressure is larger than a minimum value
+#     p_min = 1e-4
+#     primitive_state = primitive_state.at[registered_variables.pressure_index].set(
+#         jnp.maximum(primitive_state[registered_variables.pressure_index], p_min)
+#     )
 
-    return primitive_state
+#     return primitive_state
