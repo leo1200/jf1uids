@@ -254,7 +254,7 @@ def training_loop(cfg):
         # --- Combined plot with all t values ---
         fig, ax = plt.subplots(1, 1, figsize=(8, 5))
         for j, t in enumerate(training_params.loss_calculation_times):
-            for i, (name, weight) in active_loss_indices.items()
+            for i, (name, weight) in active_loss_indices.items():
                 ax.plot(weight * snapshot_losses[:, j, i], label=f"{name}, t={t}")
         ax.set_xlabel("Epoch")
         ax.set_ylabel("Loss")

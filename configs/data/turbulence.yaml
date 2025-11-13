@@ -6,8 +6,8 @@ generate_data_on_fly: True
 precomputed_data : False
 fixed_timestep: False
 dt_max: 0.1
-t_end: 1.0
-snapshot_timepoints: [1.0]
+t_end: 0.4
+snapshot_timepoints: [0.1, 0.25, 0.4]
 num_snapshots: 1
 use_specific_snapshot_timepoints: True
 return_snapshots: True

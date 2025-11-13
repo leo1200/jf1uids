@@ -1,6 +1,8 @@
 _target_: corrector_src.model.fno_hd_force_corrector.TurbulenceSGSForceCorrectorFNO
 _name_: "fno"
-hidden_channels: 8
-n_fourier_layers: 1
-fourier_modes: 4
+hidden_channels: 12
+n_fourier_layers: 2
+fourier_modes: 20
 shifting_modes: 2
+postprocessing_floor: True
+output_channels: 5

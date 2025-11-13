@@ -9,3 +9,6 @@ mse_loss: 1
 spectral_energy_loss: 0.007
 rate_of_strain_loss: 0.002
 early_stopping: True
+patience: 30
+correct_from_beggining: False
+delayed_correction_time: 0.05

@@ -29,7 +29,7 @@ from corrector_src.model._corrector_options import (
 from corrector_src.loss.sgs_turb_loss import make_loss_function
 from corrector_src.data.dataset import dataset
 from corrector_src.training.early_stopper import EarlyStopper
-from corrector_src.utils.printing_config_summary import print_data_config_summary
+from corrector_src.utils.printing_config_summary import print_full_config_summary
 
 # jf1uids
 from jf1uids import time_integration
@@ -47,16 +47,47 @@ import hydra
 from hydra.utils import get_original_cwd
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
+from hydra import initialize, compose
 from functools import partial
 from typing import Tuple
+import datetime
 
 
-@hydra.main(version_base=None, config_path="../../configs", config_name="config")
+def load_config(
+    config_path="../../configs",
+    config_name="config",
+    overrides=None,
+    experiment_root="experiments",
+    exp_name="turbulence_corrector",
+    version_base="1.2",
+):
+    """Load a Hydra config but mimic the @hydra.main runtime behavior."""
+    overrides = overrides or []
+    # overrides = ["data=turbulence", "training=turbulence_optuna"]
+
+    # --- Compose config manually ---
+    with initialize(config_path=config_path, version_base=version_base):
+        cfg = compose(config_name=config_name, overrides=overrides)
+
+    # --- Create an experiment directory (like Hydra does) ---
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    exp_name = cfg.get("experiment_name", exp_name)
+    run_dir = os.path.join(experiment_root, exp_name, timestamp)
+    os.makedirs(run_dir, exist_ok=True)
+
+    # --- Save the composed config inside that folder ---
+    OmegaConf.save(cfg, os.path.join(run_dir, "config.yaml"))
+
+    # --- Mimic Hydra’s runtime: change into the run directory ---
+    os.chdir(run_dir)
+    print(f"💾 Running in Hydra-style directory: {run_dir}")
+
+    return cfg
+
 def training_loop(cfg):
     print("Hydra run dir:", os.getcwd())
-    print_data_config_summary(cfg.data)
+    print_full_config_summary(cfg.data, cfg.training, cfg.models)
     epochs = cfg.training.epochs
-    n_look_behind = cfg.training.n_look_behind
     loss_timesteps = jnp.array(cfg.data.snapshot_timepoints)
     assert cfg.data.differentiation_mode == 1, (
         "differentiation_mode must be BACKWARDS (1)"
@@ -92,7 +123,12 @@ def training_loop(cfg):
         f" ✅ Initialized model '{model_name}' successfully with # of params {trainable_params}"
     )
 
-    corrector_config = CorrectorConfig(corrector=True, network_static=neural_net_static)
+    corrector_config = CorrectorConfig(
+        corrector=True,
+        network_static=neural_net_static,
+        correct_from_beggining=cfg.training.get("correct_from_beggining", True),
+        start_correction_time=cfg.training.get("delayed_correction_time", None),
+    )
     corrector_params = CorrectorParams(network_params=neural_net_params)
     optimizer = optax.chain(
         optax.clip_by_global_norm(1.0),
@@ -104,14 +140,13 @@ def training_loop(cfg):
     epoch_losses = []
 
     gt_cfg_data = cfg.data
-    # gt_cfg_data.debug = False
     dataset_creator = dataset(gt_cfg_data.scenarios, gt_cfg_data)
     print(f" ✅ Using data {dataset_creator.scenario_list}")
 
     # ─── Early Stopping ───────────────────────────────────────────────────
 
     if cfg.training.early_stopping:
-        patience = 20
+        patience = cfg.training.get("patience", 20)
         print(f" 🥱 Using early stopper with patience {patience}")
         early_stopper = EarlyStopper(patience=patience)
         best_params = neural_net_params
@@ -126,17 +161,7 @@ def training_loop(cfg):
             corrector_config=corrector_config,
             corrector_params=corrector_params,
         )
-    # def validate_model(network_params, cfg_data, corrector_config, corrector_params):
-    #     cfg_data.use_specific_snapshot_timepoints = True
-    #     cfg_data.snapshot_timepoints = np.linspace(0.0, cfg_data.t_end, 100).tolist()
-    #     ground_truth, lr_sim = dataset_creator.train_initializator(
-    #         resolution=cfg.data.hr_res,
-    #         downscale=cfg.data.downscaling_factor,
-    #         rng_seed=None,
-    #         # scenario selection if needed
-    #         corrector_config=corrector_config,
-    #         corrector_params=corrector_params,
-    #     )
+
     early_stop = False
     for i in range(epochs):
         if cfg.data.generate_data_on_fly:
@@ -169,6 +194,13 @@ def training_loop(cfg):
             print("nan found in loss, stopping the training")
             break
 
+        epoch_loss = np.sum(compute_loss_from_components(losses))
+        time_train = time.time() - time_train
+
+        if np.isnan(np.mean(losses)):
+            print("nan found in loss, stopping the training")
+            break
+
         snapshot_losses.append(losses)
         epoch_losses.append(epoch_loss)
 
@@ -179,11 +211,12 @@ def training_loop(cfg):
             if early_stop:
                 print("🚨 Early stopping 🚨")
                 break
-
         corrector_params = corrector_params._replace(network_params=new_network_params)
         print(
-            f" 🟡 Epoch {i} time_train {float(time_train):2f} loss {float(epoch_losses[-1].item()):2f}"
+            f" 🟡 Epoch {i} time_train {float(time_train):2f} loss {float(epoch_losses[-1].item()):2f}", end="\r"
         )
+    if np.isnan(np.mean(losses)):
+        return
 
     snapshot_losses = np.array(snapshot_losses)
     # snapshot_losses = snapshot_losses.flatten()
@@ -247,83 +280,6 @@ def training_loop(cfg):
         snapshot_losses=np.array(snapshot_losses),
     )
 
-
-# def creating_data(
-#     dataset: dataset,
-#     cfg: OmegaConf,
-#     corrector_config: CorrectorConfig,
-#     corrector_params: CorrectorParams,
-# ) -> Tuple[
-#     jnp.ndarray,
-#     Tuple[
-#         np.ndarray,
-#         SimulationConfig,
-#         SimulationParams,
-#         HelperData,
-#         RegisteredVariables,
-#     ],
-# ]:
-#     "creates data and makes sure that the ground truth hr and lr dont have any nans"
-#     is_nan_data = True
-#     while is_nan_data:  # nan seed 4158841521
-#         try:
-#             time_start = time.time()
-#             (
-#                 ground_truth,
-#                 (
-#                     initial_state_lr,
-#                     initial_config_lr,
-#                     initial_params_lr,
-#                     initial_helper_data_lr,
-#                     initial_registered_variables_lr,
-#                 ),
-#             ) = dataset.train_initializator(
-#                 resolution=cfg.data.hr_res,
-#                 downscale=cfg.data.downscaling_factor,
-#                 rng_seed=None,
-#                 # scenario selection if needed
-#                 corrector_config=corrector_config,
-#                 corrector_params=corrector_params,
-#             )
-#             time_hr = time.time()
-#             is_nan_data = jnp.any(jnp.isnan(ground_truth))
-#             if is_nan_data:
-#                 print("found nan in hr_data repeating the calculation")
-#             else:
-#                 not_ml_config_lr = initial_config_lr._replace(
-#                     return_snapshots=True,
-#                     corrector_config=CorrectorConfig(corrector=False),
-#                 )
-
-#                 final_states_lr = time_integration(
-#                     initial_state_lr,
-#                     not_ml_config_lr,
-#                     initial_params_lr,
-#                     initial_helper_data_lr,
-#                     initial_registered_variables_lr,
-#                 )
-#                 time_lr = time.time()
-#                 is_nan_data = jnp.any(jnp.isnan(final_states_lr.states))
-#                 if is_nan_data:
-#                     print("nan found in lr without ml, getting another initial state")
-#             print(
-#                 f"Time taken to create data hr {time_hr - time_start}, lr {time_lr - time_hr}"
-#             )
-#         except RuntimeError as e:
-#             if "float NaN" in str(e):
-#                 print("nan founds in data trying another seed")
-#                 is_nan_data = True
-#     return (
-#         ground_truth,
-#         (
-#             initial_state_lr,
-#             initial_config_lr,
-#             initial_params_lr,
-#             initial_helper_data_lr,
-#             initial_registered_variables_lr,
-#         ),
-#     )
-
-
 if __name__ == "__main__":
-    training_loop()
+    config = load_config(overrides=["data=turbulence", "training=variable_losses"])
+    training_loop(config)
