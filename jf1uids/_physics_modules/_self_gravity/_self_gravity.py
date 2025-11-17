@@ -27,6 +27,7 @@ from jf1uids.data_classes.simulation_helper_data import HelperData
 from jf1uids.variable_registry.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import (
     DONOR_ACCOUNTING,
+    GHOST_CELLS,
     HLLC_LM,
     LAX_FRIEDRICHS,
     RIEMANN_SPLIT,
@@ -371,6 +372,8 @@ def _apply_self_gravity(
         conserved_state, gamma, config, registered_variables
     )
 
-    primitive_state = _boundary_handler(primitive_state, config)
+
+    if config.boundary_handling == GHOST_CELLS:
+        primitive_state = _boundary_handler(primitive_state, config)
 
     return primitive_state

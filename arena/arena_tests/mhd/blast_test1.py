@@ -35,6 +35,8 @@ https://arxiv.org/pdf/2304.04360
 
 import os
 
+import jax
+
 # basic numerics
 import jax.numpy as jnp
 
@@ -61,7 +63,8 @@ from jf1uids.option_classes.simulation_config import (
     FINITE_DIFFERENCE,
     PERIODIC_BOUNDARY, 
     BoundarySettings, 
-    BoundarySettings1D
+    BoundarySettings1D,
+    SnapshotSettings
 )
 
 def mhd_blast_test1(
@@ -69,6 +72,9 @@ def mhd_blast_test1(
     params: SimulationParams,
     configuration_name: str
 ):
+    
+    # # start profiling
+    # jax.profiler.start_trace("/tmp/profile-data")
 
     test_name = f"mhd_blast_test1_{config.num_cells}cells"
 
@@ -85,6 +91,13 @@ def mhd_blast_test1(
     # set periodic boundaries in all directions
     print("Setting periodic boundaries in all directions.")
     config = config._replace(
+        return_snapshots=True,
+        num_snapshots=40,
+        snapshot_settings=SnapshotSettings(
+            return_states=False,
+            return_final_state=True,
+            return_magnetic_divergence=True
+        ),
         boundary_settings=BoundarySettings(
             BoundarySettings1D(
                 left_boundary=PERIODIC_BOUNDARY, right_boundary=PERIODIC_BOUNDARY
@@ -152,9 +165,12 @@ def mhd_blast_test1(
 
     # run the simulation
     print("🚀 running mhd_blast_test1 simulation")
-    final_state = time_integration(
+    result = time_integration(
         initial_state, config, params, helper_data, registered_variables
     )
+    final_state = result.final_state
+    magnetic_divergence = result.magnetic_divergence
+    time_points = result.time_points
 
     # store the simulation result
 
@@ -163,7 +179,7 @@ def mhd_blast_test1(
     output_folder = os.path.join("results", configuration_name, "data")
     os.makedirs(output_folder, exist_ok=True)
     output_file = os.path.join(output_folder, test_name + ".npz")
-    jnp.savez(output_file, final_state=final_state)
+    jnp.savez(output_file, final_state=final_state, magnetic_divergence=magnetic_divergence)
 
     # plot the results
     density = final_state[registered_variables.density_index]
@@ -257,4 +273,17 @@ def mhd_blast_test1(
     plt.savefig(figure_file)
     plt.close(fig)
 
+    # plot the magnetic divergence over time
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.plot(time_points, magnetic_divergence / (B0 / config.grid_spacing))
+    ax.set_xlabel("time")
+    ax.set_ylabel("max |∇·B| / (B0 / Δx)")
+    ax.set_title("Magnetic Divergence Over Time")
+    plt.tight_layout()
+    figure_file = os.path.join(figures_folder, test_name + "_divergence.svg")
+    plt.savefig(figure_file)
+    plt.close(fig)
+
     print(f"Results saved in {output_folder} and {figures_folder}.")
+
+    # jax.profiler.stop_trace()

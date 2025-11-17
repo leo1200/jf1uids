@@ -81,6 +81,10 @@ DONOR_ACCOUNTING = 1
 RIEMANN_SPLIT = 2
 RIEMANN_SPLIT_UNSTABLE = 3
 
+# Numerical precision
+SINGLE_PRECISION = 0
+DOUBLE_PRECISION = 1
+
 # ============================================================
 
 # ===================== type definitions =====================
@@ -159,6 +163,9 @@ class SimulationConfig(NamedTuple):
     #: FINITE_DIFFERENCE is for now only planned for the HOW_MHD
     #: scheme (Jeongbhin Seo, Dongsu Ryu, 2023).
     solver_mode: int = FINITE_VOLUME
+
+    #: Precision mode.
+    numerical_precision: int = SINGLE_PRECISION
 
     #: Debug runtime errors, throws exceptions
     #: on e.g. negative pressure or density.

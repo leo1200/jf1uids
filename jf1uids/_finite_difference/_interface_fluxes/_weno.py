@@ -235,7 +235,7 @@ def _weno_flux_x(
     return jax.lax.fori_loop(
         0, 7,
         mode_flux,
-        F_interface,
+        F_interface
     )
 
 @partial(jax.jit, static_argnames=["registered_variables"])

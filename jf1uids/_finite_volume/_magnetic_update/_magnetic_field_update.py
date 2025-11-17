@@ -22,8 +22,11 @@ from jax.experimental import checkify
 
 from jf1uids.option_classes.simulation_config import (
     BACKWARDS,
+    DOUBLE_PRECISION,
     FORWARDS,
+    GHOST_CELLS,
     MAGNETIC_FIELD_ONLY,
+    SINGLE_PRECISION,
     VELOCITY_ONLY,
 )
 
@@ -99,8 +102,10 @@ def magnetic_update(
 
         return phi1, phi2
 
-    magnetic_field = _boundary_handler(magnetic_field, config, MAGNETIC_FIELD_ONLY)
-    velocity = _boundary_handler(velocity, config, VELOCITY_ONLY)
+
+    if config.boundary_handling == GHOST_CELLS:
+        magnetic_field = _boundary_handler(magnetic_field, config, MAGNETIC_FIELD_ONLY)
+        velocity = _boundary_handler(velocity, config, VELOCITY_ONLY)
 
     B_0 = magnetic_field
     v_0 = velocity
@@ -113,8 +118,9 @@ def magnetic_update(
     B_1 = magnetic_field - dt * phiA
     v_1 = velocity - dt * phiB
 
-    B_1 = _boundary_handler(B_1, config, MAGNETIC_FIELD_ONLY)
-    v_1 = _boundary_handler(v_1, config, VELOCITY_ONLY)
+    if config.boundary_handling == GHOST_CELLS:
+        B_1 = _boundary_handler(B_1, config, MAGNETIC_FIELD_ONLY)
+        v_1 = _boundary_handler(v_1, config, VELOCITY_ONLY)
 
     def while_condition(state):
         B_k, v_k, B_kp1, v_kp1, current_iter = state
@@ -122,7 +128,15 @@ def magnetic_update(
             jnp.max(jnp.linalg.norm(B_k - B_kp1, axis=0)),
             jnp.max(jnp.linalg.norm(v_k - v_kp1, axis=0)),
         )
-        return (max_change > 1e-10) & (current_iter < 1000)
+        
+        if config.numerical_precision == SINGLE_PRECISION:
+            change_criterion = 1e-5
+        elif config.numerical_precision == DOUBLE_PRECISION:
+            change_criterion = 1e-10
+        else:
+            raise ValueError("Unknown numerical precision.")
+        
+        return (max_change > change_criterion) & (current_iter < 1000)
 
     def while_body(state):
         B_k, v_k, B_kp1, v_kp1, current_iter = state
@@ -138,8 +152,9 @@ def magnetic_update(
         B_kp1 = magnetic_field - dt * phiA
         v_kp1 = velocity - dt * phiB
 
-        B_kp1 = _boundary_handler(B_kp1, config, MAGNETIC_FIELD_ONLY)
-        v_kp1 = _boundary_handler(v_kp1, config, VELOCITY_ONLY)
+        if config.boundary_handling == GHOST_CELLS:
+            B_kp1 = _boundary_handler(B_kp1, config, MAGNETIC_FIELD_ONLY)
+            v_kp1 = _boundary_handler(v_kp1, config, VELOCITY_ONLY)
 
         return B_k, v_k, B_kp1, v_kp1, current_iter + 1
 

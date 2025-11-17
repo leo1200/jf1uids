@@ -1,7 +1,7 @@
 import os
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
 
-multi_gpu = True
+multi_gpu = False
 
 if multi_gpu:
     # ==== GPU selection ====
@@ -79,14 +79,14 @@ gamma = 5/3
 
 # spatial domain
 box_size = 1.0
-num_cells = 684
+num_cells = 128
 
 # activate stellar wind
-stellar_wind = True
+stellar_wind = False
 
 # turbulence
 turbulence = True
-wanted_rms = 40 * u.km / u.s
+wanted_rms = 50 * u.km / u.s
 
 # cooling
 cooling = False
@@ -126,7 +126,7 @@ config = SimulationConfig(
     num_cells = num_cells,
     wind_config = WindConfig(
         stellar_wind = stellar_wind,
-        num_injection_cells = 24,
+        num_injection_cells = 12,
         trace_wind_density = False,
     ),
     split = SPLIT,
@@ -175,7 +175,7 @@ code_velocity = 100 * u.km / u.s
 code_units = CodeUnits(code_length, code_mass, code_velocity)
 
 # time domain
-C_CFL = 0.8
+C_CFL = 0.6
 
 t_final = 1.0 * 1e4 * u.yr
 t_end = t_final.to(code_units.code_time).value
@@ -187,7 +187,7 @@ print(t_end)
 
 # wind parameters
 M_star = 40 * u.M_sun
-wind_final_velocity = 1800 * u.km / u.s
+wind_final_velocity = 2000 * u.km / u.s
 wind_mass_loss_rate = 2.965e-3 / (1e6 * u.yr) * M_star
 
 wind_params = WindParams(
@@ -231,7 +231,7 @@ print(p_0.to(code_units.code_pressure).value)
 
 turbulence_slope = -2.0
 kmin = 2.0
-kmax = int(0.4 * num_cells / 2)
+kmax = int(0.8 * num_cells / 2)
 
 if multi_gpu:
 

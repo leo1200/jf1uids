@@ -21,7 +21,7 @@ from jf1uids.option_classes.simulation_config import (
 
 from jf1uids.option_classes.simulation_params import SimulationParams
 
-@partial(jax.jit, static_argnames=["config", "registered_variables"])
+@partial(jax.jit, static_argnames=["config", "registered_variables"], donate_argnames=["primitive_state"])
 def _evolve_state_fd(
     primitive_state: STATE_TYPE,
     dt: Float[Array, ""],

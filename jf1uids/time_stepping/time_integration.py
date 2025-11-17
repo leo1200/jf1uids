@@ -18,6 +18,7 @@ from jax.experimental import checkify
 from jf1uids._finite_difference._maths._differencing import _interface_field_divergence
 from jf1uids._finite_difference._state_evolution._evolve_state import _evolve_state_fd
 from jf1uids._finite_difference._timestep_estimation._timestep_estimator import _cfl_time_step_fd
+from jf1uids._finite_volume._magnetic_update._vector_maths import divergence3D
 from jf1uids._geometry.boundaries import _boundary_handler
 from jf1uids.data_classes.simulation_state_struct import StateStruct
 from jf1uids.option_classes.simulation_config import BACKWARDS, FINITE_DIFFERENCE, FINITE_VOLUME, FORWARDS, GHOST_CELLS, STATE_TYPE
@@ -248,14 +249,14 @@ def _time_integration(
     if config.boundary_handling == GHOST_CELLS:
         primitive_state = _pad(primitive_state, config)
 
-    # important for active boundaries influencing
-    # the time step criterion for now only gas state
-    if config.mhd:
-        primitive_state = primitive_state.at[:-3, ...].set(
-            _boundary_handler(primitive_state[:-3, ...], config)
-        )
-    else:
-        primitive_state = _boundary_handler(primitive_state, config)
+        # important for active boundaries influencing
+        # the time step criterion for now only gas state
+        if config.mhd:
+            primitive_state = primitive_state.at[:-3, ...].set(
+                _boundary_handler(primitive_state[:-3, ...], config)
+            )
+        else:
+            primitive_state = _boundary_handler(primitive_state, config)
 
     # -------------------------------------------------------------
     # =============== ↓ Setup of the snapshot array ↓ =============
@@ -479,12 +480,18 @@ def _time_integration(
                 magnetic_divergence = snapshot_data.magnetic_divergence.at[
                     snapshot_data.current_checkpoint
                 ].set(
-                    jnp.mean(jnp.abs(_interface_field_divergence(
+                    jnp.max(jnp.abs(_interface_field_divergence(
                         unpad_primitive_state[registered_variables.interface_magnetic_field_index.x],
                         unpad_primitive_state[registered_variables.interface_magnetic_field_index.y],
                         unpad_primitive_state[registered_variables.interface_magnetic_field_index.z],
                         config.grid_spacing,
-                    )))
+                    ))) if config.solver_mode == FINITE_DIFFERENCE else
+                    jnp.max(jnp.abs(
+                        divergence3D(
+                            unpad_primitive_state[registered_variables.magnetic_index.x:registered_variables.magnetic_index.z+1],
+                            config.grid_spacing,
+                        )
+                    ))
                 ) if config.snapshot_settings.return_magnetic_divergence and config.mhd else None
 
                 current_checkpoint = snapshot_data.current_checkpoint + 1

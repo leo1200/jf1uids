@@ -434,7 +434,7 @@ def _eigen_R_col(
     def col_0():
         # Fill right eigenvectors R (columns) exactly as Fortran
         # Column 1 (fast -)
-        R = jnp.zeros((N_vars, Nx, Ny, Nz))
+        R = jnp.zeros_like(conserved_state)
         R = R.at[idx_D].set(af)
         R = R.at[idx_Mx].set(af * (vx_i - lf_i))
         R = R.at[idx_My].set(af * vy_i + as_ * ls_i * bty * sgnBx)
@@ -447,7 +447,7 @@ def _eigen_R_col(
     
     def col_1():
         # Column 2 (alfven -)
-        R = jnp.zeros((N_vars, Nx, Ny, Nz))
+        R = jnp.zeros_like(conserved_state)
         R = R.at[idx_D].set(0.0)
         R = R.at[idx_Mx].set(0.0)
         R = R.at[idx_My].set(-btz)
@@ -458,7 +458,7 @@ def _eigen_R_col(
         return R
     
     def col_2():
-        R = jnp.zeros((N_vars, Nx, Ny, Nz))
+        R = jnp.zeros_like(conserved_state)
         R = R.at[idx_D].set(as_)
         R = R.at[idx_Mx].set(as_ * (vx_i - ls_i))
         R = R.at[idx_My].set(as_ * vy_i - af * lf_i * bty * sgnBx)
@@ -470,7 +470,7 @@ def _eigen_R_col(
         return R
     
     def col_3():
-        R = jnp.zeros((N_vars, Nx, Ny, Nz))
+        R = jnp.zeros_like(conserved_state)
         R = R.at[idx_D].set(1.0)
         R = R.at[idx_Mx].set(vx_i)
         R = R.at[idx_My].set(vy_i)
@@ -482,7 +482,7 @@ def _eigen_R_col(
     
     def col_4():
         # Column 5 (slow +)
-        R = jnp.zeros((N_vars, Nx, Ny, Nz))
+        R = jnp.zeros_like(conserved_state)
         R = R.at[idx_D].set(as_)
         R = R.at[idx_Mx].set(as_ * (vx_i + ls_i))
         R = R.at[idx_My].set(as_ * vy_i + af * lf_i * bty * sgnBx)
@@ -495,7 +495,7 @@ def _eigen_R_col(
     
     def col_5():
         # Column 6 (alfven +)
-        R = jnp.zeros((N_vars, Nx, Ny, Nz))
+        R = jnp.zeros_like(conserved_state)
         R = R.at[idx_D].set(0.0)
         R = R.at[idx_Mx].set(0.0)
         R = R.at[idx_My].set(-btz)
@@ -507,7 +507,7 @@ def _eigen_R_col(
     
     def col_6():
         # Column 7 (fast +)
-        R = jnp.zeros((N_vars, Nx, Ny, Nz))
+        R = jnp.zeros_like(conserved_state)
         R = R.at[idx_D].set(af)
         R = R.at[idx_Mx].set(af * (vx_i + lf_i))
         R = R.at[idx_My].set(af * vy_i - as_ * ls_i * bty * sgnBx)
@@ -645,7 +645,7 @@ def _eigen_L_row(
     idx_E  = IE
 
     def row_0():
-        L = jnp.zeros((N_vars, Nx, Ny, Nz))
+        L = jnp.zeros_like(conserved_state)
         L = L.at[idx_D].set(af * (gam1 * vv2_i + lf_i * vx_i) - as_ * ls_i * (bty * vy_i + btz * vz_i) * sgnBx)
         L = L.at[idx_Mx].set(af * (gam0 * vx_i - lf_i))
         L = L.at[idx_My].set(gam0 * af * vy_i + as_ * ls_i * bty * sgnBx)
@@ -658,7 +658,7 @@ def _eigen_L_row(
         return L
     
     def row_1():
-        L = jnp.zeros((N_vars, Nx, Ny, Nz))
+        L = jnp.zeros_like(conserved_state)
         L = L.at[idx_D].set(btz * vy_i - bty * vz_i)
         L = L.at[idx_Mx].set(0.0)
         L = L.at[idx_My].set(-btz)
@@ -670,7 +670,7 @@ def _eigen_L_row(
         return L
 
     def row_2():
-        L = jnp.zeros((N_vars, Nx, Ny, Nz))
+        L = jnp.zeros_like(conserved_state)
         L = L.at[idx_D].set(as_ * (gam1 * vv2_i + ls_i * vx_i) + af * lf_i * (bty * vy_i + btz * vz_i) * sgnBx)
         L = L.at[idx_Mx].set(gam0 * as_ * vx_i - as_ * ls_i)
         L = L.at[idx_My].set(gam0 * as_ * vy_i - af * lf_i * bty * sgnBx)
@@ -683,7 +683,7 @@ def _eigen_L_row(
         return L
 
     def row_3():
-        L = jnp.zeros((N_vars, Nx, Ny, Nz))
+        L = jnp.zeros_like(conserved_state)
         L = L.at[idx_D].set(-cs2_i / gam0 - 0.5 * vv2_i)
         L = L.at[idx_Mx].set(vx_i)
         L = L.at[idx_My].set(vy_i)
@@ -695,7 +695,7 @@ def _eigen_L_row(
         return L
 
     def row_4():
-        L = jnp.zeros((N_vars, Nx, Ny, Nz))
+        L = jnp.zeros_like(conserved_state)
         L = L.at[idx_D].set(as_ * (gam1 * vv2_i - ls_i * vx_i) - af * lf_i * (bty * vy_i + btz * vz_i) * sgnBx)
         L = L.at[idx_Mx].set(as_ * (gam0 * vx_i + ls_i))
         L = L.at[idx_My].set(gam0 * as_ * vy_i + af * lf_i * bty * sgnBx)
@@ -708,7 +708,7 @@ def _eigen_L_row(
         return L
 
     def row_5():
-        L = jnp.zeros((N_vars, Nx, Ny, Nz))
+        L = jnp.zeros_like(conserved_state)
         L = L.at[idx_D].set(btz * vy_i - bty * vz_i)
         L = L.at[idx_Mx].set(0.0)
         L = L.at[idx_My].set(-btz)
@@ -720,7 +720,7 @@ def _eigen_L_row(
         return L
 
     def row_6():
-        L = jnp.zeros((N_vars, Nx, Ny, Nz))
+        L = jnp.zeros_like(conserved_state)
         L = L.at[idx_D].set(af * (gam1 * vv2_i - lf_i * vx_i) + as_ * ls_i * (bty * vy_i + btz * vz_i) * sgnBx)
         L = L.at[idx_Mx].set(af * (gam0 * vx_i + lf_i))
         L = L.at[idx_My].set(gam0 * af * vy_i - as_ * ls_i * bty * sgnBx)
