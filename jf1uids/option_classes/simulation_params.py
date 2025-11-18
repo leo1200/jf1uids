@@ -6,6 +6,7 @@ from jf1uids._physics_modules._cooling.cooling_options import CoolingParams
 from jf1uids._physics_modules._cosmic_rays.cosmic_ray_options import CosmicRayParams
 from jf1uids._physics_modules._neural_net_force._neural_net_force_options import NeuralNetForceParams
 from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindParams
+from jf1uids._physics_modules._turbulent_forcing._turbulent_forcing_options import TurbulentForcingParams
 
 class SimulationParams(NamedTuple):
     """
@@ -46,6 +47,9 @@ class SimulationParams(NamedTuple):
     snapshot_timepoints: jnp.array = jnp.array([0.0])
 
     # parameters of physics modules
+
+    #: The parameters of the turbulent forcing module.
+    turbulent_forcing_params: TurbulentForcingParams = TurbulentForcingParams()
 
     #: The parameters of the stellar wind module.
     wind_params: WindParams = WindParams()

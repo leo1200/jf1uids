@@ -151,6 +151,14 @@ def scaling_test(
             gas_pressure=P,
         )
 
+        # set all separate fields to None
+        bxb, byb, bzb = None, None, None
+        V_x, V_y, V_z = None, None, None
+        B_x, B_y, B_z = None, None, None
+        rho = None
+        P = None
+        r = None
+
         # the initial state should already be on multiple gpus
         # if multi_gpu, but to be sure
         if multi_gpu:
@@ -236,3 +244,95 @@ def scaling_test(
             temp_size_mb=temp_size_mb,
             total_size_mb=total_size_mb,
         )
+    
+        # plot the results
+        density = final_state[registered_variables.density_index]
+        pressure = final_state[registered_variables.pressure_index]
+        Bx = final_state[registered_variables.magnetic_index.x]
+        By = final_state[registered_variables.magnetic_index.y]
+        Bz = final_state[registered_variables.magnetic_index.z]
+        vx = final_state[registered_variables.velocity_index.x]
+        vy = final_state[registered_variables.velocity_index.y]
+        vz = final_state[registered_variables.velocity_index.z]
+        b_squared = Bx**2 + By**2 + Bz**2
+        v_squared = vx**2 + vy**2 + vz**2
+
+        fig, axs = plt.subplots(2, 3, figsize=(9, 6))
+
+        # density
+        im = axs[0, 0].imshow(
+            density[:, :, num_cells // 2],
+            origin="lower",
+            extent=(0, config.box_size, 0, config.box_size),
+            cmap="jet",
+        )
+        cbar = make_axes_locatable(axs[0, 0]).append_axes("right", size="5%", pad=0.1)
+        fig.colorbar(im, cax=cbar, label="density")
+        axs[0, 0].set_title("density slice")
+        axs[0, 0].set_xlabel("x")
+        axs[0, 0].set_ylabel("y")
+
+        # pressure
+        im = axs[1, 1].imshow(
+            pressure[:, :, num_cells // 2],
+            origin="lower",
+            extent=(0, config.box_size, 0, config.box_size),
+            cmap="jet",
+        )
+        cbar = make_axes_locatable(axs[1, 1]).append_axes("right", size="5%", pad=0.1)
+        fig.colorbar(im, cax=cbar, label="pressure")
+        axs[1, 1].set_title("pressure slice")
+        axs[1, 1].set_xlabel("x")
+        axs[1, 1].set_ylabel("y")
+
+        im = axs[0, 1].imshow(
+            v_squared[:, :, num_cells // 2],
+            origin="lower",
+            extent=(0, config.box_size, 0, config.box_size),
+            cmap="jet",
+        )
+        cbar = make_axes_locatable(axs[0, 1]).append_axes("right", size="5%", pad=0.1)
+        fig.colorbar(im, cax=cbar, label="v^2")
+        axs[0, 1].set_title("kinetic energy slice")
+        axs[0, 1].set_xlabel("x")
+        axs[0, 1].set_ylabel("y")
+
+        im = axs[1, 0].imshow(
+            b_squared[:, :, num_cells // 2],
+            origin="lower",
+            extent=(0, config.box_size, 0, config.box_size),
+            cmap="jet",
+        )
+        cbar = make_axes_locatable(axs[1, 0]).append_axes("right", size="5%", pad=0.1)
+        fig.colorbar(im, cax=cbar, label="B^2")
+        axs[1, 0].set_title("magnetic pressure slice")
+        axs[1, 0].set_xlabel("x")
+        axs[1, 0].set_ylabel("y")
+
+        # 0, 2: |B|^2 / 2 along the diagonal from the center
+        diag_indices = jnp.arange(0, num_cells)
+        B_diag = b_squared[diag_indices, diag_indices, num_cells // 2]
+        r_diag = jnp.sqrt((diag_indices) ** 2 + (diag_indices) ** 2) * (
+            config.box_size / num_cells
+        )
+        axs[0, 2].plot(r_diag, B_diag)
+        axs[0, 2].set_ylabel("|B|^2")
+        axs[0, 2].set_xlabel("diagonal")
+        axs[0, 2].set_title("|B|^2 along diagonal")
+
+        # density along the vertical centerline
+        pressure_diag = pressure[diag_indices, diag_indices, num_cells // 2]
+        axs[1, 2].plot(r_diag, pressure_diag)
+        axs[1, 2].set_ylabel("pressure")
+        axs[1, 2].set_xlabel("diagonal")
+        axs[1, 2].set_title("Pressure along diagonal")
+
+        plt.tight_layout()
+
+        # create the results/configuration_name/figures
+        # folder if it does not exist
+        figures_folder = os.path.join("results", configuration_name, "figures")
+        os.makedirs(figures_folder, exist_ok=True)
+        figure_file = os.path.join(figures_folder, test_name + ".png")
+        plt.savefig(figure_file)
+        plt.close(fig)

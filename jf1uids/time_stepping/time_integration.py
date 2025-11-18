@@ -20,6 +20,7 @@ from jf1uids._finite_difference._state_evolution._evolve_state import _evolve_st
 from jf1uids._finite_difference._timestep_estimation._timestep_estimator import _cfl_time_step_fd
 from jf1uids._finite_volume._magnetic_update._vector_maths import divergence3D
 from jf1uids._geometry.boundaries import _boundary_handler
+from jf1uids._physics_modules._turbulent_forcing._turbulent_forcing import _apply_forcing
 from jf1uids.data_classes.simulation_state_struct import StateStruct
 from jf1uids.option_classes.simulation_config import BACKWARDS, FINITE_DIFFERENCE, FINITE_VOLUME, FORWARDS, GHOST_CELLS, STATE_TYPE
 
@@ -667,6 +668,17 @@ def _time_integration(
                 helper_data_pad,
                 registered_variables,
                 time + dt,
+            )
+
+        # turbulence forcing, TODO: move to physics modules
+        if config.turbulent_forcing_config.turbulent_forcing:
+            key, primitive_state = _apply_forcing(
+                key,
+                primitive_state,
+                dt,
+                params.turbulent_forcing_params,
+                config,
+                registered_variables,
             )
 
         # EVOLVE THE STATE

@@ -22,7 +22,7 @@ import jax
 jax.config.update("jax_enable_x64", double_precision)
 
 from jf1uids import SimulationConfig, SimulationParams
-from jf1uids.option_classes.simulation_config import DOUBLE_PRECISION, FINITE_DIFFERENCE, FINITE_VOLUME, PERIODIC_ROLL, SINGLE_PRECISION
+from jf1uids.option_classes.simulation_config import DOUBLE_PRECISION, FINITE_DIFFERENCE, FINITE_VOLUME, LAX_FRIEDRICHS, PERIODIC_ROLL, SINGLE_PRECISION
 
 # tests
 from arena_tests.scaling.scaling import scaling_test
@@ -36,6 +36,7 @@ test_name = "fv_mhd"
 base_config = SimulationConfig(
     solver_mode = FINITE_VOLUME,
     numerical_precision = DOUBLE_PRECISION if double_precision else SINGLE_PRECISION,
+    riemann_solver = LAX_FRIEDRICHS,
     boundary_handling = PERIODIC_ROLL,
     mhd = True,
     dimensionality = 3,
@@ -44,14 +45,14 @@ base_config = SimulationConfig(
 
 # setting up baseline params
 base_params = SimulationParams(
-    C_cfl = 0.4,
+    C_cfl = 0.8,
 )
 
 # running the tests
 
 # blast test 1
 mhd_blast_test1(
-    config = base_config._replace(num_cells=128),
+    config = base_config._replace(num_cells=356),
     params = base_params,
     configuration_name = test_name,
 )
@@ -63,10 +64,10 @@ mhd_blast_test1(
 #     configuration_name = test_name,
 # )
 
-# scaling_test(
-#     config = base_config,
-#     params = base_params,
-#     resolutions = [50, 100, 200, 400],
-#     configuration_name = test_name,
-#     multi_gpu = multi_gpu,
-# )
+scaling_test(
+    config = base_config,
+    params = base_params,
+    resolutions = [512, 256, 128, 64, 32],
+    configuration_name = test_name,
+    multi_gpu = multi_gpu,
+)

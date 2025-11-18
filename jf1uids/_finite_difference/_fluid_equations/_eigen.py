@@ -12,6 +12,8 @@ from jf1uids.variable_registry.registered_variables import RegisteredVariables
 @partial(jax.jit, static_argnames=["registered_variables"])
 def _eigen_x(
     conserved_state,
+    rhomin,
+    pgmin,
     gamma: Union[float, jnp.ndarray],
     registered_variables: RegisteredVariables,
 ):
@@ -47,10 +49,6 @@ def _eigen_x(
     BB2 = Bx * Bx + By * By + Bz * Bz
 
     pg = (gamma - 1.0) * (EE - 0.5 * (rho * vv2 + BB2))
-
-    # protection (use same small floors as before)
-    rhomin = 1.0e-12
-    pgmin = 1.0e-12
 
     mask_bad = (rho < rhomin) | (pg < pgmin)
     rho = jnp.where(mask_bad, jnp.maximum(rho, rhomin), rho)

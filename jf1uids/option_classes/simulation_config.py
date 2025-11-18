@@ -13,6 +13,8 @@ from jf1uids._physics_modules._stellar_wind.stellar_wind_options import WindConf
 
 from jaxtyping import Array, Float
 
+from jf1uids._physics_modules._turbulent_forcing._turbulent_forcing_options import TurbulentForcingConfig
+
 # ===================== constant definition =====================
 
 # solver modes
@@ -80,6 +82,7 @@ SIMPLE_SOURCE_TERM = 0
 DONOR_ACCOUNTING = 1
 RIEMANN_SPLIT = 2
 RIEMANN_SPLIT_UNSTABLE = 3
+HALF_SPLIT = 4
 
 # Numerical precision
 SINGLE_PRECISION = 0
@@ -306,6 +309,9 @@ class SimulationConfig(NamedTuple):
     first_order_fallback: bool = False
 
     # physical modules
+
+    #: Turbulent forcing configuration.
+    turbulent_forcing_config: TurbulentForcingConfig = TurbulentForcingConfig()
 
     #: The configuration for the stellar wind module.
     wind_config: WindConfig = WindConfig()

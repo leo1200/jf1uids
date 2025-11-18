@@ -28,6 +28,7 @@ from jf1uids.variable_registry.registered_variables import RegisteredVariables
 from jf1uids.option_classes.simulation_config import (
     DONOR_ACCOUNTING,
     GHOST_CELLS,
+    HALF_SPLIT,
     HLLC_LM,
     LAX_FRIEDRICHS,
     RIEMANN_SPLIT,
@@ -298,6 +299,20 @@ def _gravitational_source_term_along_axis(
             )
             fluxes_i_to_ip1 = jnp.maximum(jnp.roll(fluxes, shift=-1, axis=axis), 0)
             fluxes_i_to_im1 = jnp.minimum(fluxes, 0)
+
+        elif config.self_gravity_version == HALF_SPLIT:
+            # at index i, the fluxes array contains the flux from i-1 to i
+            fluxes = _riemann_solver(
+                primitive_state_left,
+                primitive_state_right,
+                primitive_state,
+                gamma,
+                config,
+                registered_variables,
+                axis,
+            )
+            fluxes_i_to_ip1 = 0.5 * jnp.roll(fluxes, shift=-1, axis=axis)
+            fluxes_i_to_im1 = 0.5 * fluxes
 
         acc_backward = (
             -_stencil_add(

@@ -50,7 +50,7 @@ base_params = SimulationParams(
 
 # blast test 1
 # mhd_blast_test1(
-#     config = base_config._replace(num_cells=128),
+#     config = base_config._replace(num_cells=256),
 #     params = base_params,
 #     configuration_name = test_name,
 # )
@@ -65,7 +65,7 @@ base_params = SimulationParams(
 scaling_test(
     config = base_config,
     params = base_params,
-    resolutions = [50, 100, 200, 400],
+    resolutions = [256],
     configuration_name = test_name,
     multi_gpu = multi_gpu,
 )

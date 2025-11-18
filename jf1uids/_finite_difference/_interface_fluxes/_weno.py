@@ -319,125 +319,128 @@ def _weno_flux_z(
     
     return Fz
 
-@partial(jax.jit, static_argnames=["registered_variables"])
-def _weno_flux_x_high_mem(
-    conserved_state,
-    gamma: Union[float, jnp.ndarray],
-    registered_variables: RegisteredVariables,
-):
-    """
-    WENO flux reconstruction.
-    """
+# also seems to be slower
+# @partial(jax.jit, static_argnames=["registered_variables"])
+# def _weno_flux_x(
+#     conserved_state,
+#     rhomin: Union[float, jnp.ndarray],
+#     pgmin: Union[float, jnp.ndarray],
+#     gamma: Union[float, jnp.ndarray],
+#     registered_variables: RegisteredVariables,
+# ):
+#     """
+#     WENO flux reconstruction.
+#     """
     
-    q = conserved_state
-    epsilon = 1e-8
+#     q = conserved_state
+#     epsilon = 1e-8
     
-    # Get eigenstructure
-    lambdas_center, R, L = _eigen_x(q, gamma, registered_variables)
+#     # Get eigenstructure
+#     lambdas_center, R, L = _eigen_x(q, rhomin, pgmin, gamma, registered_variables)
     
-    # Get physical fluxes at cell centers
-    F = _mhd_flux_x(q, gamma, registered_variables)
+#     # Get physical fluxes at cell centers
+#     F = _mhd_flux_x(q, gamma, registered_variables)
 
-    F_stencil = jnp.stack([
-        jnp.roll(F, 2, axis=1),   # i-2
-        jnp.roll(F, 1, axis=1),   # i-1
-        F,                        # i
-        jnp.roll(F, -1, axis=1),  # i+1
-        jnp.roll(F, -2, axis=1),  # i+2
-        jnp.roll(F, -3, axis=1),  # i+3
-    ], axis=0)
+#     F_stencil = jnp.stack([
+#         jnp.roll(F, 2, axis=1),   # i-2
+#         jnp.roll(F, 1, axis=1),   # i-1
+#         F,                        # i
+#         jnp.roll(F, -1, axis=1),  # i+1
+#         jnp.roll(F, -2, axis=1),  # i+2
+#         jnp.roll(F, -3, axis=1),  # i+3
+#     ], axis=0)
     
-    q_stencil = jnp.stack([
-        jnp.roll(q, 2, axis=1),
-        jnp.roll(q, 1, axis=1),
-        q,
-        jnp.roll(q, -1, axis=1),
-        jnp.roll(q, -2, axis=1),
-        jnp.roll(q, -3, axis=1),
-    ], axis=0)
+#     q_stencil = jnp.stack([
+#         jnp.roll(q, 2, axis=1),
+#         jnp.roll(q, 1, axis=1),
+#         q,
+#         jnp.roll(q, -1, axis=1),
+#         jnp.roll(q, -2, axis=1),
+#         jnp.roll(q, -3, axis=1),
+#     ], axis=0)
     
-    # Get maximum eigenvalue over stencil
-    lambda_stencil = jnp.stack([
-        jnp.roll(lambdas_center, 2, axis=1),
-        jnp.roll(lambdas_center, 1, axis=1),
-        lambdas_center,
-        jnp.roll(lambdas_center, -1, axis=1),
-        jnp.roll(lambdas_center, -2, axis=1),
-        jnp.roll(lambdas_center, -3, axis=1),
-    ], axis=0)
+#     # Get maximum eigenvalue over stencil
+#     lambda_stencil = jnp.stack([
+#         jnp.roll(lambdas_center, 2, axis=1),
+#         jnp.roll(lambdas_center, 1, axis=1),
+#         lambdas_center,
+#         jnp.roll(lambdas_center, -1, axis=1),
+#         jnp.roll(lambdas_center, -2, axis=1),
+#         jnp.roll(lambdas_center, -3, axis=1),
+#     ], axis=0)
     
-    amx = jnp.max(jnp.abs(lambda_stencil), axis=0)  # Shape: (7, Nx, Ny, Nz)
+#     amx = jnp.max(jnp.abs(lambda_stencil), axis=0)  # Shape: (7, Nx, Ny, Nz)
     
-    # Transform stencil to characteristic variables
-    # L has shape (7, N_vars, Nx, Ny, Nz) at interfaces
-    # F_stencil: (6, N_vars, Nx, Ny, Nz)
-    # Result: (6, 7, Nx, Ny, Nz)
-    Fsk = jnp.einsum('mnxyz,snxyz->smxyz', L, F_stencil)
-    qsk = jnp.einsum('mnxyz,snxyz->smxyz', L, q_stencil)
+#     # Transform stencil to characteristic variables
+#     # L has shape (7, N_vars, Nx, Ny, Nz) at interfaces
+#     # F_stencil: (6, N_vars, Nx, Ny, Nz)
+#     # Result: (6, 7, Nx, Ny, Nz)
+#     Fsk = jnp.einsum('mnxyz,snxyz->smxyz', L, F_stencil)
+#     qsk = jnp.einsum('mnxyz,snxyz->smxyz', L, q_stencil)
     
-    # Compute differences
-    dFsk = Fsk[1:, ...] - Fsk[:-1, ...]  # (5, 7, Nx, Ny, Nz)
-    dqsk = qsk[1:, ...] - qsk[:-1, ...]
+#     # Compute differences
+#     dFsk = Fsk[1:, ...] - Fsk[:-1, ...]  # (5, 7, Nx, Ny, Nz)
+#     dqsk = qsk[1:, ...] - qsk[:-1, ...]
     
-    # Forward WENO (positive flux)
-    aterm_p = 0.5 * (dFsk[0, ...] + amx * dqsk[0, ...])
-    bterm_p = 0.5 * (dFsk[1, ...] + amx * dqsk[1, ...])
-    cterm_p = 0.5 * (dFsk[2, ...] + amx * dqsk[2, ...])
-    dterm_p = 0.5 * (dFsk[3, ...] + amx * dqsk[3, ...])
+#     # Forward WENO (positive flux)
+#     aterm_p = 0.5 * (dFsk[0, ...] + amx * dqsk[0, ...])
+#     bterm_p = 0.5 * (dFsk[1, ...] + amx * dqsk[1, ...])
+#     cterm_p = 0.5 * (dFsk[2, ...] + amx * dqsk[2, ...])
+#     dterm_p = 0.5 * (dFsk[3, ...] + amx * dqsk[3, ...])
     
-    IS0_p = 13.0 * (aterm_p - bterm_p)**2 + 3.0 * (aterm_p - 3.0*bterm_p)**2
-    IS1_p = 13.0 * (bterm_p - cterm_p)**2 + 3.0 * (bterm_p + cterm_p)**2
-    IS2_p = 13.0 * (cterm_p - dterm_p)**2 + 3.0 * (3.0*cterm_p - dterm_p)**2
+#     IS0_p = 13.0 * (aterm_p - bterm_p)**2 + 3.0 * (aterm_p - 3.0*bterm_p)**2
+#     IS1_p = 13.0 * (bterm_p - cterm_p)**2 + 3.0 * (bterm_p + cterm_p)**2
+#     IS2_p = 13.0 * (cterm_p - dterm_p)**2 + 3.0 * (3.0*cterm_p - dterm_p)**2
     
-    alpha0_p = 1.0 / (epsilon + IS0_p)**2
-    alpha1_p = 6.0 / (epsilon + IS1_p)**2
-    alpha2_p = 3.0 / (epsilon + IS2_p)**2
+#     alpha0_p = 1.0 / (epsilon + IS0_p)**2
+#     alpha1_p = 6.0 / (epsilon + IS1_p)**2
+#     alpha2_p = 3.0 / (epsilon + IS2_p)**2
     
-    alpha_sum_p = alpha0_p + alpha1_p + alpha2_p
-    alpha_sum_p = jnp.maximum(alpha_sum_p, 1e-14)  # prevent division by zero
+#     alpha_sum_p = alpha0_p + alpha1_p + alpha2_p
+#     alpha_sum_p = jnp.maximum(alpha_sum_p, 1e-14)  # prevent division by zero
 
-    omega0_p = alpha0_p / alpha_sum_p
-    omega2_p = alpha2_p / alpha_sum_p
+#     omega0_p = alpha0_p / alpha_sum_p
+#     omega2_p = alpha2_p / alpha_sum_p
     
-    second = (omega0_p * (aterm_p - 2.0*bterm_p + cterm_p) / 3.0 
-              + (omega2_p - 0.5) * (bterm_p - 2.0*cterm_p + dterm_p) / 6.0)
+#     second = (omega0_p * (aterm_p - 2.0*bterm_p + cterm_p) / 3.0 
+#               + (omega2_p - 0.5) * (bterm_p - 2.0*cterm_p + dterm_p) / 6.0)
     
-    # Backward WENO (negative flux)
-    aterm_m = 0.5 * (dFsk[4, ...] - amx * dqsk[4, ...])
-    bterm_m = 0.5 * (dFsk[3, ...] - amx * dqsk[3, ...])
-    cterm_m = 0.5 * (dFsk[2, ...] - amx * dqsk[2, ...])
-    dterm_m = 0.5 * (dFsk[1, ...] - amx * dqsk[1, ...])
+#     # Backward WENO (negative flux)
+#     aterm_m = 0.5 * (dFsk[4, ...] - amx * dqsk[4, ...])
+#     bterm_m = 0.5 * (dFsk[3, ...] - amx * dqsk[3, ...])
+#     cterm_m = 0.5 * (dFsk[2, ...] - amx * dqsk[2, ...])
+#     dterm_m = 0.5 * (dFsk[1, ...] - amx * dqsk[1, ...])
     
-    IS0_m = 13.0 * (aterm_m - bterm_m)**2 + 3.0 * (aterm_m - 3.0*bterm_m)**2
-    IS1_m = 13.0 * (bterm_m - cterm_m)**2 + 3.0 * (bterm_m + cterm_m)**2
-    IS2_m = 13.0 * (cterm_m - dterm_m)**2 + 3.0 * (3.0*cterm_m - dterm_m)**2
+#     IS0_m = 13.0 * (aterm_m - bterm_m)**2 + 3.0 * (aterm_m - 3.0*bterm_m)**2
+#     IS1_m = 13.0 * (bterm_m - cterm_m)**2 + 3.0 * (bterm_m + cterm_m)**2
+#     IS2_m = 13.0 * (cterm_m - dterm_m)**2 + 3.0 * (3.0*cterm_m - dterm_m)**2
     
-    alpha0_m = 1.0 / (epsilon + IS0_m)**2
-    alpha1_m = 6.0 / (epsilon + IS1_m)**2
-    alpha2_m = 3.0 / (epsilon + IS2_m)**2
+#     alpha0_m = 1.0 / (epsilon + IS0_m)**2
+#     alpha1_m = 6.0 / (epsilon + IS1_m)**2
+#     alpha2_m = 3.0 / (epsilon + IS2_m)**2
     
-    alpha_sum_m = alpha0_m + alpha1_m + alpha2_m
-    alpha_sum_m = jnp.maximum(alpha_sum_m, 1e-14)  # prevent division by zero
+#     alpha_sum_m = alpha0_m + alpha1_m + alpha2_m
+#     alpha_sum_m = jnp.maximum(alpha_sum_m, 1e-14)  # prevent division by zero
 
-    omega0_m = alpha0_m / alpha_sum_m
-    omega2_m = alpha2_m / alpha_sum_m
+#     omega0_m = alpha0_m / alpha_sum_m
+#     omega2_m = alpha2_m / alpha_sum_m
     
-    third = (omega0_m * (aterm_m - 2.0*bterm_m + cterm_m) / 3.0 
-             + (omega2_m - 0.5) * (bterm_m - 2.0*cterm_m + dterm_m) / 6.0)
+#     third = (omega0_m * (aterm_m - 2.0*bterm_m + cterm_m) / 3.0 
+#              + (omega2_m - 0.5) * (bterm_m - 2.0*cterm_m + dterm_m) / 6.0)
     
-    # Combine
-    Fs = - second + third  # Shape: (7, Nx, Ny, Nz)
+#     # Combine
+#     Fs = - second + third  # Shape: (7, Nx, Ny, Nz)
     
-    # Transform back to physical variables
-    # R has shape (N_vars, 7, Nx, Ny, Nz)
-    dF = jnp.einsum('nmxyz,mxyz->nxyz', R, Fs)  # Shape: (N_vars, Nx, Ny, Nz)
+#     # Transform back to physical variables
+#     # R has shape (N_vars, 7, Nx, Ny, Nz)
+#     dF = jnp.einsum('nmxyz,mxyz->nxyz', R, Fs)  # Shape: (N_vars, Nx, Ny, Nz)
 
-    # Base 4th-order flux
-    # first = (-Fsk[1, ...] + 7.0*Fsk[2, ...] + 7.0*Fsk[3, ...] - Fsk[4, ...]) / 12.0
-    first = 1/12 * (
-        -jnp.roll(F, 1, axis=1) + 7 * F + 7 * jnp.roll(F, -1, axis=1) - jnp.roll(F, -2, axis=1)
-    )
+#     # Base 4th-order flux
+#     # first = (-Fsk[1, ...] + 7.0*Fsk[2, ...] + 7.0*Fsk[3, ...] - Fsk[4, ...]) / 12.0
+#     first = 1/12 * (
+#         -jnp.roll(F, 1, axis=1) + 7 * F + 7 * jnp.roll(F, -1, axis=1) - jnp.roll(F, -2, axis=1)
+#     )
 
-    dF = first + dF
+#     dF = first + dF
 
-    return dF
+#     return dF
