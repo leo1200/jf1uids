@@ -1,3 +1,8 @@
+"""
+The turbulent forcing module also draws from 
+https://arxiv.org/pdf/2304.04360
+"""
+
 import jax
 import jax.numpy as jnp
 from functools import partial
@@ -23,12 +28,12 @@ def _create_forcing_field(
     ny = config.num_cells
     nz = config.num_cells
     
-    # Define wavenumbers using fftfreq (more efficient than manual loops)
-    kx = jnp.fft.fftfreq(nx, d=xsize/(2*jnp.pi*nx)) * (2*jnp.pi)
-    ky = jnp.fft.fftfreq(ny, d=ysize/(2*jnp.pi*ny)) * (2*jnp.pi)
-    kz = jnp.fft.fftfreq(nz, d=zsize/(2*jnp.pi*nz)) * (2*jnp.pi)
+    # wavenumbers using fftfreq
+    kx = 2.0 * jnp.pi * jnp.fft.fftfreq(nx, d=xsize/nx)
+    ky = 2.0 * jnp.pi * jnp.fft.fftfreq(ny, d=ysize/ny)
+    kz = 2.0 * jnp.pi * jnp.fft.fftfreq(nz, d=zsize/nz)
     
-    # Use broadcasting instead of meshgrid (memory efficient)
+    # broadcasting instead of meshgrid
     kx_3d = kx.reshape(nx, 1, 1)
     ky_3d = ky.reshape(1, ny, 1)
     kz_3d = kz.reshape(1, 1, nz)
@@ -36,49 +41,33 @@ def _create_forcing_field(
     k_squared = kx_3d**2 + ky_3d**2 + kz_3d**2
     kk = jnp.sqrt(k_squared)
     
-    # Power spectrum parameters
-    kpk = 2.0 * (2.0 * jnp.pi / xsize)
+    # power spectrum of the forcing
+    kpk = 4.0 * jnp.pi / config.box_size
     Pk = kk**6 * jnp.exp(-8.0 * kk / kpk)
     
-    key, subkey = jax.random.split(key)
-    ran_nums = jax.random.uniform(subkey, shape=(6, nx, ny, nz))
+    key, sk1, sk2 = jax.random.split(key, 3)
+
+    raw_noise = jax.random.normal(sk1, shape=(3, nx, ny, nz)) + \
+                1j * jax.random.normal(sk2, shape=(3, nx, ny, nz))
+
+    cwx = jnp.sqrt(Pk) * raw_noise[0]
+    cwy = jnp.sqrt(Pk) * raw_noise[1]
+    cwz = jnp.sqrt(Pk) * raw_noise[2]
     
-    # Box-Muller transform for Gaussian deviates
-    sqrt_Pk = jnp.sqrt(Pk)
-    temp1 = sqrt_Pk * jnp.sqrt(-2.0 * jnp.log(ran_nums[0] + 1e-10)) * jnp.cos(2.0 * jnp.pi * ran_nums[1])
-    temp2 = sqrt_Pk * jnp.sqrt(-2.0 * jnp.log(ran_nums[0] + 1e-10)) * jnp.sin(2.0 * jnp.pi * ran_nums[1])
-    
-    temp3 = sqrt_Pk * jnp.sqrt(-2.0 * jnp.log(ran_nums[2] + 1e-10)) * jnp.cos(2.0 * jnp.pi * ran_nums[3])
-    temp4 = sqrt_Pk * jnp.sqrt(-2.0 * jnp.log(ran_nums[2] + 1e-10)) * jnp.sin(2.0 * jnp.pi * ran_nums[3])
-    
-    temp5 = sqrt_Pk * jnp.sqrt(-2.0 * jnp.log(ran_nums[4] + 1e-10)) * jnp.cos(2.0 * jnp.pi * ran_nums[5])
-    temp6 = sqrt_Pk * jnp.sqrt(-2.0 * jnp.log(ran_nums[4] + 1e-10)) * jnp.sin(2.0 * jnp.pi * ran_nums[5])
-    
-    # Create complex forcing fields
-    cwx = temp1 + 1j * temp2
-    cwy = temp3 + 1j * temp4
-    cwz = temp5 + 1j * temp6
-    
-    # Set DC mode to zero
+    # DC mode to zero
     cwx = cwx.at[0, 0, 0].set(0.0 + 0.0j)
     cwy = cwy.at[0, 0, 0].set(0.0 + 0.0j)
     cwz = cwz.at[0, 0, 0].set(0.0 + 0.0j)
     
-    # Make divergence-free (project out compressible component)
-    # Avoid division by zero with safe k_squared
+    # project out compressible component
     k_squared_safe = jnp.where(k_squared == 0.0, 1.0, k_squared)
-    
-    # Compute divergence in Fourier space
     div_k = (kx_3d * cwx + ky_3d * cwy + kz_3d * cwz) / k_squared_safe
-    
-    # Set DC component of divergence to zero
     div_k = div_k.at[0, 0, 0].set(0.0 + 0.0j)
-    
-    # Remove divergent component
     cwx = cwx - kx_3d * div_k
     cwy = cwy - ky_3d * div_k
     cwz = cwz - kz_3d * div_k
 
+    # get real space fields
     wx_real = jnp.real(jnp.fft.ifftn(cwx))
     wy_real = jnp.real(jnp.fft.ifftn(cwy))
     wz_real = jnp.real(jnp.fft.ifftn(cwz))

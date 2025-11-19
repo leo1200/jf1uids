@@ -25,6 +25,8 @@ from jf1uids.option_classes.simulation_config import (
     DOUBLE_PRECISION,
     FORWARDS,
     GHOST_CELLS,
+    IMPLICIT_EULER,
+    IMPLICIT_MIDPOINT,
     MAGNETIC_FIELD_ONLY,
     SINGLE_PRECISION,
     VELOCITY_ONLY,
@@ -144,8 +146,12 @@ def magnetic_update(
         B_k = B_kp1
         v_k = v_kp1
 
-        avg_B = (B_k + magnetic_field) / 2
-        avg_v = (v_k + velocity) / 2
+        if config.fv_magnetic_integrator == IMPLICIT_MIDPOINT:
+            avg_B = (B_k + magnetic_field) / 2
+            avg_v = (v_k + velocity) / 2
+        elif config.fv_magnetic_integrator == IMPLICIT_EULER:
+            avg_B = B_k
+            avg_v = v_k
 
         phiA, phiB = phi(avg_v, avg_B)
 

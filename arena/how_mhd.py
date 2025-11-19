@@ -28,6 +28,7 @@ from jf1uids.option_classes.simulation_config import FINITE_DIFFERENCE, PERIODIC
 from arena_tests.scaling.scaling import scaling_test
 from arena_tests.mhd.blast_test1 import mhd_blast_test1
 from arena_tests.scaling.memory_scaling import memory_scaling
+from arena_tests.turbulent_forcing.turbulent_forcing import turbulent_forcing_test
 
 # test name
 test_name = "how_mhd"
@@ -44,16 +45,36 @@ base_config = SimulationConfig(
 # setting up baseline params
 base_params = SimulationParams(
     C_cfl = 1.5,
+    minimum_density = 1e-3,
+    minimum_pressure = 1e-3,
 )
 
 # running the tests
 
 # blast test 1
-# mhd_blast_test1(
-#     config = base_config._replace(num_cells=256),
-#     params = base_params,
-#     configuration_name = test_name,
-# )
+mhd_blast_test1(
+    config = base_config._replace(num_cells=32),
+    params = base_params,
+    configuration_name = test_name,
+)
+
+mhd_blast_test1(
+    config = base_config._replace(num_cells=64),
+    params = base_params,
+    configuration_name = test_name,
+)
+
+mhd_blast_test1(
+    config = base_config._replace(num_cells=128),
+    params = base_params,
+    configuration_name = test_name,
+)
+
+mhd_blast_test1(
+    config = base_config._replace(num_cells=256),
+    params = base_params,
+    configuration_name = test_name,
+)
 
 # memory_scaling(
 #     config = base_config,
@@ -62,10 +83,16 @@ base_params = SimulationParams(
 #     configuration_name = test_name,
 # )
 
-scaling_test(
-    config = base_config,
-    params = base_params,
-    resolutions = [256],
-    configuration_name = test_name,
-    multi_gpu = multi_gpu,
-)
+# scaling_test(
+#     config = base_config,
+#     params = base_params,
+#     resolutions = [256],
+#     configuration_name = test_name,
+#     multi_gpu = multi_gpu,
+# )
+
+# turbulent_forcing_test(
+#     config = base_config._replace(num_cells=64),
+#     params = base_params,
+#     configuration_name = test_name,
+# )

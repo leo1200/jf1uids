@@ -84,6 +84,10 @@ RIEMANN_SPLIT = 2
 RIEMANN_SPLIT_UNSTABLE = 3
 HALF_SPLIT = 4
 
+# Magnetic part integrators for split MHD
+IMPLICIT_MIDPOINT = 0
+IMPLICIT_EULER = 1
+
 # Numerical precision
 SINGLE_PRECISION = 0
 DOUBLE_PRECISION = 1
@@ -197,10 +201,13 @@ class SimulationConfig(NamedTuple):
     #: Magnetohydrodynamics switch.
     mhd: bool = False
 
-    # #: Enforce positivity of density and pressure.
-    # #: NOTE: CURRENTLY ONLY IMPLEMENTED FOR 
-    # #: FINITE DIFFERENCE MODE.
-    # #: enforce_positivity: bool = True
+    #: Integrator used for the magnetic part in the FV MHD scheme.
+    fv_magnetic_integrator: int = IMPLICIT_MIDPOINT
+
+    #: Enforce positivity of density and pressure.
+    #: NOTE: CURRENTLY ONLY IMPLEMENTED FOR 
+    #: FINITE DIFFERENCE MODE.
+    enforce_positivity: bool = True
 
     #: Self gravity switch, currently only
     #: for periodic boundaries.

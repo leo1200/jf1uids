@@ -485,6 +485,7 @@ def _wind_ei3D(
 def _wind_ei3D_source(
     wind_params: WindParams,
     conserved_state: STATE_TYPE,
+    dt: Float[Array, ""],
     config: SimulationConfig,
     helper_data: HelperData,
     num_injection_cells: int,
@@ -497,22 +498,45 @@ def _wind_ei3D_source(
     V = 4 / 3 * jnp.pi * r_inj**3
 
     # for now only allow injection at the box center
-    injection_mask = helper_data.r <= r_inj - config.grid_spacing / 2
+    injection_mask = helper_data.r <= r_inj
 
     # mass injection
     drho_dt = wind_params.wind_mass_loss_rate / V
 
     source_term = source_term.at[registered_variables.density_index].set(
-        drho_dt * injection_mask
+        drho_dt * injection_mask * dt
     )
 
     # energy injection
-    dE_dt = (
-        0.5 * wind_params.wind_final_velocity**2 * wind_params.wind_mass_loss_rate / V
+    dE = (
+        0.5 * wind_params.wind_final_velocity**2 * wind_params.wind_mass_loss_rate / V * dt
+    )
+
+    # we do not want to inject kinetic energy, only thermal, the kinetic energy
+    # is 1/2 * rho * v^2 = 1/2 * m^2 / rho, momentum m, as we change the density,
+    # and until now keep the momentum constant, we would change the kinetic energy
+    # to keep the kinetic energy constant
+    # 1/2 m_old^2 / rho_old = 1/2 m_new^2 / rho_new ->
+    # m_new = m_old * sqrt(rho_new / rho_old) ->
+    # dm = m_old * (sqrt(rho_new / rho_old) - 1)
+    #    = m_old * (sqrt((rho_old + drho * dt) / rho_old) - 1)
+    #    = m_old * (sqrt(1 + drho * dt / rho_old) - 1)
+    momentum_source_factor = jnp.sqrt(
+        1 + drho_dt * dt
+        / (conserved_state[registered_variables.density_index] + 1e-20)
+    ) - 1.0
+    source_term = source_term.at[registered_variables.momentum_index.x].set(
+        conserved_state[registered_variables.momentum_index.x] * momentum_source_factor * injection_mask
+    )
+    source_term = source_term.at[registered_variables.momentum_index.y].set(
+        conserved_state[registered_variables.momentum_index.y] * momentum_source_factor * injection_mask
+    )
+    source_term = source_term.at[registered_variables.momentum_index.z].set(
+        conserved_state[registered_variables.momentum_index.z] * momentum_source_factor * injection_mask
     )
 
     source_term = source_term.at[registered_variables.energy_index].set(
-        dE_dt * injection_mask
+        dE * injection_mask
     )
 
     return source_term

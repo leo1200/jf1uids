@@ -373,7 +373,7 @@ def _time_integration(
             # correctly and update the SnapshotData if we are currently
             # at a point in time where we want to take a snapshot.
 
-            time, primitive_state, snapshot_data = carry
+            time, key, primitive_state, snapshot_data = carry
 
             def update_snapshot_data(time, primitive_state, snapshot_data):
                 time_points = snapshot_data.time_points.at[
@@ -548,7 +548,7 @@ def _time_integration(
             # - e.g. to output the current state to disk or
             # directly produce intermediate plots.
 
-            time, primitive_state, snapshot_data = carry
+            time, key, primitive_state, snapshot_data = carry
 
             def update_snapshot_data(snapshot_data):
                 current_checkpoint = snapshot_data.current_checkpoint + 1
@@ -589,7 +589,7 @@ def _time_integration(
             # This is the simplest case where we only have
             # the time and the primitive state in the carry.
             # We just unpack them accordingly.
-            time, primitive_state = carry
+            time, key, primitive_state = carry
 
         # --------------- ↑ Carry unpacking+ ↑ ----------------
 
@@ -671,6 +671,9 @@ def _time_integration(
             )
 
         # turbulence forcing, TODO: move to physics modules
+        # NOTE: THE KEY IS CURRENTLY DIRECTLY IN THE CARRY
+        # FOR THE CASE WITHOUT SNAPSHOT DATA AND NOT PRESENT
+        # IN THE CARRY OTHERWISE. TODO: IMPROVE THIS.
         if config.turbulent_forcing_config.turbulent_forcing:
             key, primitive_state = _apply_forcing(
                 key,
@@ -726,9 +729,9 @@ def _time_integration(
 
         # packing the carry again
         if config.return_snapshots or config.activate_snapshot_callback:
-            carry = (time, primitive_state, snapshot_data)
+            carry = (time, key, primitive_state, snapshot_data)
         else:
-            carry = (time, primitive_state)
+            carry = (time, key, primitive_state)
 
         return carry
 
@@ -749,15 +752,15 @@ def _time_integration(
 
     def condition(carry):
         if config.return_snapshots or config.activate_snapshot_callback:
-            t, _, _ = carry
+            t, _, _, _ = carry
         else:
-            t, _ = carry
+            t, _, _ = carry
         return t < params.t_end
 
     if config.return_snapshots or config.activate_snapshot_callback:
-        carry = (0.0, primitive_state, snapshot_data)
+        carry = (0.0, jax.random.key(42), primitive_state, snapshot_data)
     else:
-        carry = (0.0, primitive_state)
+        carry = (0.0, jax.random.key(42), primitive_state)
 
     if not config.fixed_timestep:
         if config.differentiation_mode == BACKWARDS:
@@ -783,7 +786,7 @@ def _time_integration(
     # return them in the appropriate format.
 
     if config.return_snapshots or config.activate_snapshot_callback:
-        _, primitive_state, snapshot_data = carry
+        _, _, primitive_state, snapshot_data = carry
 
         if config.return_snapshots:
             if config.snapshot_settings.return_final_state:
@@ -804,7 +807,7 @@ def _time_integration(
 
             return primitive_state
     else:
-        _, primitive_state = carry
+        _, _, primitive_state = carry
 
         # unpad the primitive state if we padded it
         if config.boundary_handling == GHOST_CELLS:

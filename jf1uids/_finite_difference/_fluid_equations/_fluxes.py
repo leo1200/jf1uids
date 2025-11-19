@@ -18,16 +18,19 @@ from jf1uids.option_classes.simulation_config import (
 # since the other directions can be obtained
 # by permuting the arrays accordingly.
 @partial(
-    jax.jit, static_argnames=["registered_variables"]
+    jax.jit, static_argnames=["registered_variables", "config"]
 )
 def _mhd_flux_x(
     conserved_state: STATE_TYPE,
+    minimum_density: Union[float, Float[Array, ""]],
+    minimum_pressure: Union[float, Float[Array, ""]],
     gamma: Union[float, Float[Array, ""]],
+    config: SimulationConfig,
     registered_variables: RegisteredVariables,
 ) -> STATE_TYPE:
 
     primitive_state = primitive_state_from_conserved_mhd(
-        conserved_state, gamma, registered_variables
+        conserved_state, minimum_density, minimum_pressure, gamma, config, registered_variables
     )
     
     # retrieve necessary quantities

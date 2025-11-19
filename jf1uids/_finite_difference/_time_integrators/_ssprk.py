@@ -211,9 +211,9 @@ def _ssprk4_with_ct(
         dtdz = k2_coeff * dt / grid_spacing
 
         # Calculate fluxes based on the state of the current stage
-        dF_x = _weno_flux_x(current_q, params.minimum_density, params.minimum_pressure, gamma, registered_variables)
-        dF_y = _weno_flux_y(current_q, params.minimum_density, params.minimum_pressure, gamma, registered_variables)
-        dF_z = _weno_flux_z(current_q, params.minimum_density, params.minimum_pressure, gamma, registered_variables)
+        dF_x = _weno_flux_x(current_q, params.minimum_density, params.minimum_pressure, gamma, config, registered_variables)
+        dF_y = _weno_flux_y(current_q, params.minimum_density, params.minimum_pressure, gamma, config, registered_variables)
+        dF_z = _weno_flux_z(current_q, params.minimum_density, params.minimum_pressure, gamma, config, registered_variables)
 
         # Calculate RHS for interface magnetic fields using Constrained Transport
         rhs_bx, rhs_by, rhs_bz = constrained_transport_rhs(
@@ -232,13 +232,12 @@ def _ssprk4_with_ct(
                 _wind_ei3D_source(
                     params.wind_params,
                     current_q,
+                    k2_coeff * dt,
                     config,
                     helper_data,
                     config.wind_config.num_injection_cells,
                     registered_variables,
                 )
-                * k2_coeff
-                * dt
             )
 
         return rhs_q, rhs_bx, rhs_by, rhs_bz
@@ -282,6 +281,15 @@ def _ssprk4_with_ct(
         current_state, final_state = carry
         q_curr, bx_curr, by_curr, bz_curr = current_state
         q_final, bx_final, by_final, bz_final = final_state
+
+        if config.enforce_positivity:
+            q_curr = _enforce_positivity(
+                q_curr,
+                gamma,
+                params.minimum_density,
+                params.minimum_pressure,
+                registered_variables,
+            )
 
         k_rhs = k_rhs_s[stage_idx]
         k_0 = k_0_s[stage_idx]
@@ -328,5 +336,14 @@ def _ssprk4_with_ct(
     q_final = update_cell_center_fields(
         q_final, bx_final, by_final, bz_final, registered_variables
     )
+
+    if config.enforce_positivity:
+        q_final = _enforce_positivity(
+            q_final,
+            gamma,
+            params.minimum_density,
+            params.minimum_pressure,
+            registered_variables,
+        )
 
     return q_final, bx_final, by_final, bz_final

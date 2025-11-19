@@ -28,7 +28,13 @@ def _enforce_positivity(
     minimum_pressure: Union[float, Float[Array, ""]],
     registered_variables: RegisteredVariables,
 ) -> STATE_TYPE:
+    
+
     rho = conserved_state[registered_variables.density_index]
+
+    # enforce minimum density
+    rho = jnp.maximum(rho, minimum_density)
+
     v_x = conserved_state[registered_variables.momentum_index.x] / rho
     v_y = conserved_state[registered_variables.momentum_index.y] / rho
     v_z = conserved_state[registered_variables.momentum_index.z] / rho
@@ -46,9 +52,6 @@ def _enforce_positivity(
 
     # redefine energy with new pressure
     energy = pressure / (gamma - 1.0) + 0.5 * rho * v2 + 0.5 * b2
-
-    # enforce minimum density
-    rho = jnp.maximum(rho, minimum_density)
 
     # reconstruct conserved state
     conserved_state = conserved_state.at[registered_variables.density_index].set(rho)

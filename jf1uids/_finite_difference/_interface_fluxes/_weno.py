@@ -105,14 +105,16 @@ from jax import checkpoint
 
 from jf1uids._finite_difference._fluid_equations._eigen import _eigen_L_row, _eigen_R_col, _eigen_lambdas, _eigen_x
 from jf1uids._finite_difference._fluid_equations._fluxes import _mhd_flux_x
+from jf1uids.option_classes.simulation_config import SimulationConfig
 from jf1uids.variable_registry.registered_variables import RegisteredVariables
 
-@partial(jax.jit, static_argnames=["registered_variables"])
+@partial(jax.jit, static_argnames=["registered_variables", "config"])
 def _weno_flux_x(
     conserved_state,
     rhomin: Union[float, jnp.ndarray],
     pgmin: Union[float, jnp.ndarray],
     gamma: Union[float, jnp.ndarray],
+    config: SimulationConfig,
     registered_variables: RegisteredVariables,
 ):
     """
@@ -122,7 +124,7 @@ def _weno_flux_x(
     epsilon = 1e-8
 
     # retrieve the center fluxes
-    F = _mhd_flux_x(conserved_state, gamma, registered_variables)
+    F = _mhd_flux_x(conserved_state, rhomin, pgmin, gamma, config, registered_variables)
     
     # with this we can already compute the first part of the flux
     F_interface = 1/12 * (
@@ -238,12 +240,13 @@ def _weno_flux_x(
         F_interface
     )
 
-@partial(jax.jit, static_argnames=["registered_variables"])
+@partial(jax.jit, static_argnames=["registered_variables", "config"])
 def _weno_flux_y(
     conserved_state,
     rhomin: Union[float, jnp.ndarray],
     pgmin: Union[float, jnp.ndarray],
     gamma: Union[float, jnp.ndarray],
+    config: SimulationConfig,
     registered_variables: RegisteredVariables,
 ):
     # Transpose to make y the "x" direction
@@ -260,7 +263,7 @@ def _weno_flux_y(
     qy = qy.at[registered_variables.magnetic_index.x].set(B_y)
     qy = qy.at[registered_variables.magnetic_index.y].set(B_x)
     
-    Fy = _weno_flux_x(qy, rhomin, pgmin, gamma, registered_variables)
+    Fy = _weno_flux_x(qy, rhomin, pgmin, gamma, config, registered_variables)
     
     # Transpose back
     Fy = jnp.transpose(Fy, (0, 2, 1, 3))
@@ -279,12 +282,13 @@ def _weno_flux_y(
     return Fy
 
 
-@partial(jax.jit, static_argnames=["registered_variables"])
+@partial(jax.jit, static_argnames=["registered_variables", "config"])
 def _weno_flux_z(
     conserved_state,
     rhomin: Union[float, jnp.ndarray],
     pgmin: Union[float, jnp.ndarray],
     gamma: Union[float, jnp.ndarray],
+    config: SimulationConfig,
     registered_variables: RegisteredVariables,
 ):
     # Transpose to make z the "x" direction
@@ -301,7 +305,7 @@ def _weno_flux_z(
     qz = qz.at[registered_variables.magnetic_index.x].set(B_z)
     qz = qz.at[registered_variables.magnetic_index.z].set(B_x)
     
-    Fz = _weno_flux_x(qz, rhomin, pgmin, gamma, registered_variables)
+    Fz = _weno_flux_x(qz, rhomin, pgmin, gamma, config, registered_variables)
     
     # Transpose back
     Fz = jnp.transpose(Fz, (0, 3, 2, 1))

@@ -61,7 +61,7 @@ def _evolve_state_fd(
 
     # back to primitive state
     primitive_state = primitive_state_from_conserved_mhd(
-        conserved_state, gamma, registered_variables
+        conserved_state, params.minimum_density, params.minimum_pressure, gamma, config, registered_variables
     )
 
     # append updated interface magnetic fields

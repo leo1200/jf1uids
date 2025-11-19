@@ -101,10 +101,13 @@ def conserved_state_from_primitive_mhd(
     return conserved_state
 
 
-@partial(jax.jit, static_argnames=["registered_variables"])
+@partial(jax.jit, static_argnames=["registered_variables", 'config'])
 def primitive_state_from_conserved_mhd(
     conserved_state: STATE_TYPE,
+    rhomin: Union[float, Float[Array, ""]],
+    pgmin: Union[float, Float[Array, ""]],
     gamma: Union[float, Float[Array, ""]],
+    config: SimulationConfig,
     registered_variables: RegisteredVariables,
 ) -> STATE_TYPE:
     """
@@ -133,6 +136,19 @@ def primitive_state_from_conserved_mhd(
     primitive_state = primitive_state.at[registered_variables.velocity_index.x].set(ux)
     primitive_state = primitive_state.at[registered_variables.velocity_index.y].set(uy)
     primitive_state = primitive_state.at[registered_variables.velocity_index.z].set(uz)
+
+    if config.enforce_positivity:
+        # enforce positivity of density and pressure
+        primitive_state = primitive_state.at[registered_variables.density_index].set(
+            jnp.maximum(
+                primitive_state[registered_variables.density_index], rhomin
+            )
+        )
+        primitive_state = primitive_state.at[registered_variables.pressure_index].set(
+            jnp.maximum(
+                primitive_state[registered_variables.pressure_index], pgmin
+            )
+        )
 
     return primitive_state
 

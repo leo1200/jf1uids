@@ -174,8 +174,6 @@ pressure = final_state[registered_variables.pressure_index]
 im1 = axs[0].imshow(pressure[:, :, num_cells // 2], extent=(0, box_size, 0, box_size), norm=LogNorm(vmin=1e-8, vmax=1e-1))
 fig.colorbar(im1, ax=axs[0], label="Pressure")
 axs[0].set_title("pressure slice, half-split scheme")
-axs[0].set_xlabel("x")
-axs[0].set_ylabel("y")
 
 # Riemann-split version
 snapshots, config, params, helper_data, registered_variables = simulate_collapse(num_cells, t_end = t_end, self_gravity_version = RIEMANN_SPLIT)
@@ -184,10 +182,13 @@ pressure = final_state[registered_variables.pressure_index]
 im2 = axs[1].imshow(pressure[:, :, num_cells // 2], extent=(0, box_size, 0, box_size), norm=LogNorm(vmin=1e-8, vmax=1e-1))
 fig.colorbar(im2, ax=axs[1], label="Pressure")
 axs[1].set_title("pressure slice, riemann-split scheme")
-axs[1].set_xlabel("x")
-axs[1].set_ylabel("y")
 
-plt.suptitle(f"Pressure slices at t={t_end} with {num_cells}^3 cells")
+# remove x and y axis ticks
+for ax in axs:
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+plt.suptitle(f"pressure slices at t = {t_end} for simulations with {num_cells}³ cells")
 plt.tight_layout()
-plt.savefig("simple_failure_pressure_slices.png")
+plt.savefig("simple_failure_pressure_slices.png", dpi=800)
 plt.close()

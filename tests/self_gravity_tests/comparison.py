@@ -173,7 +173,7 @@ configurations = [
     (128, RIEMANN_SPLIT_UNSTABLE),
 ]
 
-fig_profile, axes_profile = plt.subplots(1, 3, figsize=(15, 5))
+fig_profile, axes_profile = plt.subplots(1, 3, figsize=(12, 4))
 fig_energy, ax_energy = plt.subplots(1, 1, figsize=(10, 5))
 
 for num_cells, self_gravity_version in configurations:
@@ -184,49 +184,49 @@ for num_cells, self_gravity_version in configurations:
     kinetic_energy = snapshots.kinetic_energy
     gravitational_energy = snapshots.gravitational_energy
     time = snapshots.time_points
-    ax_energy.plot(time, total_energy, label="Total Energy, N = " + str(num_cells) + ", " + stringify_self_gravity_version(self_gravity_version), linestyle = '-' if self_gravity_version == SIMPLE_SOURCE_TERM else '--')
-    ax_energy.plot(time, internal_energy, label="Internal Energy, N = " + str(num_cells) + ", " + stringify_self_gravity_version(self_gravity_version), linestyle = '-' if self_gravity_version == SIMPLE_SOURCE_TERM else '--')
-    ax_energy.plot(time, kinetic_energy, label="Kinetic Energy, N = " + str(num_cells) + ", " + stringify_self_gravity_version(self_gravity_version), linestyle = '-' if self_gravity_version == SIMPLE_SOURCE_TERM else '--')
-    ax_energy.plot(time, gravitational_energy, label="Gravitational Energy, N = " + str(num_cells) + ", " + stringify_self_gravity_version(self_gravity_version), linestyle = '-' if self_gravity_version == SIMPLE_SOURCE_TERM else '--')
-    ax_energy.set_xlabel("Time")
-    ax_energy.set_ylabel("Energy")
+    ax_energy.plot(time, total_energy, label="total, N = " + str(num_cells) + "³, " + stringify_self_gravity_version(self_gravity_version), linestyle = '-' if self_gravity_version == SIMPLE_SOURCE_TERM else '--')
+    ax_energy.plot(time, internal_energy, label="internal, N = " + str(num_cells) + "³, " + stringify_self_gravity_version(self_gravity_version), linestyle = '-' if self_gravity_version == SIMPLE_SOURCE_TERM else '--')
+    ax_energy.plot(time, kinetic_energy, label="kinetic, N = " + str(num_cells) + "³, " + stringify_self_gravity_version(self_gravity_version), linestyle = '-' if self_gravity_version == SIMPLE_SOURCE_TERM else '--')
+    ax_energy.plot(time, gravitational_energy, label="gravitational, N = " + str(num_cells) + "³, " + stringify_self_gravity_version(self_gravity_version), linestyle = '-' if self_gravity_version == SIMPLE_SOURCE_TERM else '--')
+    ax_energy.set_xlabel("time")
+    ax_energy.set_ylabel("energy")
 
     snapshots, helper_data, registered_variables = None, None, None # free memory
 
     snapshots, _, _, helper_data, registered_variables = simulate_collapse(num_cells, self_gravity_version = self_gravity_version, t_end = 0.8)
     final_state = snapshots.final_state
     ax = axes_profile[0]
-    ax.scatter(helper_data.r.flatten(), final_state[registered_variables.density_index].flatten(), label="Final Density, N = " + str(num_cells) + ", " + stringify_self_gravity_version(self_gravity_version), s = 1)
+    ax.scatter(helper_data.r.flatten(), final_state[registered_variables.density_index].flatten(), label="N = " + str(num_cells) + "³, " + stringify_self_gravity_version(self_gravity_version), s = 1)
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlim(1e-2, 6e-1)
     ax.set_ylim(1e-2, 1e3)
     ax.set_xlabel("r")
-    ax.set_ylabel("Density")
+    ax.set_ylabel("density")
 
     v_r = -jnp.sqrt(final_state[registered_variables.velocity_index.x] ** 2 + final_state[registered_variables.velocity_index.y] ** 2 + final_state[registered_variables.velocity_index.z] ** 2)
     ax = axes_profile[1]
-    ax.scatter(helper_data.r.flatten(), v_r.flatten(), label="Radial Velocity, N = " + str(num_cells) + ", " + stringify_self_gravity_version(self_gravity_version), s = 1)
+    ax.scatter(helper_data.r.flatten(), v_r.flatten(), label="N = " + str(num_cells) + "³, " + stringify_self_gravity_version(self_gravity_version), s = 1)
     ax.set_xscale("log")
     ax.set_xlim(1e-2, 6e-1)
     ax.set_xlabel("r")
-    ax.set_ylabel("Velocity")
+    ax.set_ylabel("velocity")
 
     ax = axes_profile[2]
-    ax.scatter(helper_data.r.flatten(), final_state[registered_variables.pressure_index].flatten() / final_state[registered_variables.density_index].flatten() ** gamma, label="P / rho^gamma, N = " + str(num_cells) + ", " + stringify_self_gravity_version(self_gravity_version), s = 1)
+    ax.scatter(helper_data.r.flatten(), final_state[registered_variables.pressure_index].flatten() / final_state[registered_variables.density_index].flatten() ** gamma, label="N = " + str(num_cells) + "³, " + stringify_self_gravity_version(self_gravity_version), s = 1)
     ax.set_xlim(1e-2, 6e-1)
     ax.set_ylim(0, 0.2)
     ax.set_xlabel("r")
-    ax.set_ylabel("P / rho^gamma")
+    ax.set_ylabel(r"P / $\rho^\gamma$")
     ax.set_xscale("log")
 
-fig_energy.suptitle("Evrard's Collapse Energy Evolution")
+fig_energy.suptitle("Evrard's collapse energy evolution")
 ax_energy.legend(fontsize="x-small", ncol=len(configurations))
 fig_energy.tight_layout()
 fig_energy.savefig("collapse_energy_evolution_comparison.svg")
 
-fig_profile.suptitle("Evrard's Collapse Radial Profiles")
+fig_profile.suptitle("Evrard's collapse radial profiles, t = 0.8")
 for ax in axes_profile:
-    ax.legend(fontsize="x-small")
+    ax.legend(loc = "lower left")
 fig_profile.tight_layout()
-fig_profile.savefig("collapse_radial_profiles_comparison.png")
+fig_profile.savefig("collapse_radial_profiles_comparison.png", dpi = 800)

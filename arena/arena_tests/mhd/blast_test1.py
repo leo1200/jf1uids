@@ -228,7 +228,7 @@ def mhd_blast_test1(
         cmap="jet",
     )
     cbar = make_axes_locatable(axs[0, 1]).append_axes("right", size="5%", pad=0.1)
-    fig.colorbar(im, cax=cbar, label="v^2")
+    fig.colorbar(im, cax=cbar, label="v²")
     axs[0, 1].set_title("kinetic energy slice")
     axs[0, 1].set_xlabel("x")
     axs[0, 1].set_ylabel("y")
@@ -240,7 +240,7 @@ def mhd_blast_test1(
         cmap="jet",
     )
     cbar = make_axes_locatable(axs[1, 0]).append_axes("right", size="5%", pad=0.1)
-    fig.colorbar(im, cax=cbar, label="B^2")
+    fig.colorbar(im, cax=cbar, label="B²")
     axs[1, 0].set_title("magnetic pressure slice")
     axs[1, 0].set_xlabel("x")
     axs[1, 0].set_ylabel("y")
@@ -252,16 +252,16 @@ def mhd_blast_test1(
         config.box_size / num_cells
     )
     axs[0, 2].plot(r_diag, B_diag)
-    axs[0, 2].set_ylabel("|B|^2")
+    axs[0, 2].set_ylabel("|B|²")
     axs[0, 2].set_xlabel("diagonal")
-    axs[0, 2].set_title("|B|^2 along diagonal")
+    axs[0, 2].set_title("|B|² along diagonal")
 
     # density along the vertical centerline
     pressure_diag = pressure[diag_indices, diag_indices, num_cells // 2]
     axs[1, 2].plot(r_diag, pressure_diag)
     axs[1, 2].set_ylabel("pressure")
     axs[1, 2].set_xlabel("diagonal")
-    axs[1, 2].set_title("Pressure along diagonal")
+    axs[1, 2].set_title("pressure along diagonal")
 
     plt.tight_layout()
 
@@ -270,7 +270,7 @@ def mhd_blast_test1(
     figures_folder = os.path.join("results", configuration_name, "figures")
     os.makedirs(figures_folder, exist_ok=True)
     figure_file = os.path.join(figures_folder, test_name + ".png")
-    plt.savefig(figure_file)
+    plt.savefig(figure_file, dpi=800)
     plt.close(fig)
 
     # plot the magnetic divergence over time
