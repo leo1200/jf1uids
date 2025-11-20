@@ -495,12 +495,24 @@ def _wind_ei3D_source(
     source_term = jnp.zeros_like(conserved_state)
 
     r_inj = num_injection_cells * config.grid_spacing
-    V = 4 / 3 * jnp.pi * r_inj**3
+    r_1 = 1.3 * r_inj
 
-    # for now only allow injection at the box center
-    injection_mask = helper_data.r <= r_inj
+    # taper down injection to avoid sharp cut-off
+    # injection_mask = helper_data.r <= r_inj
+    injection_mask = jnp.where(
+        helper_data.r <= r_inj,
+        1.0,
+        jnp.where(
+            (helper_data.r > r_inj) & (helper_data.r <= r_1),
+            (r_1 - helper_data.r) / (r_1 - r_inj),
+            0.0,
+        ),
+    )
+
+    V = jnp.sum(injection_mask) * config.grid_spacing**3
 
     # mass injection
+    # V = sum(injection_mask) * config.grid_spacing**3
     drho_dt = wind_params.wind_mass_loss_rate / V
 
     source_term = source_term.at[registered_variables.density_index].set(
@@ -522,17 +534,24 @@ def _wind_ei3D_source(
     #    = m_old * (sqrt((rho_old + drho * dt) / rho_old) - 1)
     #    = m_old * (sqrt(1 + drho * dt / rho_old) - 1)
     momentum_source_factor = jnp.sqrt(
-        1 + drho_dt * dt
-        / (conserved_state[registered_variables.density_index] + 1e-20)
+        1 + drho_dt * dt * injection_mask
+        / (conserved_state[registered_variables.density_index])
     ) - 1.0
+    # ensure we only inject momentum within r_1, while
+    # the momentum source factor should be zero outside r_1 anyway
+    # (sqrt(1 + 0) - 1) = 0 there might be small numerical errors
+    momentum_source_factor = jnp.where(
+        helper_data.r <= r_1, momentum_source_factor, 0.0
+    )
+
     source_term = source_term.at[registered_variables.momentum_index.x].set(
-        conserved_state[registered_variables.momentum_index.x] * momentum_source_factor * injection_mask
+        conserved_state[registered_variables.momentum_index.x] * momentum_source_factor
     )
     source_term = source_term.at[registered_variables.momentum_index.y].set(
-        conserved_state[registered_variables.momentum_index.y] * momentum_source_factor * injection_mask
+        conserved_state[registered_variables.momentum_index.y] * momentum_source_factor
     )
     source_term = source_term.at[registered_variables.momentum_index.z].set(
-        conserved_state[registered_variables.momentum_index.z] * momentum_source_factor * injection_mask
+        conserved_state[registered_variables.momentum_index.z] * momentum_source_factor
     )
 
     source_term = source_term.at[registered_variables.energy_index].set(

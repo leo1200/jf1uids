@@ -82,10 +82,10 @@ box_size = 1.0
 num_cells = 128
 
 # activate stellar wind
-stellar_wind = False
+stellar_wind = True
 
 # turbulence
-turbulence = True
+turbulence = False
 wanted_rms = 50 * u.km / u.s
 
 # cooling
@@ -104,21 +104,13 @@ if mhd:
 
 print("Appended string for files:", app_string)
 
-fixed_timestep = False
-scale_time = False
+
 dt_max = 0.001
-num_timesteps = 2000
 
 # setup simulation config
 config = SimulationConfig(
     solver_mode = FINITE_DIFFERENCE,
-    runtime_debugging = False,
-    memory_analysis = False,
-    print_elapsed_time = False,
-    riemann_solver = HLL,
     mhd = True,
-    limiter = DOUBLE_MINMOD,
-    first_order_fallback = False,
     progress_bar = True,
     dimensionality = 3,
     num_ghost_cells = 2,
@@ -129,18 +121,7 @@ config = SimulationConfig(
         num_injection_cells = 12,
         trace_wind_density = False,
     ),
-    split = SPLIT,
-    time_integrator = MUSCL,
-    fixed_timestep = fixed_timestep,
-    exact_end_time = True,
     differentiation_mode = FORWARDS,
-    num_timesteps = num_timesteps,
-    return_snapshots = False,
-    snapshot_settings = SnapshotSettings(
-        return_states = False,
-        return_final_state = True
-    ),
-    self_gravity = False,
     self_gravity_version = SIMPLE_SOURCE_TERM,
     num_snapshots = 5,
     cooling_config = CoolingConfig(
@@ -175,13 +156,11 @@ code_velocity = 100 * u.km / u.s
 code_units = CodeUnits(code_length, code_mass, code_velocity)
 
 # time domain
-C_CFL = 0.6
+C_CFL = 0.9
 
 t_final = 1.0 * 1e4 * u.yr
 t_end = t_final.to(code_units.code_time).value
 
-if scale_time:
-    t_end = dt_max * num_timesteps
 print(t_end)
 
 

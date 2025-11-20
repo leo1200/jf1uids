@@ -239,7 +239,7 @@ else:
 config = finalize_config(config, initial_state.shape)
 
 # first only turbulence
-t_final = 4.0 * 1e4 * u.yr
+t_final = 24.0 * 1e4 * u.yr
 t_end = t_final.to(code_units.code_time).value
 print(t_end)
 params = params._replace(
@@ -248,7 +248,9 @@ params = params._replace(
 final_state = time_integration(initial_state, config, params, helper_data, registered_variables, sharding = named_sharding)
 
 # save the intermediate state to disk
-jnp.save("data/" + app_string + ".npy", final_state)
+jnp.save("data/" + app_string + "2.npy", final_state)
+
+# final_state = jnp.array(jnp.load("data/" + app_string + "2.npy"))
 
 s = 45
 
@@ -279,7 +281,7 @@ print(t_end)
 config = config._replace(
     wind_config = WindConfig(
         stellar_wind = True,
-        num_injection_cells = 9,
+        num_injection_cells = 18,
     ),
 )
 params = params._replace(
@@ -304,7 +306,7 @@ rms_velocity = jnp.sqrt(mean_squared_velocity)
 print("Final RMS velocity:", (rms_velocity * code_units.code_velocity).to(u.km / u.s).value, "km/s")
 
 # save the final state to disk
-jnp.save("data/driven_turb_wind" + app_string + ".npy", final_state)
+jnp.save("data/driven_turb_wind" + app_string + "2.npy", final_state)
 
 s = 45
 

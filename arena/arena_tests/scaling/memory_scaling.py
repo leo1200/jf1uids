@@ -195,28 +195,45 @@ def memory_scaling(
         resolutions,
         input_memory,
         marker="o",
-        label="Input Memory",
+        label="input memory",
     )
     ax.plot(
         resolutions,
         temp_memory,
         marker="o",
-        label="Temporary Memory",
+        label="temporary memory",
     )
     ax.plot(
         resolutions,
         total_memory,
         marker="o",
-        label="Total Memory",
+        label="total memory",
     )
     ax.set_xscale("log")
     ax.set_yscale("log")
-    ax.set_xlabel("Number of Cells per Dimension")
-    ax.set_ylabel("Memory Usage (MB)")
-    ax.set_title("Memory Scaling Test")
+    ax.set_xlabel("number of cells per dimension")
+    ax.set_ylabel("memory usage in MB")
+    ax.set_title("memory scaling test")
     ax.legend()
 
     fig_dir = f"results/{configuration_name}/figures"
     os.makedirs(fig_dir, exist_ok=True)
     fig_path = os.path.join(fig_dir, test_name + ".svg")
     fig.savefig(fig_path)
+
+    # also plot temp_memory / input_memory over resolution
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ratio = jnp.array(temp_memory) / jnp.array(input_memory)
+    ax.plot(
+        resolutions,
+        ratio,
+        marker="o",
+        label="temp / input memory ratio",
+    )
+    ax.set_xlabel("number of cells per dimension")
+    ax.set_ylabel("temp / input memory ratio")
+    ax.set_title("memory scaling test")
+    ax.legend()
+    fig_path = os.path.join(fig_dir, test_name + "_ratio.svg")
+    fig.savefig(fig_path)
+    print(f"💾 saved memory scaling figure to {fig_path}")
