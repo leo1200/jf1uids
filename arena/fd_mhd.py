@@ -2,7 +2,7 @@
 Tests of our implementation of the HOW-MHD scheme (Seo & Ryu 2023).
 """
 
-multi_gpu = False
+multi_gpu = True
 double_precision = False
 
 if multi_gpu:
@@ -76,9 +76,17 @@ base_params = SimulationParams(
 #     configuration_name = test_name,
 # )
 
-memory_scaling(
+# memory_scaling(
+#     config = base_config,
+#     params = base_params,
+#     resolutions = [50, 100, 200, 400],
+#     configuration_name = test_name,
+# )
+
+scaling_test(
     config = base_config,
     params = base_params,
-    resolutions = [50, 100, 200, 400],
+    resolutions = [600],
     configuration_name = test_name,
+    multi_gpu = multi_gpu,
 )

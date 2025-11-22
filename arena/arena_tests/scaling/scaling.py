@@ -15,6 +15,8 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
+from jax.sharding import PartitionSpec as P
+
 # jf1uidsSimulationConfig
 from jf1uids import (
     # jf1uids data structures
@@ -109,10 +111,10 @@ def scaling_test(
         r1 = 1.1 * r0
 
         rho = jnp.ones_like(r)
-        P = jnp.ones_like(r) * 1.0
-        P = jnp.where(r <= r0, 100.0, P)
-        P = jnp.where((r > r0) & (r <= r1), 1.0 + 99.0 * (r1 - r) / (r1 - r0), P)
-        P = jnp.where(r > r1, 1.0, P)
+        p = jnp.ones_like(r) * 1.0
+        p = jnp.where(r <= r0, 100.0, p)
+        p = jnp.where((r > r0) & (r <= r1), 1.0 + 99.0 * (r1 - r) / (r1 - r0), p)
+        p = jnp.where(r > r1, 1.0, p)
 
         V_x = jnp.zeros_like(r)
         V_y = jnp.zeros_like(r)
@@ -148,7 +150,7 @@ def scaling_test(
             interface_magnetic_field_x=bxb,
             interface_magnetic_field_y=byb,
             interface_magnetic_field_z=bzb,
-            gas_pressure=P,
+            gas_pressure=p,
         )
 
         # set all separate fields to None
@@ -156,7 +158,7 @@ def scaling_test(
         V_x, V_y, V_z = None, None, None
         B_x, B_y, B_z = None, None, None
         rho = None
-        P = None
+        p = None
         r = None
 
         # the initial state should already be on multiple gpus
