@@ -45,6 +45,15 @@ as a dependency. For a GPU-compatible installation of `JAX`, please refer to the
 
 ## Showcase
 
+| ![wind in driven turbulence](tests/finite_difference/figures/interm_driven_turb_wind4.png) |
+|:---------------------------------------------------------------------------------:|
+| Magnetohydrodynamics simulation with driven turbulence at a resolution of 512³ cells in a fifth order CT MHD scheme run on 4 H200 GPUs. |
+
+
+| ![wind in driven turbulence](tests/finite_difference/figures/driven_turb_wind4.png) |
+|:---------------------------------------------------------------------------------:|
+| Magnetohydrodynamics simulation with driven turbulence and stellar wind at a resolution of 512³ cells in a fifth order CT MHD scheme run on 4 H200 GPUs. |
+
 | ![Orszag-Tang Vortex](notebooks/figures/orszag_tang_animation.gif) | ![3D Collapse](notebooks/figures/3d_collapse.gif) |
 |:------------------------------------------------------------------:|:-------------------------------------------------:|
 | Orszag-Tang Vortex                                                 | 3D Collapse                                       |
@@ -61,6 +70,11 @@ as a dependency. For a GPU-compatible installation of `JAX`, please refer to the
 |:---------------------------------------------------------------------------------:|
 | Wind Parameter Optimization                                                       |
 
+<!-- ## Scaling
+
+| ![single gpu scaling]() |
+|:---------------------------------------------------------------------------------:|
+| Single GPU-scaling for the finite volume and finite difference MHD schemes. | -->
 
 ## Citable References
 
