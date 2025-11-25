@@ -89,7 +89,7 @@ def simulate(limiter, num_cells):
 
     config = finalize_config(config, initial_state.shape)
 
-    final_state = time_integration(initial_state, config, params, helper_data, registered_variables)
+    final_state = time_integration(initial_state, config, params, registered_variables)
     rho_final = final_state[registered_variables.density_index]
     u_final = final_state[registered_variables.velocity_index]
     p_final = final_state[registered_variables.pressure_index]

@@ -174,7 +174,6 @@ def force_pass(
         initial_state,
         config,
         current_sim_params,
-        helper_data,
         registered_variables,
     )
 

@@ -226,7 +226,7 @@ run_simulation = True
 
 if run_simulation:
     final_state = time_integration(
-        initial_state, config, params, helper_data, registered_variables
+        initial_state, config, params, registered_variables
     )
     # save final state
     jnp.save("data/how_blast.npy", final_state)

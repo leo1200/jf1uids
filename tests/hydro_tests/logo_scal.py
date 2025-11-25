@@ -165,7 +165,6 @@ def cost_analyse_backprop(num_checkpoints):
         initial_state,
         config_alt,
         params,
-        helper_data,
         registered_variables
     )
     print(f"Number of timesteps: {result.num_iterations}")
@@ -182,7 +181,6 @@ def cost_analyse_backprop(num_checkpoints):
             initial_state,
             config,
             current_sim_params,
-            helper_data,
             registered_variables,
         )
 

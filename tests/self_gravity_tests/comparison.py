@@ -156,7 +156,7 @@ def simulate_collapse(num_cells, t_end = 3.0, self_gravity_version = RIEMANN_SPL
     config = finalize_config(config, initial_state.shape)
 
     return jax.block_until_ready(
-        time_integration(initial_state, config, params, helper_data, registered_variables)
+        time_integration(initial_state, config, params, registered_variables)
     ), config, params, helper_data, registered_variables
 
 def stringify_self_gravity_version(version):

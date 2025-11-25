@@ -169,7 +169,7 @@ def run_turbulent_simulation(stellar_wind = True, turbulence = True, t_final = 2
 
     config = finalize_config(config, initial_state.shape)
 
-    return initial_state, time_integration(initial_state, config, params, helper_data, registered_variables), config, registered_variables, params
+    return initial_state, time_integration(initial_state, config, params, registered_variables), config, registered_variables, params
 
 def get_energy(primitive_state, config, registered_variables, params):
     """Calculate the total energy from the primitive state."""

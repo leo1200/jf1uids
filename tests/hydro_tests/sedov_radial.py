@@ -130,7 +130,7 @@ initial_state = construct_primitive_state(
 config = finalize_config(config, initial_state.shape)
 
 # Run the simulation
-result = time_integration(initial_state, config, params, helper_data, registered_variables)
+result = time_integration(initial_state, config, params, registered_variables)
 
 
 # =========================================================================

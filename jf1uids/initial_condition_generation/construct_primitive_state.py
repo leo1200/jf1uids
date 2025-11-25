@@ -73,30 +73,34 @@ def construct_primitive_state(
         state = state.at[registered_variables.velocity_index.z].set(velocity_z)
 
     if config.mhd:
-        if config.dimensionality == 1:
-            state = state.at[registered_variables.magnetic_index].set(magnetic_field_x)
-        elif config.dimensionality >= 2:
-            state = state.at[registered_variables.magnetic_index.x].set(
-                magnetic_field_x
-            )
-            state = state.at[registered_variables.magnetic_index.y].set(
-                magnetic_field_y
-            )
-            state = state.at[registered_variables.magnetic_index.z].set(
-                magnetic_field_z
+        if config.dimensionality >= 2:
+            if magnetic_field_x is not None:
+                state = state.at[registered_variables.magnetic_index.x].set(
+                    magnetic_field_x
+                )
+            if magnetic_field_y is not None:
+                state = state.at[registered_variables.magnetic_index.y].set(
+                    magnetic_field_y
+                )
+            if magnetic_field_z is not None:
+                state = state.at[registered_variables.magnetic_index.z].set(
+                    magnetic_field_z
             )
 
         if config.solver_mode == FINITE_DIFFERENCE:
-            state = state.at[
-                registered_variables.interface_magnetic_field_index.x
-            ].set(interface_magnetic_field_x)
-            state = state.at[
-                registered_variables.interface_magnetic_field_index.y
-            ].set(interface_magnetic_field_y)
-            state = state.at[
-                registered_variables.interface_magnetic_field_index.z
-            ].set(interface_magnetic_field_z)
-
+            if interface_magnetic_field_x is not None:
+                state = state.at[
+                    registered_variables.interface_magnetic_field_index.x
+                ].set(interface_magnetic_field_x)
+            if interface_magnetic_field_y is not None:
+                state = state.at[
+                    registered_variables.interface_magnetic_field_index.y
+                ].set(interface_magnetic_field_y)
+            if interface_magnetic_field_z is not None:
+                state = state.at[
+                    registered_variables.interface_magnetic_field_index.z
+                ].set(interface_magnetic_field_z)
+    
     state = state.at[registered_variables.pressure_index].set(gas_pressure)
 
     if registered_variables.cosmic_ray_n_active:

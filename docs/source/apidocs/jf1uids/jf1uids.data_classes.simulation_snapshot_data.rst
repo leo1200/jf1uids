@@ -93,6 +93,13 @@ API
 
       .. autodoc2-docstring:: jf1uids.data_classes.simulation_snapshot_data.SnapshotData.radial_momentum
 
+   .. py:attribute:: magnetic_divergence
+      :canonical: jf1uids.data_classes.simulation_snapshot_data.SnapshotData.magnetic_divergence
+      :type: jax.numpy.ndarray
+      :value: None
+
+      .. autodoc2-docstring:: jf1uids.data_classes.simulation_snapshot_data.SnapshotData.magnetic_divergence
+
    .. py:attribute:: runtime
       :canonical: jf1uids.data_classes.simulation_snapshot_data.SnapshotData.runtime
       :type: float

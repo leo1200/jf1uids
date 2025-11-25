@@ -84,7 +84,7 @@ from jf1uids.option_classes.simulation_config import (
 #     config = finalize_config(config, initial_state.shape)
     
 #     # --- Run Time Integration ---
-#     result = time_integration(initial_state, config, params, helper_data, registered_variables)
+#     result = time_integration(initial_state, config, params, registered_variables)
     
 #     # Return only the final density field (index 0)
 #     final_density = result[0, :, :]

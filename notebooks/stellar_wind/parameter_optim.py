@@ -137,7 +137,7 @@ sample_simulation = lambda velocity, mass_loss_rate: time_integration(initial_st
         wind_mass_loss_rate=mass_loss_rate,
         wind_final_velocity=velocity
     )
-), helper_data, registered_variables)
+), registered_variables)
 
 # generate a reference simulation
 M_star = 40 * u.M_sun

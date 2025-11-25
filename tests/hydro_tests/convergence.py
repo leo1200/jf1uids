@@ -75,7 +75,7 @@ def simulate_and_get_error(num_cells, use_first_order):
     )
 
     config = finalize_config(config, initial_state.shape)
-    final_state = time_integration(initial_state, config, params, helper_data, registered_variables)
+    final_state = time_integration(initial_state, config, params, registered_variables)
     rho_final = final_state[registered_variables.density_index]
     
     # -- Error Calculation --

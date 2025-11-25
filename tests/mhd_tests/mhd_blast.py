@@ -98,7 +98,7 @@ def run_blast_simulation(num_cells):
 
     config = finalize_config(config, initial_state.shape)
 
-    final_state = time_integration(initial_state, config, params, helper_data, registered_variables)
+    final_state = time_integration(initial_state, config, params, registered_variables)
 
     return final_state
 

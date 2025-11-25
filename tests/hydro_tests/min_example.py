@@ -68,5 +68,5 @@ config = finalize_config(config, initial_state.shape)
 # run the simulation
 final_state = time_integration(
     initial_state, config, params, 
-    helper_data, registered_variables
+    registered_variables
 )

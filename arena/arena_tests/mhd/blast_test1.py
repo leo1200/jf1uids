@@ -166,7 +166,7 @@ def mhd_blast_test1(
     # run the simulation
     print("🚀 running mhd_blast_test1 simulation")
     result = time_integration(
-        initial_state, config, params, helper_data, registered_variables
+        initial_state, config, params, registered_variables
     )
     final_state = result.final_state
     magnetic_divergence = result.magnetic_divergence

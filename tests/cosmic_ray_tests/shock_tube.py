@@ -83,7 +83,7 @@ def shock_tube_test():
     config2 = finalize_config(config2, initial_state.shape)
 
     # run the simulation without diffusive shock acceleration
-    final_state = time_integration(initial_state, config, params, helper_data, registered_variables)
+    final_state = time_integration(initial_state, config, params, registered_variables)
     rho_final = final_state[registered_variables.density_index]
     u_final = final_state[registered_variables.velocity_index]
     p_final = final_state[registered_variables.pressure_index]
@@ -92,7 +92,7 @@ def shock_tube_test():
     p_gas_final = p_final - p_cr_final
 
     # run the simulation with diffusive shock acceleration
-    final_state_acc = time_integration(initial_state, config2, params, helper_data, registered_variables)
+    final_state_acc = time_integration(initial_state, config2, params, registered_variables)
     rho_final_acc = final_state_acc[registered_variables.density_index]
     u_final_acc = final_state_acc[registered_variables.velocity_index]
     p_final_acc = final_state_acc[registered_variables.pressure_index]

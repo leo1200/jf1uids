@@ -148,20 +148,20 @@ def jf1uids_simulate(num_cells, dt):
     config = finalize_config(config, initial_state.shape)
 
     # compile the JAX functions
-    time_integration(initial_state, config, params, helper_data, registered_variables).block_until_ready()
+    time_integration(initial_state, config, params, registered_variables).block_until_ready()
 
     # time the simulation
     runtimes = []
     for _ in range(5):
         start_time = time.time()
         # run the simulation
-        final_state = time_integration(initial_state, config, params, helper_data, registered_variables).block_until_ready()
+        final_state = time_integration(initial_state, config, params, registered_variables).block_until_ready()
         end_time = time.time()
         runtimes.append(end_time - start_time)
     runtime = min(runtimes)
     print(runtime)
     
-    final_state = time_integration(initial_state, config, params, helper_data, registered_variables)
+    final_state = time_integration(initial_state, config, params, registered_variables)
 
     rho_final = final_state[registered_variables.density_index]
     u_final = final_state[registered_variables.velocity_index]

@@ -102,7 +102,7 @@ initial_state = construct_primitive_state(
 
 config = finalize_config(config, initial_state.shape)
 
-final_state = time_integration(initial_state, config, params, helper_data, registered_variables)
+final_state = time_integration(initial_state, config, params, registered_variables)
 
 # save the final state to a file
 jnp.savez('mhd_jet_final_state.npz', final_state=final_state)

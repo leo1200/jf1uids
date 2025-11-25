@@ -185,7 +185,7 @@ def turbulent_forcing_test(
     # run the simulation
     print("🚀 running turbulent_forcing simulation")
     final_state = time_integration(
-        initial_state, config, params, helper_data, registered_variables
+        initial_state, config, params, registered_variables
     )
 
     # def _apply_forcing(

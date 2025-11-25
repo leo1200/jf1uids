@@ -51,6 +51,20 @@ API
 
       .. autodoc2-docstring:: jf1uids.option_classes.simulation_params.SimulationParams.gamma
 
+   .. py:attribute:: minimum_density
+      :canonical: jf1uids.option_classes.simulation_params.SimulationParams.minimum_density
+      :type: float
+      :value: 1e-14
+
+      .. autodoc2-docstring:: jf1uids.option_classes.simulation_params.SimulationParams.minimum_density
+
+   .. py:attribute:: minimum_pressure
+      :canonical: jf1uids.option_classes.simulation_params.SimulationParams.minimum_pressure
+      :type: float
+      :value: 1e-14
+
+      .. autodoc2-docstring:: jf1uids.option_classes.simulation_params.SimulationParams.minimum_pressure
+
    .. py:attribute:: dt_max
       :canonical: jf1uids.option_classes.simulation_params.SimulationParams.dt_max
       :type: float
@@ -71,6 +85,13 @@ API
       :value: 'array(...)'
 
       .. autodoc2-docstring:: jf1uids.option_classes.simulation_params.SimulationParams.snapshot_timepoints
+
+   .. py:attribute:: turbulent_forcing_params
+      :canonical: jf1uids.option_classes.simulation_params.SimulationParams.turbulent_forcing_params
+      :type: jf1uids._physics_modules._turbulent_forcing._turbulent_forcing_options.TurbulentForcingParams
+      :value: 'TurbulentForcingParams(...)'
+
+      .. autodoc2-docstring:: jf1uids.option_classes.simulation_params.SimulationParams.turbulent_forcing_params
 
    .. py:attribute:: wind_params
       :canonical: jf1uids.option_classes.simulation_params.SimulationParams.wind_params

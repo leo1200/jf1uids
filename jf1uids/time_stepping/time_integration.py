@@ -62,7 +62,6 @@ def time_integration(
     primitive_state: STATE_TYPE,
     config: SimulationConfig,
     params: SimulationParams,
-    helper_data: HelperData,
     registered_variables: RegisteredVariables,
     snapshot_callable = None,
     sharding: Union[NoneType, jax.NamedSharding] = None,
@@ -76,7 +75,6 @@ def time_integration(
         primitive_state: The primitive state array.
         config: The simulation configuration.
         params: The simulation parameters.
-        helper_data: The helper data.
         registered_variables: The registered variables.
         snapshot_callable: A callable which is called at certain time points
             if config.activate_snapshot_callback is True. The callable must
@@ -107,7 +105,19 @@ def time_integration(
     # time if requested, compiling the function for memory analysis if
     # requested, etc.
 
-    helper_data_pad = get_helper_data(config, sharding, padded = config.boundary_handling == GHOST_CELLS)
+    helper_data_pad = get_helper_data(
+        config,
+        sharding,
+        padded = config.boundary_handling == GHOST_CELLS,
+        production = True
+    )
+    
+    helper_data = get_helper_data(
+        config,
+        sharding,
+        padded = False,
+        production = True
+    )
 
     if config.runtime_debugging:
         errors = (

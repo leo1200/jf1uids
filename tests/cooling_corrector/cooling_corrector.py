@@ -341,7 +341,7 @@ for high_res in high_res_s:
     )
 
     if run_simulation:
-        result = time_integration(initial_state, config, params, helper_data, registered_variables)
+        result = time_integration(initial_state, config, params, registered_variables)
         reference_states = result.states
         # save reference states as numpy array
         jnp.save(f"data/reference_states{high_res}.npy", jnp.array(reference_states))
@@ -352,7 +352,7 @@ for high_res in high_res_s:
                 cooling = False,
             )
         )
-        result_no_cooling = time_integration(initial_state, config_no_cooling, params, helper_data, registered_variables)
+        result_no_cooling = time_integration(initial_state, config_no_cooling, params, registered_variables)
         reference_states_no_cooling = result_no_cooling.states
         jnp.save(f"data/reference_states_no_cooling{high_res}.npy", jnp.array(reference_states_no_cooling))
     else:
@@ -379,7 +379,7 @@ if plot_problem_setting:
             cooling = False,
         )
         # run simulation without cooling
-        # final_state = time_integration(initial_state, config, params, helper_data, registered_variables)
+        # final_state = time_integration(initial_state, config, params, registered_variables)
         # load from file
         final_state = jnp.load(f"data/reference_states_no_cooling{high_res}.npy", allow_pickle=True)[-1]
 
@@ -395,7 +395,7 @@ if plot_problem_setting:
             cooling = True,
         )
         # run simulation with cooling
-        # final_state = time_integration(initial_state, config, params, helper_data, registered_variables)
+        # final_state = time_integration(initial_state, config, params, registered_variables)
         final_state = jnp.load(f"data/reference_states{high_res}.npy", allow_pickle=True)[-1]
 
         plot_profiles(axs[1, :], final_state, registered_variables, helper_data, code_units, label = f"jf1uids, {high_res} cells", color = color)
@@ -457,7 +457,7 @@ if train_model:
                     )
                 )
             )
-            result = time_integration(initial_state, config, params_new, helper_data_low_res, registered_variables)
+            result = time_integration(initial_state, config, params_new, registered_variables)
             return jnp.mean(((result.states[:, :, beginning_index:] - reference_states_downsampled[:, :, beginning_index:]) / jnp.max(reference_states_downsampled[:, :, beginning_index:], axis = (0, 2))[None, :, None]) ** 2)
 
         @eqx.filter_jit
@@ -503,7 +503,7 @@ params = params._replace(
         )
     )
 )
-result = time_integration(initial_state, config, params, helper_data_low_res, registered_variables)
+result = time_integration(initial_state, config, params, registered_variables)
 low_res_states_corrected = result.states
 final_state = low_res_states_corrected[-1]
 fig, axs = plt.subplots(1, 4, figsize=(20, 5))
@@ -537,7 +537,7 @@ if run_high_res_for_error_plot:
         num_injection_cells = get_num_injection_cells(r_inj, high_res)
     )
     err_timepoints = (params.snapshot_timepoints * code_units.code_time).to(u.yr).value
-    result = time_integration(initial_state, config, params, helper_data_low_res, registered_variables)
+    result = time_integration(initial_state, config, params, registered_variables)
     reference_states = result.states
 
     # save err_timepoints and reference_states as numpy array
@@ -559,7 +559,7 @@ initial_state, config, params, helper_data_low_res, registered_variables = setup
     t_final = 1.3e12 * u.s,
     num_injection_cells = get_num_injection_cells(r_inj, low_res)
 )
-result = time_integration(initial_state, config, params, helper_data_low_res, registered_variables)
+result = time_integration(initial_state, config, params, registered_variables)
 low_res_states = result.states
 error_uncorrected = jnp.mean(((low_res_states[:, :, beginning_index:] - reference_states_downwampled[:, :, beginning_index:]) / jnp.max(reference_states_downwampled[:, :, beginning_index:], axis = (0, 2))[None, :, None]) ** 2, axis = (1, 2))
 
@@ -575,7 +575,7 @@ initial_state, config, params, helper_data_low_res, registered_variables = setup
     t_final = 1.3e12 * u.s,
     num_injection_cells = get_num_injection_cells(r_inj, low_res)
 )
-result = time_integration(initial_state, config, params, helper_data_low_res, registered_variables)
+result = time_integration(initial_state, config, params, registered_variables)
 low_res_states_corrected = result.states
 error_corrected = jnp.mean(((low_res_states_corrected[:, :, beginning_index:] - reference_states_downwampled[:, :, beginning_index:]) / jnp.max(reference_states_downwampled[:, :, beginning_index:], axis = (0, 2))[None, :, None]) ** 2, axis = (1, 2))
 

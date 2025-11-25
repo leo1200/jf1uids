@@ -167,7 +167,7 @@ def sedov_cr_test():
 
     config = finalize_config(config, initial_state.shape)
 
-    result = time_integration(initial_state, config, params, helper_data, registered_variables)
+    result = time_integration(initial_state, config, params, registered_variables)
 
     final_state = result.states[-1]
 

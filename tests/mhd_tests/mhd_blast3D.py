@@ -129,7 +129,7 @@ initial_state, config, registered_variables, params, helper_data = run_blast_sim
 run_simulation = True
 
 if run_simulation:
-    final_state = time_integration(initial_state, config, params, helper_data, registered_variables)
+    final_state = time_integration(initial_state, config, params, registered_variables)
     # save final state
     jnp.save('data/mhd_blast3D.npy', final_state)
 else:

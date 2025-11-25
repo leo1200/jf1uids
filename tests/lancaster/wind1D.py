@@ -319,7 +319,7 @@ for high_res in high_res_s:
     )
 
     if run_simulation:
-        result = time_integration(initial_state, config, params, helper_data, registered_variables)
+        result = time_integration(initial_state, config, params, registered_variables)
         reference_states = result.states
         # save reference states as numpy array
         jnp.save(f"data/reference_states{high_res}.npy", jnp.array(reference_states))
@@ -330,7 +330,7 @@ for high_res in high_res_s:
                 cooling = False,
             )
         )
-        result_no_cooling = time_integration(initial_state, config_no_cooling, params, helper_data, registered_variables)
+        result_no_cooling = time_integration(initial_state, config_no_cooling, params, registered_variables)
         reference_states_no_cooling = result_no_cooling.states
         jnp.save(f"data/reference_states_no_cooling{high_res}.npy", jnp.array(reference_states_no_cooling))
     else:

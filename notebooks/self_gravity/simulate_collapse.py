@@ -122,7 +122,7 @@ def simulate_collapse(num_cells):
 
     config = finalize_config(config, initial_state.shape)
 
-    return jax.block_until_ready(time_integration(initial_state, config, params, helper_data, registered_variables))
+    return jax.block_until_ready(time_integration(initial_state, config, params, registered_variables))
 
 def resolution_study():
 

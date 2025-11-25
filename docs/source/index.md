@@ -91,6 +91,7 @@ notebooks/hydrodynamics/kelvin_helmholtz.ipynb
 :maxdepth: 1
 
 notebooks/magnetohydrodynamics/orszag_tang_vortex.ipynb
+notebooks/magnetohydrodynamics/fd_mhd_blast.ipynb
 ```
 
 ```{toctree}

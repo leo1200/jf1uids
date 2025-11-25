@@ -245,7 +245,7 @@ print(t_end)
 params = params._replace(
     t_end = t_end,
 )
-final_state = time_integration(initial_state, config, params, helper_data, registered_variables, sharding = named_sharding)
+final_state = time_integration(initial_state, config, params, registered_variables, sharding = named_sharding)
 
 # save the intermediate state to disk
 jnp.save("data/" + app_string + "2.npy", final_state)
@@ -289,7 +289,7 @@ params = params._replace(
     minimum_density = 1e-3,
     minimum_pressure = 1e-3,
 )
-final_state = time_integration(final_state, config, params, helper_data, registered_variables, sharding = named_sharding)
+final_state = time_integration(final_state, config, params, registered_variables, sharding = named_sharding)
 
 # print min and max density and pressure
 print("Final min density:", jnp.min(final_state[registered_variables.density_index]))

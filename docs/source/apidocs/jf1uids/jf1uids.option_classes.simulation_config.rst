@@ -47,6 +47,12 @@ Data
    :class: autosummary longtable
    :align: left
 
+   * - :py:obj:`FINITE_VOLUME <jf1uids.option_classes.simulation_config.FINITE_VOLUME>`
+     - .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.FINITE_VOLUME
+          :summary:
+   * - :py:obj:`FINITE_DIFFERENCE <jf1uids.option_classes.simulation_config.FINITE_DIFFERENCE>`
+     - .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.FINITE_DIFFERENCE
+          :summary:
    * - :py:obj:`FORWARDS <jf1uids.option_classes.simulation_config.FORWARDS>`
      - .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.FORWARDS
           :summary:
@@ -101,6 +107,9 @@ Data
    * - :py:obj:`MUSCL <jf1uids.option_classes.simulation_config.MUSCL>`
      - .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.MUSCL
           :summary:
+   * - :py:obj:`RK4_SSP <jf1uids.option_classes.simulation_config.RK4_SSP>`
+     - .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.RK4_SSP
+          :summary:
    * - :py:obj:`OPEN_BOUNDARY <jf1uids.option_classes.simulation_config.OPEN_BOUNDARY>`
      - .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.OPEN_BOUNDARY
           :summary:
@@ -143,6 +152,12 @@ Data
    * - :py:obj:`ZAXIS <jf1uids.option_classes.simulation_config.ZAXIS>`
      - .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.ZAXIS
           :summary:
+   * - :py:obj:`GHOST_CELLS <jf1uids.option_classes.simulation_config.GHOST_CELLS>`
+     - .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.GHOST_CELLS
+          :summary:
+   * - :py:obj:`PERIODIC_ROLL <jf1uids.option_classes.simulation_config.PERIODIC_ROLL>`
+     - .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.PERIODIC_ROLL
+          :summary:
    * - :py:obj:`SIMPLE_SOURCE_TERM <jf1uids.option_classes.simulation_config.SIMPLE_SOURCE_TERM>`
      - .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.SIMPLE_SOURCE_TERM
           :summary:
@@ -154,6 +169,21 @@ Data
           :summary:
    * - :py:obj:`RIEMANN_SPLIT_UNSTABLE <jf1uids.option_classes.simulation_config.RIEMANN_SPLIT_UNSTABLE>`
      - .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.RIEMANN_SPLIT_UNSTABLE
+          :summary:
+   * - :py:obj:`HALF_SPLIT <jf1uids.option_classes.simulation_config.HALF_SPLIT>`
+     - .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.HALF_SPLIT
+          :summary:
+   * - :py:obj:`IMPLICIT_MIDPOINT <jf1uids.option_classes.simulation_config.IMPLICIT_MIDPOINT>`
+     - .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.IMPLICIT_MIDPOINT
+          :summary:
+   * - :py:obj:`IMPLICIT_EULER <jf1uids.option_classes.simulation_config.IMPLICIT_EULER>`
+     - .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.IMPLICIT_EULER
+          :summary:
+   * - :py:obj:`SINGLE_PRECISION <jf1uids.option_classes.simulation_config.SINGLE_PRECISION>`
+     - .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.SINGLE_PRECISION
+          :summary:
+   * - :py:obj:`DOUBLE_PRECISION <jf1uids.option_classes.simulation_config.DOUBLE_PRECISION>`
+     - .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.DOUBLE_PRECISION
           :summary:
    * - :py:obj:`STATE_TYPE <jf1uids.option_classes.simulation_config.STATE_TYPE>`
      - .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.STATE_TYPE
@@ -167,6 +197,18 @@ Data
 
 API
 ~~~
+
+.. py:data:: FINITE_VOLUME
+   :canonical: jf1uids.option_classes.simulation_config.FINITE_VOLUME
+   :value: 0
+
+   .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.FINITE_VOLUME
+
+.. py:data:: FINITE_DIFFERENCE
+   :canonical: jf1uids.option_classes.simulation_config.FINITE_DIFFERENCE
+   :value: 1
+
+   .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.FINITE_DIFFERENCE
 
 .. py:data:: FORWARDS
    :canonical: jf1uids.option_classes.simulation_config.FORWARDS
@@ -276,6 +318,12 @@ API
 
    .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.MUSCL
 
+.. py:data:: RK4_SSP
+   :canonical: jf1uids.option_classes.simulation_config.RK4_SSP
+   :value: 2
+
+   .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.RK4_SSP
+
 .. py:data:: OPEN_BOUNDARY
    :canonical: jf1uids.option_classes.simulation_config.OPEN_BOUNDARY
    :value: 0
@@ -360,6 +408,18 @@ API
 
    .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.ZAXIS
 
+.. py:data:: GHOST_CELLS
+   :canonical: jf1uids.option_classes.simulation_config.GHOST_CELLS
+   :value: 0
+
+   .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.GHOST_CELLS
+
+.. py:data:: PERIODIC_ROLL
+   :canonical: jf1uids.option_classes.simulation_config.PERIODIC_ROLL
+   :value: 1
+
+   .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.PERIODIC_ROLL
+
 .. py:data:: SIMPLE_SOURCE_TERM
    :canonical: jf1uids.option_classes.simulation_config.SIMPLE_SOURCE_TERM
    :value: 0
@@ -383,6 +443,36 @@ API
    :value: 3
 
    .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.RIEMANN_SPLIT_UNSTABLE
+
+.. py:data:: HALF_SPLIT
+   :canonical: jf1uids.option_classes.simulation_config.HALF_SPLIT
+   :value: 4
+
+   .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.HALF_SPLIT
+
+.. py:data:: IMPLICIT_MIDPOINT
+   :canonical: jf1uids.option_classes.simulation_config.IMPLICIT_MIDPOINT
+   :value: 0
+
+   .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.IMPLICIT_MIDPOINT
+
+.. py:data:: IMPLICIT_EULER
+   :canonical: jf1uids.option_classes.simulation_config.IMPLICIT_EULER
+   :value: 1
+
+   .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.IMPLICIT_EULER
+
+.. py:data:: SINGLE_PRECISION
+   :canonical: jf1uids.option_classes.simulation_config.SINGLE_PRECISION
+   :value: 0
+
+   .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.SINGLE_PRECISION
+
+.. py:data:: DOUBLE_PRECISION
+   :canonical: jf1uids.option_classes.simulation_config.DOUBLE_PRECISION
+   :value: 1
+
+   .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.DOUBLE_PRECISION
 
 .. py:data:: STATE_TYPE
    :canonical: jf1uids.option_classes.simulation_config.STATE_TYPE
@@ -465,6 +555,13 @@ API
 
       .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.SnapshotSettings.return_radial_momentum
 
+   .. py:attribute:: return_magnetic_divergence
+      :canonical: jf1uids.option_classes.simulation_config.SnapshotSettings.return_magnetic_divergence
+      :type: bool
+      :value: False
+
+      .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.SnapshotSettings.return_magnetic_divergence
+
 .. py:class:: BoundarySettings1D
    :canonical: jf1uids.option_classes.simulation_config.BoundarySettings1D
 
@@ -521,6 +618,20 @@ API
 
    .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.SimulationConfig
 
+   .. py:attribute:: solver_mode
+      :canonical: jf1uids.option_classes.simulation_config.SimulationConfig.solver_mode
+      :type: int
+      :value: None
+
+      .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.SimulationConfig.solver_mode
+
+   .. py:attribute:: numerical_precision
+      :canonical: jf1uids.option_classes.simulation_config.SimulationConfig.numerical_precision
+      :type: int
+      :value: None
+
+      .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.SimulationConfig.numerical_precision
+
    .. py:attribute:: runtime_debugging
       :canonical: jf1uids.option_classes.simulation_config.SimulationConfig.runtime_debugging
       :type: bool
@@ -576,6 +687,20 @@ API
       :value: False
 
       .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.SimulationConfig.mhd
+
+   .. py:attribute:: fv_magnetic_integrator
+      :canonical: jf1uids.option_classes.simulation_config.SimulationConfig.fv_magnetic_integrator
+      :type: int
+      :value: None
+
+      .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.SimulationConfig.fv_magnetic_integrator
+
+   .. py:attribute:: enforce_positivity
+      :canonical: jf1uids.option_classes.simulation_config.SimulationConfig.enforce_positivity
+      :type: bool
+      :value: True
+
+      .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.SimulationConfig.enforce_positivity
 
    .. py:attribute:: self_gravity
       :canonical: jf1uids.option_classes.simulation_config.SimulationConfig.self_gravity
@@ -654,6 +779,13 @@ API
 
       .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.SimulationConfig.grid_spacing
 
+   .. py:attribute:: boundary_handling
+      :canonical: jf1uids.option_classes.simulation_config.SimulationConfig.boundary_handling
+      :type: int
+      :value: None
+
+      .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.SimulationConfig.boundary_handling
+
    .. py:attribute:: boundary_settings
       :canonical: jf1uids.option_classes.simulation_config.SimulationConfig.boundary_settings
       :type: typing.Union[types.NoneType, jf1uids.option_classes.simulation_config.BoundarySettings1D, jf1uids.option_classes.simulation_config.BoundarySettings]
@@ -688,6 +820,13 @@ API
       :value: 1000
 
       .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.SimulationConfig.num_timesteps
+
+   .. py:attribute:: use_max_adaptive_timestep
+      :canonical: jf1uids.option_classes.simulation_config.SimulationConfig.use_max_adaptive_timestep
+      :type: bool
+      :value: True
+
+      .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.SimulationConfig.use_max_adaptive_timestep
 
    .. py:attribute:: differentiation_mode
       :canonical: jf1uids.option_classes.simulation_config.SimulationConfig.differentiation_mode
@@ -744,6 +883,13 @@ API
       :value: False
 
       .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.SimulationConfig.first_order_fallback
+
+   .. py:attribute:: turbulent_forcing_config
+      :canonical: jf1uids.option_classes.simulation_config.SimulationConfig.turbulent_forcing_config
+      :type: jf1uids._physics_modules._turbulent_forcing._turbulent_forcing_options.TurbulentForcingConfig
+      :value: 'TurbulentForcingConfig(...)'
+
+      .. autodoc2-docstring:: jf1uids.option_classes.simulation_config.SimulationConfig.turbulent_forcing_config
 
    .. py:attribute:: wind_config
       :canonical: jf1uids.option_classes.simulation_config.SimulationConfig.wind_config

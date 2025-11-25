@@ -205,7 +205,7 @@ for i, (slope, rms) in enumerate(product(slopes, rms_values)):
     # In[4]:
 
 
-    result = time_integration(initial_state, config, params, helper_data, registered_variables)
+    result = time_integration(initial_state, config, params, registered_variables)
     final_state = result.states[-1]
 
     safe_rms = str(rms.value).replace('.', 'p')  # e.g., 20.0 → 20p0

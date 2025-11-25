@@ -76,7 +76,6 @@ def measure_execution_time(
         primitive_state,
         config,
         params,
-        helper_data,
         registered_variables,
         sharding=sharding,
     )
@@ -90,7 +89,6 @@ def measure_execution_time(
             primitive_state,
             config,
             params,
-            helper_data,
             registered_variables,
             sharding=sharding,
         )

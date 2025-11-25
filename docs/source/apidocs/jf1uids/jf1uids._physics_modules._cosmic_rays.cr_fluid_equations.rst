@@ -58,22 +58,22 @@ API
 
    .. autodoc2-docstring:: jf1uids._physics_modules._cosmic_rays.cr_fluid_equations.gamma_cr
 
-.. py:function:: total_energy_from_primitives_with_crs(primitive_state: jaxtyping.Float[jaxtyping.Array, num_vars num_cells], registered_variables: jf1uids.fluid_equations.registered_variables.RegisteredVariables) -> jaxtyping.Float[jaxtyping.Array, num_cells]
+.. py:function:: total_energy_from_primitives_with_crs(primitive_state: jaxtyping.Float[jaxtyping.Array, num_vars num_cells], registered_variables: jf1uids.variable_registry.registered_variables.RegisteredVariables) -> jaxtyping.Float[jaxtyping.Array, num_cells]
    :canonical: jf1uids._physics_modules._cosmic_rays.cr_fluid_equations.total_energy_from_primitives_with_crs
 
    .. autodoc2-docstring:: jf1uids._physics_modules._cosmic_rays.cr_fluid_equations.total_energy_from_primitives_with_crs
 
-.. py:function:: gas_pressure_from_primitives_with_crs(primitive_state: jaxtyping.Float[jaxtyping.Array, num_vars num_cells], registered_variables: jf1uids.fluid_equations.registered_variables.RegisteredVariables) -> jaxtyping.Float[jaxtyping.Array, num_cells]
+.. py:function:: gas_pressure_from_primitives_with_crs(primitive_state: jaxtyping.Float[jaxtyping.Array, num_vars num_cells], registered_variables: jf1uids.variable_registry.registered_variables.RegisteredVariables) -> jaxtyping.Float[jaxtyping.Array, num_cells]
    :canonical: jf1uids._physics_modules._cosmic_rays.cr_fluid_equations.gas_pressure_from_primitives_with_crs
 
    .. autodoc2-docstring:: jf1uids._physics_modules._cosmic_rays.cr_fluid_equations.gas_pressure_from_primitives_with_crs
 
-.. py:function:: total_pressure_from_conserved_with_crs(conserved_state: jaxtyping.Float[jaxtyping.Array, num_vars num_cells], registered_variables: jf1uids.fluid_equations.registered_variables.RegisteredVariables) -> jaxtyping.Float[jaxtyping.Array, num_cells]
+.. py:function:: total_pressure_from_conserved_with_crs(conserved_state: jaxtyping.Float[jaxtyping.Array, num_vars num_cells], registered_variables: jf1uids.variable_registry.registered_variables.RegisteredVariables) -> jaxtyping.Float[jaxtyping.Array, num_cells]
    :canonical: jf1uids._physics_modules._cosmic_rays.cr_fluid_equations.total_pressure_from_conserved_with_crs
 
    .. autodoc2-docstring:: jf1uids._physics_modules._cosmic_rays.cr_fluid_equations.total_pressure_from_conserved_with_crs
 
-.. py:function:: speed_of_sound_crs(primitive_state: jaxtyping.Float[jaxtyping.Array, num_vars num_cells], registered_variables: jf1uids.fluid_equations.registered_variables.RegisteredVariables) -> jaxtyping.Float[jaxtyping.Array, num_cells]
+.. py:function:: speed_of_sound_crs(primitive_state: jaxtyping.Float[jaxtyping.Array, num_vars num_cells], registered_variables: jf1uids.variable_registry.registered_variables.RegisteredVariables) -> jaxtyping.Float[jaxtyping.Array, num_cells]
    :canonical: jf1uids._physics_modules._cosmic_rays.cr_fluid_equations.speed_of_sound_crs
 
    .. autodoc2-docstring:: jf1uids._physics_modules._cosmic_rays.cr_fluid_equations.speed_of_sound_crs

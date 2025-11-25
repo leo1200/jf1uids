@@ -13,5 +13,5 @@ Submodules
    :titlesonly:
    :maxdepth: 1
 
-   jf1uids.initial_condition_generation.construct_primitive_state
    jf1uids.initial_condition_generation.turbulent_ic_generator
+   jf1uids.initial_condition_generation.construct_primitive_state

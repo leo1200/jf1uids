@@ -156,7 +156,7 @@ initial_state = construct_primitive_state(
 config = finalize_config(config, initial_state.shape)
 
 # main simulation loop
-final_state = time_integration(initial_state, config, params, helper_data, registered_variables)
+final_state = time_integration(initial_state, config, params, registered_variables)
 
 # compare with weaver solution
 def plot_weaver_comparison(axs, final_state, params, helper_data, code_units, rho_0, p_0):

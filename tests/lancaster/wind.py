@@ -304,7 +304,7 @@ else:
 config = finalize_config(config, initial_state.shape)
 
 
-result = time_integration(initial_state, config, params, helper_data, registered_variables, sharding = named_sharding)
+result = time_integration(initial_state, config, params, registered_variables, sharding = named_sharding)
 
 final_state = result.final_state
 

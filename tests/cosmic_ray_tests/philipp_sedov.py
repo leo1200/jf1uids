@@ -224,7 +224,7 @@ def philipp_sedov():
         config = finalize_config(config, initial_state.shape)
         
         ## running the simulation
-        result = time_integration(initial_state, config, params, helper_data, registered_variables)
+        result = time_integration(initial_state, config, params, registered_variables)
         print(len(result.states))
         final_state = result.states[-1]
 

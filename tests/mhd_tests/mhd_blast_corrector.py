@@ -162,7 +162,7 @@ high_resolution = 512
 low_resolution = 64
 
 initial_state_high_res, config_high_res, params_high_res, helper_data_high_res, registered_variables_high_res = get_blast_setup(high_resolution)
-target_state_high_res = time_integration(initial_state_high_res, config_high_res, params_high_res, helper_data_high_res, registered_variables_high_res)
+target_state_high_res = time_integration(initial_state_high_res, config_high_res, params_high_res, registered_variables_high_res)
 target_state_low_res = downaverage_state(target_state_high_res, (low_resolution, low_resolution))
 
 model = CorrectorCNN(
@@ -202,7 +202,6 @@ def loss_fn(network_params_arrays):
                 network_params = network_params_arrays
             )
         ),
-        helper_data_low_res,
         registered_variables_low_res
     )
     # Calculate the L2 loss between the final state and the target state
@@ -279,7 +278,6 @@ final_state_low_res = time_integration(
             network_params = trained_params
         )
     ),
-    helper_data_low_res,
     registered_variables_low_res
 )
 
@@ -288,7 +286,6 @@ final_state_low_res_uncorrected = time_integration(
     initial_state_low_res_uncorrected,
     config_low_res_uncorrected,
     params_low_res_uncorrected,
-    helper_data_low_res_uncorrected,
     registered_variables_low_res_uncorrected
 )
 # load the losses from the file
@@ -304,7 +301,6 @@ def get_errors_over_time(time):
         params_high_res._replace(
             t_end = time
         ),
-        helper_data_high_res,
         registered_variables_high_res
     )
     # downaverage the final state to low resolution
@@ -318,7 +314,6 @@ def get_errors_over_time(time):
         params_low_res_uncorrected._replace(
             t_end = time
         ),
-        helper_data_low_res_uncorrected,
         registered_variables_low_res_uncorrected
     )
 
@@ -333,7 +328,6 @@ def get_errors_over_time(time):
             ),
             t_end = time
         ),
-        helper_data_low_res,
         registered_variables_low_res
     )
 

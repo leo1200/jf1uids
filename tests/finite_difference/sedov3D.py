@@ -193,7 +193,7 @@ plt.savefig("figures/start.png", dpi=300)
 # print(conserved_state)
 
 # Run the simulation
-result = time_integration(initial_state, config, params, helper_data, registered_variables)
+result = time_integration(initial_state, config, params, registered_variables)
 
 # print(result)
 
