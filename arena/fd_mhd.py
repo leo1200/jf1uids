@@ -2,7 +2,7 @@
 Tests of our implementation of the HOW-MHD scheme (Seo & Ryu 2023).
 """
 
-multi_gpu = True
+multi_gpu = False
 double_precision = False
 
 if multi_gpu:
@@ -36,6 +36,7 @@ test_name = "fd_mhd"
 # setting up a baseline config
 base_config = SimulationConfig(
     solver_mode = FINITE_DIFFERENCE,
+    donate_state = False,
     boundary_handling = PERIODIC_ROLL,
     mhd = True,
     dimensionality = 3,
@@ -83,10 +84,10 @@ base_params = SimulationParams(
 #     configuration_name = test_name,
 # )
 
-scaling_test(
-    config = base_config,
-    params = base_params,
-    resolutions = [600],
-    configuration_name = test_name,
-    multi_gpu = multi_gpu,
-)
+# scaling_test(
+#     config = base_config,
+#     params = base_params,
+#     resolutions = [400],
+#     configuration_name = test_name,
+#     multi_gpu = multi_gpu,
+# )

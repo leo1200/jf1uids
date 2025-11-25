@@ -168,8 +168,28 @@ def scaling_test(
 
         config = finalize_config(config, initial_state.shape)
 
+        if config.donate_state:
+            time_integration_jit = jax.jit(
+                _time_integration,
+                static_argnames=[
+                    "config",
+                    "registered_variables",
+                    "snapshot_callable"
+                ],
+                donate_argnames=["state"],
+            )
+        else:
+            time_integration_jit = jax.jit(
+                _time_integration,
+                static_argnames=[
+                    "config",
+                    "registered_variables",
+                    "snapshot_callable"
+                ],
+            )
+
         # compile the time integration step and print memory usage
-        compiled_step = _time_integration.lower(
+        compiled_step = time_integration_jit.lower(
             initial_state,
             config,
             params,
@@ -211,7 +231,7 @@ def scaling_test(
         # start timer
         start_time = timer()
 
-        result = _time_integration(
+        result = time_integration_jit(
             initial_state,
             config,
             params,

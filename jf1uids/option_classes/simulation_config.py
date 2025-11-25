@@ -179,6 +179,12 @@ class SimulationConfig(NamedTuple):
     #: Significantly reduces performance.
     runtime_debugging: bool = False
 
+    #: Donate the state arrays to the time integration function
+    #: to reduce memory allocations. If activated, the
+    #: initial state arrays will be invalid after
+    #: the simulation.
+    donate_state: bool = False
+
     #: Memory analysis of the main time integration
     #: function
     memory_analysis: bool = False

@@ -5,6 +5,7 @@
 import os
 
 # basic numerics
+import jax
 import jax.numpy as jnp
 
 # plotting
@@ -142,7 +143,27 @@ def memory_scaling(
 
         config_run = finalize_config(config_run, initial_state.shape)
 
-        compiled_step = _time_integration.lower(
+        if config.donate_state:
+            time_integration_jit = jax.jit(
+                _time_integration,
+                static_argnames=[
+                    "config",
+                    "registered_variables",
+                    "snapshot_callable"
+                ],
+                donate_argnames=["state"],
+            )
+        else:
+            time_integration_jit = jax.jit(
+                _time_integration,
+                static_argnames=[
+                    "config",
+                    "registered_variables",
+                    "snapshot_callable"
+                ],
+            )
+
+        compiled_step = time_integration_jit.lower(
             initial_state,
             config_run,
             params,

@@ -119,6 +119,26 @@ def time_integration(
         production = True
     )
 
+    if config.donate_state:
+        time_integration_jit = jax.jit(
+            _time_integration,
+            static_argnames=[
+                "config",
+                "registered_variables",
+                "snapshot_callable"
+            ],
+            donate_argnames=["state"],
+        )
+    else:
+        time_integration_jit = jax.jit(
+            _time_integration,
+            static_argnames=[
+                "config",
+                "registered_variables",
+                "snapshot_callable"
+            ],
+        )
+
     if config.runtime_debugging:
         errors = (
             checkify.user_checks
@@ -142,7 +162,7 @@ def time_integration(
 
     else:
         if config.memory_analysis:
-            compiled_step = _time_integration.lower(
+            compiled_step = time_integration_jit.lower(
                 primitive_state,
                 config,
                 params,
@@ -174,7 +194,7 @@ def time_integration(
         if config.print_elapsed_time:
             if not config.memory_analysis:
                 # compile the time integration function
-                _time_integration.lower(
+                time_integration_jit.lower(
                     primitive_state,
                     config,
                     params,
@@ -187,7 +207,7 @@ def time_integration(
             start_time = timer()
             print("🚀 Starting simulation...")
 
-        final_state = _time_integration(
+        final_state = time_integration_jit(
             primitive_state,
             config,
             params,
@@ -216,10 +236,6 @@ def time_integration(
     return final_state
 
 
-@partial(
-    jax.jit, static_argnames=["config", "registered_variables", "snapshot_callable"]
-)
-# @jaxtyped(typechecker=typechecker)
 def _time_integration(
     state: Union[STATE_TYPE, StateStruct],
     config: SimulationConfig,
